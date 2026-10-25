@@ -2,7 +2,7 @@
   "episode_id": "rapid_ad_episode",
   "town": "Town03",
   "seed": 1,
-  "timeout_sec": 22,
+  "timeout_sec": 12,
   "fps": 20,
   "ego": {
     "spawn_transform": {
@@ -33,7 +33,7 @@
     "hand_prop": null
   },
   "scene": {
-    "control_line_offset_m": 0.0,
+    "control_line_offset_m": 3.0,
     "max_brake_decel_mps2": 4.5,
     "reaction_budget_s": 0.1,
     "safety_buffer_m": 1.0,
@@ -41,7 +41,9 @@
     "evidence_gap_duration_s": 1.0,
     "resume_response_allowance_s": 3.0,
     "initial_stop_precondition_timeout_s": 8.0,
-    "add_visual_cones": false
+    "add_visual_cones": false,
+    "recoverability_calibrated": false,
+    "save_diagnostic_frames": true
   },
   "environment": {
     "weather": "ClearNoon",

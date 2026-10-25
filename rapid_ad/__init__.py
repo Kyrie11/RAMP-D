@@ -1,3 +1,2 @@
-"""RAPID-AD: Recoverability-Aware Plan Invalidation Diagnostics for Autonomous Driving."""
-
-__version__ = "0.1.0"
+"""RAPID-AD experimental benchmark and diagnostics."""
+__version__ = "0.2.0"

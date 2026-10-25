@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+_selftest_output/
+*.pyc
+runs/
+analysis/
+calibration/

@@ -39,8 +39,8 @@ def main() -> int:
     parser.add_argument("--max-queries", type=int, default=None)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
-    parser.add_argument("--rpc-timeout", type=float, default=20.0)
-    parser.add_argument("--timeout-s", type=float, default=22.0)
+    parser.add_argument("--rpc-timeout", type=float, default=8.0)
+    parser.add_argument("--timeout-s", type=float, default=12.0)
     parser.add_argument("--fps", type=float, default=20.0)
     parser.add_argument("--out-root", default="/data0/senzeyu2/dataset/RAPID-AD/runs")
     parser.add_argument("--episode-id", default=None)
@@ -49,8 +49,13 @@ def main() -> int:
 
     project_root = Path(__file__).resolve().parents[1]
     marshal_root = Path(args.marshal_root).expanduser().resolve()
-    sys.path.insert(0, str(project_root))
-    sys.path.insert(0, str(marshal_root))
+    carla_root = Path(os.environ.get("CARLA_ROOT", "/data0/senzeyu2/dataset/CRADrive/CARLA0.9.15")).expanduser().resolve()
+    carla_api_root = carla_root / "PythonAPI" / "carla"
+    import_paths = [str(project_root), str(marshal_root), str(carla_api_root)]
+    import_paths.extend(sorted(str(p) for p in (carla_api_root / "dist").glob("*0.9.15*.egg")))
+    for path in reversed(import_paths):
+        if path not in sys.path:
+            sys.path.insert(0, path)
 
     from marshal_bench.utils.logging_utils import EpisodeLogger
     import carla  # type: ignore
@@ -113,11 +118,23 @@ def main() -> int:
         client.set_timeout(float(args.rpc_timeout))
         client_ver = client.get_client_version()
         server_ver = client.get_server_version()
+        print(f"[CARLA] python_module={getattr(carla, '__file__', 'unknown')}")
+        print(f"[CARLA] client_version={client_ver} server_version={server_ver}")
+        print(f"[CARLA] CARLA_ROOT={carla_root}")
+        print(f"[CARLA] agents_path={carla_api_root}")
         if client_ver != server_ver:
             raise RuntimeError(f"CARLA client/server version mismatch: client={client_ver}, server={server_ver}")
         from marshal_bench.scenarios.rapid_ad_factorial_demo import run as run_rapid_ad
         result = run_rapid_ad(client, config, logger)
         logger.save_metadata({"marshal_result": result}, name="marshal_result.json")
+        logger.save_metadata({
+            "status": "completed",
+            "case_id": case.get("case_id"),
+            "controller": args.controller,
+            "carla_python_module": getattr(carla, "__file__", "unknown"),
+            "carla_client_version": client_ver,
+            "carla_server_version": server_ver,
+        }, name="episode_status.json")
         logger.log_event("rapid_ad_episode_finished", case_id=case.get("case_id"), controller=args.controller)
         logger.close()
         print(f"[OK] episode={episode_id}")
@@ -126,6 +143,7 @@ def main() -> int:
     except Exception as exc:
         logger.log_event("rapid_ad_episode_exception", error=repr(exc), traceback=traceback.format_exc())
         logger.save_metadata({"error": repr(exc), "traceback": traceback.format_exc()}, name="episode_error.json")
+        logger.save_metadata({"status": "python_exception", "error": repr(exc)}, name="episode_status.json")
         logger.close()
         print(f"[FAIL] {type(exc).__name__}: {exc}", file=sys.stderr)
         traceback.print_exc()

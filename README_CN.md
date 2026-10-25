@@ -1,213 +1,322 @@
-# RAPID-AD
+# RAPID-AD v3：阶段 1-3 工程包
 
-**RAPID-AD = Recoverability-Aware Plan Invalidation Diagnostics for Autonomous Driving**
+**工程名：** RAPID-AD — Recoverability-Aware Plan Invalidation Diagnostics for Autonomous Driving
 
-工程目标：围绕“交通控制约束变化后，现有驾驶计划是否仍然有效、何时需要撤销，以及车辆是否仍有安全恢复能力”建立一个可复现的 CARLA 闭环诊断基准。第一版使用 MARSHAL 的场景执行、交通指挥者 actor、控制器接口、同步传感器和日志设施；不修改 MARSHAL 原始场景与 runner 注册表。
+**本版本目标：** 建立可靠的 MARSHAL/CARLA 运行环境，构建可配对的最小因果场景，区分策略失败与仿真/场景无效，并为 RQ1/RQ2 收集可解释的闭环证据。
 
-> 重要边界：第一版的 `frame_hold` 是对交给控制器的 RGB 图像做时间窗口内的帧保持，只改变视觉证据可用性，不改变 CARLA 世界真值。它用于因果诊断，不等于物理遮挡。物理遮挡是独立的外部有效性测试。所有“失败机制存在”“超加性”结论必须等待重复实验。
+> 重要：我在当前环境中只能对代码做静态检查和合成测试，不能连接你服务器上的 CARLA 0.9.15。因此，v3 的 live CARLA 兼容性仍须按下列步骤验证。不要把静态自检通过理解为 CARLA 端到端已经通过。
 
-## 1. 目录约定
+## 1. 工程路径
 
-- 代码：`/home/senzeyu2/code/RAPID-AD`
+- RAPID-AD 代码：`/home/senzeyu2/code/RAPID-AD`
 - MARSHAL：`/home/senzeyu2/code/MARSHAL`
 - CARLA：`/data0/senzeyu2/dataset/CRADrive/CARLA0.9.15`
-- 输出与场景清单：`/data0/senzeyu2/dataset/RAPID-AD`
+- 输出：`/data0/senzeyu2/dataset/RAPID-AD`
 
-## 2. 环境检查
+先把 ZIP 解压到 `/home/senzeyu2/code`，使目录成为 `/home/senzeyu2/code/RAPID-AD`。不要把代码放在数据目录中。
 
-先激活你运行 MARSHAL 的 Python 环境。不要在没有检查版本的情况下安装另一个 `carla` PyPI 包；CARLA PythonAPI wheel 必须与服务器版本匹配。
+## 2. v1 运行结果与 v2 审计暴露的问题
+
+请先阅读 [`docs/ENGINEERING_AUDIT.md`](docs/ENGINEERING_AUDIT.md) 和 [`docs/V3_CHANGES_CN.md`](docs/V3_CHANGES_CN.md)。v3 在 v2 基础上又修复了时间窗、缓存有效性和右删失问题。
+
+- v3 `core` 是完整 32-cell/seed 因子设计，覆盖 `none/pre/overlap/post` 四种证据窗口。
+- 批量执行默认 fail-fast；每个 episode 保存 stdout/stderr，并在前后检查 CARLA RPC、同步模式、actor 数量及 ego spawn station 是否清空。
+- 静态 STOP 不会因为没有 release 而被记为 `stale_retention`；未观察完整 release 后响应窗口的 episode 会被标记为右删失。
+- GO->STOP 的 `pre/overlap/post` mask 按事件时间调度并验证实际时间戳，不再把空间距离跨度误当成固定时间延迟。
+- `input_mask_realized` 需要真实的缓存替换、无 cache miss、有效时长与正确事件顺序。
+- 阶段锚点误差超过阈值的 episode 不进入因果分母；schema-v1/v2 不会进入 v3 交互估计。
+- “可恢复”是经过车辆/条件标定后的模型估计，不是物理证明。`core/all` 默认要求 `recoverability_calibrated=true`。
+- 新增视觉审计清单与 run-health 汇总；最终因果分析应使用 `--require-visual-audit`。
+
+## 3. 环境变量与 CARLA PythonAPI
+
+在运行 RAPID-AD 的 shell 中设置：
 
 ```bash
 export CARLA_ROOT=/data0/senzeyu2/dataset/CRADrive/CARLA0.9.15
 export MARSHAL_ROOT=/home/senzeyu2/code/MARSHAL
 export RAPID_ROOT=/home/senzeyu2/code/RAPID-AD
 export RAPID_DATA=/data0/senzeyu2/dataset/RAPID-AD
-
-python --version
-find "$CARLA_ROOT/PythonAPI/carla/dist" -maxdepth 1 -name 'carla*0.9.15*.whl' -print
-python "$RAPID_ROOT/scripts/preflight.py" \
-  --carla-root "$CARLA_ROOT" \
-  --marshal-root "$MARSHAL_ROOT" \
-  --roadwork-root /home/senzeyu2/code/roadwork-dataset \
-  --bench2drive-root /home/senzeyu2/code/Bench2Drive \
-  --skip-server
+export PYTHONPATH="$CARLA_ROOT/PythonAPI/carla:$RAPID_ROOT:$MARSHAL_ROOT:${PYTHONPATH:-}"
+mkdir -p "$RAPID_DATA"
 ```
 
-如果 `import carla` 失败，先找出与当前 Python 版本匹配的 wheel。例如当前环境是 Python 3.10 且目录中存在 `carla-0.9.15-cp310-...whl` 时：
+确认 Python 版本与 wheel 匹配：
 
 ```bash
-python -m pip install "$CARLA_ROOT"/PythonAPI/carla/dist/carla-0.9.15-cp310-*.whl
+python --version
+ls -lh "$CARLA_ROOT/PythonAPI/carla/dist"
+python -c 'import sys; print("cp%d%d" % sys.version_info[:2])'
 ```
 
-不要把示例中的 `cp310` 直接用于其他 Python 版本。若没有匹配 wheel，建议建立独立 Python 3.10 环境或按 CARLA 0.9.15 的安装说明编译/安装匹配的 PythonAPI。MARSHAL 当前仓库文档主要验证的是 CARLA 0.9.16；0.9.15 需要先通过现有场景冒烟测试，不能假定完全兼容。
+如果 `dist` 中有与 Python ABI 匹配的 `carla-0.9.15-*.egg`，v3 会自动加入导入路径；如果只有不匹配的 egg，则应切换到兼容的 Python 版本，或安装与当前 Python ABI 匹配的 CARLA 0.9.15 wheel。不要安装任意版本的 PyPI `carla` 包来替代服务器对应的 PythonAPI。
 
-如果 MARSHAL 依赖尚未安装，先阅读其 requirements / README，再在同一环境安装。RAPID-AD 的设计生成、汇总和静态测试仅使用 Python 标准库；视觉模型仍需要 MARSHAL 对应的 PyTorch / Transformers 等依赖。
+安装工程所需的诊断帧/测试依赖：
 
-## 3. 启动 CARLA
+```bash
+python -m pip install -r "$RAPID_ROOT/requirements.txt"
+```
 
-在单独终端启动服务器（按你的机器 GPU/显示配置调整质量选项）：
+CARLA 和 MARSHAL 不通过该 requirements 文件安装；继续使用你已有的 CARLA 0.9.15 与 MARSHAL clone。
+
+### 特别检查 CARLA 路径不一致
+
+v1 日志显示 MARSHAL 从 `/data0/senzeyu2/dataset/CRADrive/CARLA_0.9.15/PythonAPI/carla`（有下划线）加载 agents，但你指定的根目录是 `CARLA0.9.15`（无下划线）。这可能是另一套安装路径，**目前还不能断定它是 RPC 超时根因**。先检查：
+
+```bash
+ls -ld "$CARLA_ROOT" /data0/senzeyu2/dataset/CRADrive/CARLA_0.9.15 2>/dev/null || true
+python - <<'PY'
+import carla, sys
+print("carla module:", getattr(carla, "__file__", None))
+print("CARLA-related sys.path:")
+for p in sys.path:
+    if "CARLA" in p or "carla" in p:
+        print(" ", p)
+PY
+grep -RniE 'CARLA_0\.9\.15|CARLA0\.9\.15|PythonAPI/carla' "$MARSHAL_ROOT/marshal_bench/utils/carla_api_compat.py"
+```
+
+如果 `carla_api_compat.py` 中有硬编码的另一条 agents 路径，请确认两个目录是同一版本；若不是，应把该路径改为从 `CARLA_ROOT` 环境变量派生。不要盲目替换路径，先确认目录存在且版本匹配。
+
+## 4. 启动干净的 CARLA 服务端
+
+先确认没有其他 CARLA server 正在占用 2000 端口，也没有其他客户端同时 tick 世界。若上一次实验异常退出，建议先正常关闭并重新启动 CARLA，避免残留同步模式或 actor。
 
 ```bash
 cd "$CARLA_ROOT"
-./CarlaUE4.sh -quality-level=Epic -RenderOffScreen -carla-rpc-port=2000
+./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound -carla-rpc-port=2000
 ```
 
-确认没有其他实验正在使用 RPC port 2000。CARLA 服务器与 PythonAPI 必须版本一致。RAPID-AD 的首个场景使用 Town03；CARLA 包必须包含 Town03。
+服务端先正常启动即可；由 MARSHAL/RAPID-AD 的场景配置加载目标地图。若你已有经过验证的 CARLA 启动命令，可以继续使用它。早期调试用 `Low`，不要先用 `Epic`。
 
-另一个终端执行：
+## 5. 阶段 1：复现 MARSHAL 基准并检查 spawn
+
+先查看你本地 clone 实际提供的入口，避免使用不在该版本中的脚本名：
 
 ```bash
+cd "$MARSHAL_ROOT"
+find . -maxdepth 3 -type f \( -name 'start.py' -o -name 'run_marshal_officer_demo.py' -o -name 'run_marshal_sweep.py' \) -print
+```
+
+如果存在 `scripts/run_marshal_officer_demo.py`，先运行：
+
+```bash
+python scripts/run_marshal_officer_demo.py --help
+python scripts/run_marshal_officer_demo.py --scenario flagger_control
+```
+
+如果存在 `start.py`，查看帮助后再运行其 Oracle/baseline 入口：
+
+```bash
+python start.py --help
+```
+
+完整 MARSHAL 场景集可能耗时较长；若当前 clone 提供单场景选项，优先复现 `flagger_control` 的 Oracle/baseline。不要直接执行一个未经 `find` 和 `--help` 确认存在的脚本名。
+
+## 6. 阶段 1：RAPID-AD 预检查
+
+```bash
+python "$RAPID_ROOT/scripts/selftest.py"
 python "$RAPID_ROOT/scripts/preflight.py" \
   --carla-root "$CARLA_ROOT" \
   --marshal-root "$MARSHAL_ROOT" \
   --host 127.0.0.1 --port 2000
 ```
 
-## 4. 阶段 1：先复现 MARSHAL 原有基线
+预检查会检查：
 
-在 MARSHAL 仓库中，先只跑已有的代表场景和 oracle / baseline。具体参数以当前 clone 的 `--help` 为准：
+- CARLA client/server 版本是否一致；
+- 当前 world 是否仍遗留 synchronous mode；
+- MARSHAL import 是否可用；
+- Town03 的配置 spawn station 是否有驾驶 waypoint；
+- ego spawn station 附近是否存在残留车辆、walker 或 sensor。
+
+若 `check_spawn.py` 报告附近有动态 actor，先查看其 actor id/type/location。不要直接继续 batch。清理残留 actor 或重启 CARLA，再重新跑 preflight。
+
+## 7. 制动标定：确认“晚期但仍可恢复”确实可恢复
+
+当前早期/晚期动作阶段分别以估计停车余量 5.0 m / 1.5 m 触发。默认减速度 4.5 m/s² 只是占位假设。为了避免把物理不可恢复误判为规划失败，必须先在相同车辆、速度、天气和地图条件下做标定。
+
+确保 spawn station 清空后执行：
 
 ```bash
-cd "$MARSHAL_ROOT"
-python scripts/_run_reference_staging_sweep.py --help
-python scripts/_run_reference_staging_sweep.py \
-  flagger_control flagger_slow_then_stop sequential_directive stale_directive_residue \
-  --controller oracle --controller baseline
+python "$RAPID_ROOT/scripts/calibrate_braking.py" \
+  --base-config "$RAPID_ROOT/configs/base_episode.json" \
+  --host 127.0.0.1 --port 2000 \
+  --target-speed-kmh 12 --repeats 3 --conservatism 0.8 \
+  --out "$RAPID_DATA/calibration/braking_calibration.json" \
+  --apply-config
 ```
 
-如果当前 clone 的参数或场景名与示例不一致，以 `--help` 输出为准。目标是确认 CARLA、flagger actor、同步相机、控制器和日志完整工作；不要把这一步的结果当成新研究结果。
+该脚本会临时切换同步模式、用配置 spawn station 上的车辆加速到目标速度后全制动，测量停止距离，最后尝试恢复原 world settings。上传的 MARSHAL `_common.py` 优先选择 `vehicle.tesla.model3`，标定脚本默认同样使用它；如果你的本地 clone 修改过车辆选择逻辑，必须用 `--vehicle-blueprint` 指定实际使用的 blueprint，并确保 MARSHAL 与标定使用同一车型。检查 JSON 中每次重复的停止距离是否稳定；若三次有效减速度的相对极差超过 20%，脚本会拒绝执行 `--apply-config`，应增加重复次数或排查场景。它是实测的直线全制动估计，不是形式化可达性证明。若脚本无法在固定 spawn station 生成车辆，先修复 spawn/环境问题，不要继续实验。
 
-## 5. 安装 RAPID-AD 场景入口
+如果更改车辆 blueprint、天气/摩擦、CARLA 版本或目标速度，重新标定。不要把这次标定推广到所有车辆/天气。
 
-安装脚本只向 MARSHAL 新增一个薄入口文件，不修改 MARSHAL 的原始 runner 或已有场景：
+## 8. 安装 RAPID-AD overlay
 
 ```bash
 python "$RAPID_ROOT/scripts/install_overlay.py" \
   --marshal-root "$MARSHAL_ROOT" \
   --project-root "$RAPID_ROOT"
-
-export PYTHONPATH="$RAPID_ROOT:$MARSHAL_ROOT:${PYTHONPATH:-}"
-python "$RAPID_ROOT/scripts/selftest.py"
 ```
 
-入口文件为 `marshal_bench/scenarios/rapid_ad_factorial_demo.py`，实际实现留在 RAPID-AD 项目中。若已存在同名文件，安装脚本会先备份。
+该命令只把 `rapid_ad_factorial_demo.py` 复制到 MARSHAL 场景目录；原始 MARSHAL 场景文件不会被改写。
 
-## 6. 第一版场景设计
+## 9. 阶段 2/3：先跑一个 Oracle episode
 
-### GO -> STOP：安全撤销
+**不要直接跑完整矩阵。** 先只运行第一个场景，确认环境能完整启动、执行和清理：
 
-- `control_transition=0`：指挥者始终保持 PROCEED，是匹配的静态对照。
-- `control_transition=1`：车辆接近控制线时，PROCEED 切换为 STOP。
-- `phase=early/late`：目标切换距离分别为 12m / 9m（从自车中心到虚拟控制线）。
-- `gap_timing=none/pre/overlap/post`：视觉输入帧保持窗口相对于目标切换距离的位置。
-- 车辆目标速度默认 12 km/h；虚拟控制线与指挥者的纵向位置对齐（`control_line_offset_m=0`），避免把合理地停在指挥者前方误判为越线。
+```bash
+export PYTHONPATH="$CARLA_ROOT/PythonAPI/carla:$RAPID_ROOT:$MARSHAL_ROOT:${PYTHONPATH:-}"
+python "$RAPID_ROOT/scripts/run_batch.py" \
+  --suite smoke --seeds 0 \
+  --controllers rapid_ad_oracle \
+  --max-cases 1 \
+  --carla-root "$CARLA_ROOT" \
+  --marshal-root "$MARSHAL_ROOT" \
+  --data-root "$RAPID_DATA" \
+  --host 127.0.0.1 --port 2000
+```
 
-### STOP -> GO：合法恢复
+检查输出目录中的：
 
-- `control_transition=0`：STOP 始终有效，是静态等待对照。
-- `control_transition=1`：在 episode 开始后的 3s / 7s 切换为 PROCEED。
-- `phase=short_wait/long_wait`：控制状态释放时机。
-- `gap_timing=none/pre/overlap/post`：帧保持窗口相对于释放时刻的位置。
+- `batch_status.json`；
+- `health_before.txt`、`health_after.txt`；
+- `spawn_before.txt`、`spawn_after.txt`；
+- `episode_stdout.log`、`episode_stderr.log`；
+- `<episode_id>/rapid_ad_metrics.json`；
+- `<episode_id>/rapid_ad_trace.json`；
+- `<episode_id>/diagnostic_frames/*.jpg`（少量关键帧（压缩 JPEG），而不是整段图像序列）。
 
-`core` 包含 16 个匹配条件（两种任务 × 转换开关 × 两个阶段 × 无 gap/overlap gap）；`all` 包含 32 个条件，加入 pre/post 顺序对照。`smoke` 只有 6 个条件，仅用于确认工程链路，不用于统计结论。
+如果出现任何非零返回码、RPC health failure、actor-count drift、spawn 不清空或缺失 metrics，runner 会默认停止。先处理当前失败，再重跑；不要把剩余 cases 的连锁错误混进结果。
 
-## 7. 阶段 2：生成场景清单并跑 smoke
+### 解释 Oracle 结果
+
+- GO->STOP 动态条件：Oracle 必须在 STOP 有效时不越过控制线，并满足安全余量。
+- STOP->GO 动态条件：Oracle 应在合法 release 后恢复行驶。
+- 静态 GO/STOP 是 placebo controls；它们不应该被赋予不适用的 stop/resume failure。
+- Oracle 读取特权的真实 directive，帧保持不会限制 Oracle 的规则输入；它用于验证场景/物理上界，不是视觉基线。
+
+如果 Oracle 在 late 条件中无法安全停车，先检查制动标定、控制线位置和 transition margin。该场景不能用于证明普通模型的可避免计划撤销失败。
+
+## 10. 阶段 2/3：完整 smoke（单 controller）
+
+一个 controller 一次，便于定位故障：
 
 ```bash
 python "$RAPID_ROOT/scripts/run_batch.py" \
   --suite smoke --seeds 0 \
-  --controllers rapid_ad_oracle baseline pid \
-  --marshal-root "$MARSHAL_ROOT" \
-  --data-root "$RAPID_DATA" \
-  --host 127.0.0.1 --port 2000
+  --controllers rapid_ad_oracle \
+  --carla-root "$CARLA_ROOT" --marshal-root "$MARSHAL_ROOT" \
+  --data-root "$RAPID_DATA" --host 127.0.0.1 --port 2000
 ```
 
-这会在 `RAPID_DATA/design/` 写出 JSON/CSV 场景清单，并把每个 episode 的原始日志和 `rapid_ad_metrics.json` 放到 `RAPID_DATA/runs/`。`rapid_ad_oracle` 是特权参考控制器，只用于证明场景可解，不是待比较算法。`baseline` 通常是只看交通灯的基线，`pid` 是几何跟踪参考，均不能被当作有能力理解临时指令的强视觉模型。
+Oracle smoke 全部通过后，再分别运行 baseline/PID 参考控制器（它们不理解视觉指挥者，预期不是强模型）：
 
-如果 smoke 中 oracle 都不能正确停车/恢复，先调试几何和控制线，不要运行强模型或解释失败率。
+```bash
+python "$RAPID_ROOT/scripts/run_batch.py" --suite smoke --seeds 0 \
+  --controllers baseline \
+  --carla-root "$CARLA_ROOT" --marshal-root "$MARSHAL_ROOT" \
+  --data-root "$RAPID_DATA" --host 127.0.0.1 --port 2000
 
-## 8. 阶段 3：验证是否存在可重复失败
+# Then run PID in a separate batch so a failure in one controller cannot contaminate the other.
+python "$RAPID_ROOT/scripts/run_batch.py" --suite smoke --seeds 0 \
+  --controllers pid \
+  --carla-root "$CARLA_ROOT" --marshal-root "$MARSHAL_ROOT" \
+  --data-root "$RAPID_DATA" --host 127.0.0.1 --port 2000
+```
 
-先跑 core 的 oracle 和基线：
+然后选择 MARSHAL 支持、输入模态已明确的视觉/闭环策略。示例仅适用于本地 Hugging Face 模型：
 
 ```bash
 python "$RAPID_ROOT/scripts/run_batch.py" \
-  --suite core --seeds 0,1,2 \
-  --controllers rapid_ad_oracle baseline pid mpc \
-  --marshal-root "$MARSHAL_ROOT" \
-  --data-root "$RAPID_DATA" \
-  --host 127.0.0.1 --port 2000
-```
-
-然后单独跑一个视觉模型。示例模型名需要替换成你本机可用、且 MARSHAL `VLMController` 支持的模型：
-
-```bash
-python "$RAPID_ROOT/scripts/run_batch.py" \
-  --suite smoke --seeds 0,1,2 \
+  --suite smoke --seeds 0 \
   --controllers vlm --model /path/to/your/local-vlm \
   --query-period-s 0.5 \
-  --marshal-root "$MARSHAL_ROOT" \
-  --data-root "$RAPID_DATA" \
-  --host 127.0.0.1 --port 2000
+  --carla-root "$CARLA_ROOT" --marshal-root "$MARSHAL_ROOT" \
+  --data-root "$RAPID_DATA" --host 127.0.0.1 --port 2000
 ```
 
-`query-period-s=0.5` 是第一轮诊断配置，目的是减少策略查询间隔与物理不可恢复性的混杂；之后应再测试 1.0s / 1.5s，明确区分模型查询节奏导致的延迟。VLM 的视觉证据消费时间只有在 controller 暴露 decision history 时才可直接记录；对黑盒端到端策略只能测外部行为响应，不能声称直接观测到内部 belief update。
+若 MARSHAL VLM 需要远程 API 或自定义 backend，请按其实际 controller API 配置；不要假设本地 Hugging Face 路径能直接使用远程服务。
 
-确认工程链路稳定后，运行完整 32-cell 顺序矩阵：
+### 先做视觉审计，不要跳过
+
+每次 smoke 批次完成后，从输出中复制 `RUN_TAG`，生成人工审计清单：
+
+```bash
+python "$RAPID_ROOT/scripts/make_visual_audit_manifest.py" \
+  --data-root "$RAPID_DATA" --run-tag <RUN_TAG>
+```
+
+打开 `analysis/<RUN_TAG>/visual_audit_manifest.csv`，检查 `diagnostic_frames/*.jpg` 并填写 `officer_visible`、`control_line_visible`、`new_directive_visible_in_first_fresh_frame`、`delivered_frame_is_stale_during_mask` 和 `audit_pass`。只有在指挥者/控制线可见、动态切换后的第一张 fresh frame 能辨认新指令、mask 窗口确实传递旧帧时，才把该行的 `audit_pass` 设为 `yes`。若画面不清楚，先修正 actor 位置、手势资产或相机视角，不要继续扩大实验。
+
+另外，可汇总工程故障：
+
+```bash
+python "$RAPID_ROOT/scripts/summarize_run_health.py" \
+  --data-root "$RAPID_DATA" --run-tag <RUN_TAG>
+```
+
+## 11. 阶段 2/3：完整因子矩阵
+
+`core` 是每 seed 32 个条件：GO->STOP 的 16 个条件 + STOP->GO 的 16 个条件。至少先用 1 个 seed 验证工程，再用至少 5 个 seed 做 pilot 分析。
 
 ```bash
 python "$RAPID_ROOT/scripts/run_batch.py" \
-  --suite all --seeds 0,1,2 \
-  --controllers rapid_ad_oracle baseline pid mpc \
-  --marshal-root "$MARSHAL_ROOT" \
-  --data-root "$RAPID_DATA" \
-  --host 127.0.0.1 --port 2000
+  --suite core --seeds 0,1,2,3,4 \
+  --controllers rapid_ad_oracle \
+  --base-config "$RAPID_ROOT/configs/base_episode.json" \
+  --carla-root "$CARLA_ROOT" --marshal-root "$MARSHAL_ROOT" \
+  --data-root "$RAPID_DATA" --host 127.0.0.1 --port 2000
 ```
 
-然后用 VLM 或已安装 checkpoint 的闭环模型替换/追加 controller。不同架构的配置可以通过 `--controller-config-json path/to/controller_config.json` 传入。不要把缺少 checkpoint、接口不兼容或 setup invalid 的 episode 当成模型失败。
+`core/all` 默认要求 `scene.recoverability_calibrated=true`。若只是做工程调试，可显式加 `--allow-uncalibrated`，但该批结果不能支持物理可恢复性结论。Oracle 通过后，再分别对 baseline、PID/MPC 和候选视觉模型运行同样矩阵。完整矩阵不要同时启动多个 CARLA client，也不要并行运行多个同步 episode。
 
-## 9. 评价标准与失败归因
+## 12. 分析结果
 
-每个 episode 会输出：
+从 `run_batch.py` 的输出中复制实际 `RUN_TAG`：
 
-- `rapid_ad_metrics.json`：单次运行摘要；
-- `rapid_ad_trace.json`：每个同步 tick 的控制线距离、车速、指令真值、恢复余量和 gap 状态；
-- MARSHAL 的 `metrics.csv`、`events.json`、camera frames 和 metadata。
-
-关键量：
-
-1. `unsafe_crossing_while_stop`：STOP 有效时车头越过控制线。
-2. `recoverability_margin_at_evidence_m`：证据重新可用时，控制线余量减去车长、缓冲、估计制动距离和反应预算。
-3. `observable_brake_response_latency_s`：证据可用后，外部可观测到的制动/油门响应延迟；它不是内部 plan invalidation time。
-4. `stop_confirmed_before_release` 与 `resume_latency_s`：合法放行前是否确实停车，以及证据可用后多久恢复行驶。
-5. `collision_count`、`setup_valid`、`anchor_status`：用于过滤场景搭建失败和未暴露到目标阶段的 episode。
-
-失败标签区分 `unsafe_continuation`、`stop_not_completed`、`unrecoverable_before_evidence`、`decision_after_recovery_deadline`、`initial_stop_not_established` 和 `stale_retention`。请同时报告失败率与不可恢复率；不可恢复样本不能被简单归咎于即时 plan revocation。
-
-制动参数 `max_brake_decel_mps2=4.5` 是初始保守假设，不是实测真值。正式实验前应使用 MARSHAL 已有的 `_brake_calibration.py` 或自建制动标定，更新 `configs/base_episode.json`，并报告敏感性分析。对 CARLA 不同车辆蓝图，不能共用一个未经验证的制动上限。
-
-## 10. 分析结果
+先生成并填写 `visual_audit_manifest.csv`，再进行最终交互分析：
 
 ```bash
-python "$RAPID_ROOT/scripts/analyze_results.py" --data-root "$RAPID_DATA" --run-tag <上一步打印的RUN_TAG>
+python "$RAPID_ROOT/scripts/analyze_results.py" \
+  --data-root "$RAPID_DATA" --run-tag <RUN_TAG> \
+  --visual-audit-csv "$RAPID_DATA/analysis/<RUN_TAG>/visual_audit_manifest.csv" \
+  --require-visual-audit
 ```
 
-输出位于 `analysis/<RUN_TAG>/`：
+如果还没有完成视觉审计，可以不加上述两个审计参数先看 provisional 汇总，但结果只能用于调试。
 
-- `cell_summary.csv`
-- `factorial_interactions.csv`
-- `analysis_metadata.json`
+输出：
 
-交互项是加性风险尺度上的描述性估计。只有每个 cell 有足够重复、setup 有效、场景可解性匹配，并报告置信区间后，才能讨论因果交互；单次 32-cell 运行不能证明超加性失败。
+- `analysis/<RUN_TAG>/cell_summary.csv`
+- `analysis/<RUN_TAG>/factorial_interactions.csv`
+- `analysis/<RUN_TAG>/analysis_metadata.json`
 
-## 11. RoadWork 与 Bench2Drive 的作用
+解释规则：
 
-第一版不需要重新训练模型，也不需要从 RoadWork 收集大规模新数据集。RoadWork 用于检查施工区视觉语义的现实性；Bench2Drive 可以后续提供额外闭环模型/评测基线。先把 MARSHAL 的控制器接口跑通，避免在版本不兼容、checkpoint 缺失和场景因果问题之间同时排错。
+1. 先看 invalid/unexposed episodes；无效 episode 不能作为成功或失败放入分母。
+2. 先报告 `unrecoverable_before_evidence`，再报告 evidence 可用且估计仍可恢复时的 `estimated_avoidable_failure`。
+3. `decision_action_change_latency_*` 只在 controller 暴露离散决策历史时可用，是外部动作变化代理，不等于内部轨迹缓存真正失效的时间；`speed_drop_latency_*` 与 `command_response_latency_s` 分别代表物理速度响应与控制指令响应。
+4. STOP->GO 的 stale retention 只在真实 release 且 release 前 STOP 已成立的 episode 中计算。
+5. interaction 表比较每一种 `pre/overlap/post` gap 与 `none` 的配对 seed blocks。少于 5 个完整独立 blocks 会标记 underpowered；这仍是探索性统计，不自动构成因果结论。
+6. 运行时推理的 wall-clock 延迟不会在同步 CARLA 中自然转化为 simulation-time 延迟；v3 记录的是模拟时间中的响应/查询间隔。如果论文要研究真实计算延迟，需要后续加入异步动作队列或明确的仿真时间延迟干预。
 
-## 12. 当前限制
+## 13. 故障处理
 
-- 第一版场景使用 MARSHAL 的 Town03 控制点，控制线由指挥者纵向位置上游 3m 的虚拟线定义；需要通过截图和轨迹检查确认它确实落在正确车道。
-- `frame_hold` 只干预 RGB 输入，车辆状态和信号灯字段保持实时；这是一种可控的证据延迟，不是完整传感器失效模型。
-- STOP->GO 的 release anchor 是 episode 开始后 3s / 7s；它用于固定事件顺序，`stop_confirmed_before_release` 用于识别模型是否满足释放前停车条件。
-- 特权 Oracle 不计入算法比较。它若不能安全执行，说明场景或物理参数需要修正。
-- MARSHAL 的静态 expected-action 分数不适合直接评价动态 GO->STOP/STOP->GO 序列；主指标是 `rapid_ad_metrics.json` 中的时序与闭环行为指标。
+### `Failed to spawn ego vehicle at the assigned station`
+
+1. 查看 `episode_stderr.log` 和 `spawn_after.txt`。
+2. 如果 spawn station 附近仍有 vehicle/walker/sensor，说明 actor cleanup 或上一次崩溃可能留下残留；清理或重启 CARLA 后重跑 preflight。
+3. 如果站点清空仍无法 spawn，检查 Town03、配置坐标/朝向、vehicle blueprint 与 CARLA 版本。不要自动换随机 spawn 点，因为那会改变配对场景几何。
+
+### `time-out ... while waiting for the simulator`
+
+1. 不要继续跑下一批。v3 会 fail-fast。
+2. 查看同一 episode 的 stdout/stderr 与 `health_after.txt`。
+3. 如果 health check 失败或 world 仍处于 synchronous mode，重启 CARLA server，再从单个 Oracle episode 开始。
+4. 若 `returncode=-6`，现在的 stderr 应保存 native/Python abort 前的信息；仍需根据日志判断原因，不能直接归因于算法。
+
+### diagnostic PNG
+
+不需要打包所有 PNG。v3 每个 episode 只保存少量关键帧：首次原始帧、mask 开始时的原始/送入控制器帧、transition 附近的帧、第一张恢复的新帧。调试时优先分享某个 case 的 `diagnostic_frames/`、`rapid_ad_trace.json`、`rapid_ad_metrics.json` 和 stdout/stderr。
