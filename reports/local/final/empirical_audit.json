@@ -1,0 +1,25 @@
+{
+  "audit": "numerical_falsification_only",
+  "reference": "ordinary_RK4_piecewise_constant_inputs",
+  "seed": 31701,
+  "rollouts": 64,
+  "checked_state_vectors": 20480,
+  "containment_misses": 0,
+  "first_misses": [],
+  "empirical_containment_fraction": 1.0,
+  "tube_status": "VALIDATED",
+  "accepted_steps": 32,
+  "witness_replay": true,
+  "false_safe_count": null,
+  "false_safe_note": "not defined: no safety verifier implemented",
+  "stats": {
+    "attempts": 32,
+    "native_iterations": 64,
+    "accepted_steps": 32,
+    "subdivisions": 31,
+    "schedule_subdivisions": 31,
+    "failure_subdivisions": 0,
+    "max_depth": 5,
+    "elapsed_s": 0.006078021999996963
+  }
+}

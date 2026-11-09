@@ -1,0 +1,10 @@
+[ 10%] Building CXX object CMakeFiles/rampd_interval.dir/cpp/src/picard.cpp.o
+[ 20%] Building CXX object CMakeFiles/rampd_interval.dir/cpp/src/interval_bicycle.cpp.o
+[ 30%] Linking CXX shared library librampd_interval.so
+[ 40%] Built target rampd_interval
+[ 50%] Linking CXX executable test_interval
+[ 60%] Linking CXX executable test_picard
+[ 70%] Built target test_interval
+[ 80%] Built target test_picard
+[ 90%] Linking CXX executable test_abi
+[100%] Built target test_abi

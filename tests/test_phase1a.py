@@ -3,7 +3,7 @@ import pytest
 from rampd_core import Interval, add, mul, div, sin, cos, tan, backend_name, BicycleParameters, StateBounds, ControlBounds, rhs, friction_value_enclosure
 
 def test_backend_loaded():
-    assert "Boost.Numeric.Interval" in backend_name()
+    assert "MPFR-192" in backend_name()
 
 def test_arithmetic_contains_extrema():
     assert add(Interval(1,2),Interval(3,4)) == Interval(4,6)

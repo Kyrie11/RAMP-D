@@ -1,0 +1,16 @@
+{
+  "status": "VALIDATED",
+  "reason": "COMPLETE_DYNAMICS_ENCLOSURE",
+  "backend": "MPFR-192/directed-binary64/ABI2",
+  "build": "compiler=14.2.0;mpfr_runtime=4.2.2;precision_bits=192;abi=2;api=0.2.0;mpfr_header=bootstrap_public_API_declarations",
+  "accepted_steps": 32,
+  "exact_horizon_covered": "1",
+  "final_px": [
+    7.999999998394508,
+    8.000000001605505
+  ],
+  "includes_analytic_px_8m": true,
+  "witness_replay": true,
+  "full_support_safety_verified": false,
+  "certificate": "/mnt/data/RAMP-D_Phase1B/reports/local/final/demo_certificate.json"
+}

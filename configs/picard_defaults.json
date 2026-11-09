@@ -1,0 +1,12 @@
+{
+  "note": "Illustrative numerical search settings, not calibrated physical uncertainty",
+  "max_iterations": 16,
+  "relative_inflation": 0.125,
+  "absolute_inflation": [1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9],
+  "max_step_s": 0.05,
+  "min_step_s": 1e-7,
+  "max_depth": 20,
+  "max_steps": 10000,
+  "max_attempts": 20000,
+  "time_limit_s": null
+}

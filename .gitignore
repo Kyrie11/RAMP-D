@@ -1,7 +1,9 @@
-build/
+build*/
 __pycache__/
 .pytest_cache/
+*.pyc
 *.so
 *.dylib
-*.dll
+*.egg-info/
+reports/phase1b_*/
 .venv/

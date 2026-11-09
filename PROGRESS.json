@@ -1,0 +1,19 @@
+{
+  "release": "0.2.0",
+  "phase": "1B",
+  "phase1a_fixes": "implemented; target regression pending",
+  "phase1b": "implemented; local bootstrap tests passed; official-header target acceptance pending",
+  "phase1c": "not implemented beyond 1B failure-bisection fallback",
+  "phase1d": "not implemented",
+  "belief_invariant_backup_fullsupport_cegar": "not implemented",
+  "requires_dataset": false,
+  "requires_sumo": false,
+  "requires_carla": false,
+  "user_reported_target": {
+    "python": "3.10",
+    "sumo": "1.20",
+    "carla_api": "0.9.16",
+    "simulator_mode": "headless"
+  },
+  "local_limit": "No official MPFR development header; runtime testing used public API declarations outside distribution."
+}
