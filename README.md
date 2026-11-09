@@ -1,33 +1,48 @@
-# RAMP-D Phase 1B - validated Picard integration
+# RAMP-D Phase 1C — Adaptive Subdivision
 
-This is the complete source release replacing Phase 1A. It contains the Phase
-1A regression suite and a C++17 / MPFR numerical core called from Python 3.10+.
-No dataset, GPU, SUMO process or CARLA process is needed in this phase.
+This release includes the accepted Phase 1A/1B numerical core and adds an
+adaptive *local tube-width policy* on top of validated Picard integration.
+Python 3.10+ orchestrates the integrator; the C++17/MPFR backend performs the
+outward-rounded interval arithmetic. No dataset, GPU, SUMO process or CARLA
+process is required in this phase.
 
-**A `VALIDATED` result proves a dynamics enclosure under the declared model and
-inputs. It is not the full-support verifier's `CERTIFIED`, not a collision
-certificate, and not authorization to execute vehicle controls.**
+**Semantics:** `VALIDATED` means the complete requested time horizon is covered
+by replayable Picard inclusion witnesses and, when enabled, every accepted
+local tube box obeys the configured coordinate-width limits. It does not mean
+collision-free, rule-compliant, friction-feasible, recursively safe, or
+executable. Width limits are numerical/abstraction resolution budgets, not
+physical safety constraints. Failure to meet them returns `UNKNOWN`.
 
-## What changed
+## Phase 1C additions
 
-- Replaced the Boost/libm numerical backend with explicit MPFR directed
-  rounding at 192 bits, followed by directed binary64 endpoint conversion.
-- Corrected the Phase 1A friction scale: `I(mu) * I(g)`, never `I(mu*g)`.
-- Added interval subtraction, square, exact-decimal enclosures and pi bounds.
-- Added C++ Picard self-inclusion, selective enclosure inflation and endpoint
-  bounds. Every accepted step has strict componentwise inclusion.
-- Added Python failure-driven bisection, exact rational bookkeeping of dyadic
-  times, resource budgets, UNKNOWN propagation and replayable JSON witnesses.
-- Added stale-native-library rejection and a mandatory zero-tests guard.
-- Preserved the previous Python model/RHS/friction call signatures.
+- Exact rational diameters for binary64 interval endpoints. Width comparison
+  is exact against the configured binary64 cap; no epsilon is added.
+- Six independent local width caps in SI units, in state order
+  `(px [m], py [m], psi [rad], v [m/s], a [m/s^2], delta [rad])`.
+- Width-triggered time bisection even when the coarse Picard inclusion itself
+  succeeded. Both children are recomputed and independently validated.
+- Separate `max_width_subdivisions` budget, in addition to the existing step,
+  attempt, depth, minimum-step and wall-clock budgets.
+- Explicit `INITIAL_WIDTH_LIMIT`, `WIDTH_SPLIT_BUDGET`, and width-related
+  depth/min-step `UNKNOWN` reasons. No incomplete horizon receives an endpoint.
+- Per-segment exact width metadata in certificate schema v2. Replay recomputes
+  widths and enforces the recorded width policy. Schema v1 Phase 1B certificates
+  remain readable.
+- Fixed-coarse, fixed-fine and adaptive-width synthetic benchmark with JSON/CSV
+  output. Runtime measurements are descriptive, not pass/fail performance
+  claims.
+
+A coordinate's local tube width includes both true support spread and the
+coordinate range traversed during that time substep, as well as interval
+wrapping/inflation. Subdivision reduces the local time span; it cannot remove
+real initial uncertainty or uncertainty that genuinely accumulates. If the
+initial support already exceeds a cap, integration returns `UNKNOWN` without
+attempting to split time.
 
 ## Dependencies
 
-Supported target: Linux, GCC or Clang, CMake >= 3.16, Python >= 3.10.
-The user reports Python 3.10, CARLA API 0.9.16, SUMO 1.20; the simulators are
-not imported, started or tested by this release.
-
-Ubuntu/Debian development packages:
+Linux, GCC/Clang, CMake >= 3.16, Python >= 3.10, official MPFR/GMP development
+headers and libraries. On Ubuntu/Debian:
 
 ```bash
 sudo apt-get update
@@ -35,99 +50,58 @@ sudo apt-get install -y build-essential cmake libmpfr-dev libgmp-dev
 python -m pip install -r requirements-test.txt
 ```
 
-Use the active Python environment. No runtime Python dependency beyond the
-standard library is needed; pytest and mpmath are used by the test suite.
-MPFR/GMP development headers and libraries are required for the C++ build.
-Boost is no longer required. A user-installed prefix is supported through
-`CMAKE_PREFIX_PATH` or explicit CMake `MPFR_INCLUDE_DIR`, `MPFR_LIBRARY`,
-`GMP_LIBRARY` arguments. Do not mix the old `.so` with the new Python code.
+Use the intended active Python 3.10 environment. CARLA 0.9.16 and SUMO 1.20
+are not imported, started or tested. The simulation mode may remain headless;
+no simulator is needed for Phase 1C.
 
-## One-command acceptance
+## One-command target acceptance
 
 From `/home/senzeyu2/code/RAMP-D`:
 
 ```bash
-PYTHON_BIN="$(command -v python)" bash scripts/validate_phase1b.sh
+PYTHON_BIN="$(command -v python)" bash scripts/validate_phase1c.sh
 python scripts/package_report.py
 ```
 
-The script configures a new `build_phase1b/` tree, discovers all 3 C++ tests,
-runs them, runs the Python suite, replays a demo witness, runs a numerical
-falsification audit, and records environment/source/library hashes. It refuses
-zero native tests even when the installed CTest itself exits successfully.
+The acceptance script creates a clean `build_phase1c/` tree, requires discovery
+of all three native tests, runs the full Python regression suite, the Phase 1B
+Picard demo and witness replay, the seeded RK4 falsification audit, and the
+Phase 1C benchmark. It rejects zero native tests, skipped/failed Python tests,
+benchmark runs without width-triggered splits, invalid benchmark witnesses,
+and accepted segments exceeding their width caps.
 
-Pass additional arguments to CMake after the script name if necessary:
+The report is written under `reports/phase1c_<UTC timestamp>/`. The packaged
+server report is `reports/RAMP-D_Phase1C_server_report.zip`.
 
-```bash
-PYTHON_BIN=python bash scripts/validate_phase1b.sh -DCMAKE_PREFIX_PATH="$CONDA_PREFIX"
-```
-
-This requires MPFR/GMP development files actually to be installed in that
-prefix; setting a prefix alone does not install them.
-
-## Manual build / tests
+## Manual build and tests
 
 ```bash
-cmake -S . -B build_phase1b -DCMAKE_BUILD_TYPE=Release -DRAMPD_BUILD_TESTS=ON
-cmake --build build_phase1b --parallel 2
-(cd build_phase1b && ctest -N && ctest --output-on-failure)
+cmake -S . -B build_phase1c -DCMAKE_BUILD_TYPE=Release -DRAMPD_BUILD_TESTS=ON
+cmake --build build_phase1c --parallel 2
+(cd build_phase1c && ctest -N && ctest --output-on-failure)
 export PYTHONPATH="$PWD/python${PYTHONPATH:+:$PYTHONPATH}"
-export RAMPD_INTERVAL_LIB="$PWD/build_phase1b/librampd_interval.so"
+export RAMPD_INTERVAL_LIB="$PWD/build_phase1c/librampd_interval.so"
 python -m pytest -q tests
-python scripts/demo_phase1b.py --output reports/demo_certificate.json
-python scripts/replay_certificate.py reports/demo_certificate.json
-python scripts/audit_phase1b.py --output reports/empirical_audit.json
+python scripts/benchmark_phase1c.py --output reports/phase1c_benchmark.json --repeats 5
 ```
 
-`ctest --test-dir` was added in CMake 3.20. Entering the build directory works
-with the older supported versions too. The uploaded Phase 1A already had
-`enable_testing()` and `add_test()`; its reported root-directory search is most
-consistent with an unsupported flag/CTest version, not a missing test target.
-The target's actual CTest version is recorded by the acceptance script.
-
-## Python API
+## Typical API
 
 ```python
-from rampd_core import (
-    BicycleParameters, StateBounds, ControlBounds, PicardOptions,
-    TubeStatus, integrate, replay_certificate,
-)
+from rampd_core import PicardOptions, integrate
 
-params = BicycleParameters(wheelbase_m=2.8, friction_coefficient=0.9)
-initial = StateBounds.point([0, 0, 0, 8, 0, 0])
-control = ControlBounds.point(jerk=0, steering_rate=0)
-result = integrate(initial, control, params, horizon_s=1.0,
-                   options=PicardOptions(max_step_s=0.05))
-print(result.status.value, result.reason)
-if result.status is TubeStatus.VALIDATED:
-    print(result.endpoint)
-    result.save("reports/example.json")
-    assert replay_certificate("reports/example.json").ok
-else:
-    assert result.endpoint is None
-    print("verified prefix ends at", result.validated_until)
+opts = PicardOptions(
+    max_step_s=0.4,
+    max_tube_widths=(2.2, 0.8, 0.1, 0.3, 0.1, 0.01),
+    max_width_subdivisions=10000,
+    max_steps=10000,
+    max_attempts=20000,
+    max_depth=20,
+)
+result = integrate(initial, control, vehicle, horizon_s=0.8, options=opts)
 ```
 
-`max_step_s` is a cap, not a fixed step: a 1 s horizon with a 0.05 s cap is
-bisected to 32 substeps of 0.03125 s before any failure-driven refinement.
-No unvalidated point integrator is used as the enclosure generator.
-
-## Package guide
-
-- `cpp/src/interval.cpp`: directed interval operations and bicycle vector field.
-- `cpp/src/picard.cpp`: one-step candidate search and inclusion witness.
-- `python/rampd_core/reachability.py`: orchestration and exact-time schedule.
-- `python/rampd_core/certificate.py`: serialization and search-independent replay.
-- `tests/`: retained Phase 1A regressions, rational/high-precision audits,
-  analytic-flow tests, failure handling and witness tampering tests.
-- `docs/NUMERICS_AND_SCOPE.md`: mathematical contract, proof argument and limits.
-- `docs/PHASE1B_ACCEPTANCE.md`: actual local test results and target acceptance gate.
-- `docs/FAILURE_LOG.md`: detected failures, fixes and unresolved boundaries.
-- `reports/local/`: local evidence, not target-server results.
-
-The local container lacked official MPFR development headers. Its native
-functional tests used an explicitly recorded minimal public-API declaration
-header against the real MPFR 4.2.2 runtime. That header and all binaries/build
-trees are **excluded** from this source release. The target must rebuild using
-the official development headers. This limitation is visible in local report
-status `BOOTSTRAP_TEST_PASS_REQUIRES_OFFICIAL_HEADERS`; it is not target acceptance.
+The numerical values above are a synthetic benchmark configuration, not
+recommended universal vehicle thresholds. Select width caps from the downstream
+collision/resource geometry resolution and uncertainty budget. Do not copy them
+as physical safety limits.

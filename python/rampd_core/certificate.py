@@ -7,9 +7,10 @@ import json
 import math
 from .interval import Interval
 from .model import StateBounds, ControlBounds, BicycleParameters
-from .reachability import StepWitness, TubeStatus, check_witness
+from .reachability import StepWitness, TubeStatus, check_witness, state_box_widths, PicardOptions
 
-SCHEMA = "rampd.picard-tube.v1"
+SCHEMA = "rampd.picard-tube.v2"
+LEGACY_SCHEMA = "rampd.picard-tube.v1"
 
 def _box(x):
     return [[v.lo, v.hi] for v in (x.as_tuple() if hasattr(x, "as_tuple") else x)]
@@ -29,6 +30,7 @@ def to_dict(result):
                           duration_hex=w.duration_s.hex(), initial=_box(w.initial),
                           tube=_box(w.tube), field=_box(w.field), picard_image=_box(w.picard_image),
                           endpoint=_box(w.endpoint), inclusion_margin_lo=list(w.inclusion_margin_lo),
+                          width_exact=[_fraction(v) for v in state_box_widths(w.tube)],
                           iterations=w.iterations))
     return dict(schema=SCHEMA, status=result.status.value, reason=result.reason,
                 claim="dynamics_outer_enclosure_only", full_support_safety_verified=False,
@@ -56,7 +58,7 @@ def replay_certificate(path_or_dict) -> ReplayReport:
     checked = 0
     try:
         d = path_or_dict if isinstance(path_or_dict, dict) else json.loads(Path(path_or_dict).read_text(encoding="utf-8"))
-        if d["schema"] != SCHEMA: raise ValueError("unsupported schema")
+        if d["schema"] not in (SCHEMA, LEGACY_SCHEMA): raise ValueError("unsupported schema")
         if d["status"] != TubeStatus.VALIDATED.value: raise ValueError("not a complete VALIDATED result")
         if d["claim"] != "dynamics_outer_enclosure_only" or d["full_support_safety_verified"] is not False:
             raise ValueError("unsupported safety claim")
@@ -68,7 +70,12 @@ def replay_certificate(path_or_dict) -> ReplayReport:
         if len(disturbance) != 6: raise ValueError("invalid disturbance")
         horizon = float.fromhex(d["horizon_hex"])
         if not math.isfinite(horizon) or horizon <= 0: raise ValueError("invalid horizon")
+        options = PicardOptions(**d.get("options", {}))
         state = _state(d["initial"]); t = Fraction(0)
+        if options.max_tube_widths is not None:
+            initial_widths = state_box_widths(state)
+            if any(w > cap for w, cap in zip(initial_widths, options.max_tube_widths)):
+                raise ValueError("initial state violates configured tube-width limit")
         if not d["segments"]: raise ValueError("empty witness list")
         for record in d["segments"]:
             start = Fraction(*map(int, record["start_time_exact"]))
@@ -86,6 +93,14 @@ def replay_certificate(path_or_dict) -> ReplayReport:
                                   tuple(record["inclusion_margin_lo"]), int(record["iterations"]))
             if not check_witness(witness, control, params, disturbance):
                 raise ValueError("Picard witness replay failed")
+            widths = state_box_widths(witness.tube)
+            if options.max_tube_widths is not None and any(
+                    width > cap for width, cap in zip(widths, options.max_tube_widths)):
+                raise ValueError("segment violates configured tube-width limit")
+            if d["schema"] == SCHEMA:
+                claimed = tuple(Fraction(*map(int, pair)) for pair in record["width_exact"])
+                if len(claimed) != 6 or any(v != actual for v, actual in zip(claimed, widths)):
+                    raise ValueError("exact width metadata mismatch")
             state, t = witness.endpoint, end
             checked += 1
         if t != Fraction.from_float(horizon): raise ValueError("horizon not fully covered")

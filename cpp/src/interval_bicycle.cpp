@@ -11,7 +11,7 @@ const char* rampd_interval_backend(void){return "MPFR-192/directed-binary64/ABI2
 const char* rampd_build_info(void){
     static const std::string value=[](){std::ostringstream s;
         s<<"compiler="<<__VERSION__<<";mpfr_runtime="<<mpfr_get_version()
-         <<";precision_bits=192;abi=2;api=0.2.0";
+         <<";precision_bits=192;abi=2;api=0.3.0";
 #ifdef MPFR_VERSION_STRING
         s<<";mpfr_header="<<MPFR_VERSION_STRING;
 #else

@@ -74,3 +74,27 @@ Model calibration, nonzero disturbance interpretation, vehicle pose reference
 and simulator/model mismatch are not supplied by the paper's equations alone.
 They do not block the nominal mathematical tests, but must be resolved before
 claiming physical safety. See NUMERICS_AND_SCOPE.md.
+
+## Phase 1C adaptive subdivision issues and resolutions
+
+1. **A successful Picard inclusion can still be too wide for downstream
+   geometry.** Added a post-inclusion width gate. The wide candidate is not
+   accepted; it is bisected and both children are recomputed.
+2. **Width calculations based on ordinary `hi - lo` can overflow or round
+   across a strict cap.** Widths are now exact rational differences of the
+   binary64 endpoints. Cap comparisons are exact against the exact binary64
+   cap; no epsilon is used.
+3. **Time subdivision cannot reduce initial or genuinely accumulated
+   uncertainty.** Initial support wider than a cap returns UNKNOWN immediately;
+   later unachievable caps terminate through explicit depth/min-step/split/time
+   budgets and UNKNOWN.
+4. **A separate cost budget is needed.** Added `max_width_subdivisions` apart
+   from the existing max attempts, max accepted steps, max depth, minimum step
+   and wall-clock limits.
+5. **Certificate metadata must not be trusted.** Schema v2 stores exact width
+   fractions; replay recomputes and requires exact equality, and independently
+   checks every configured cap. Phase 1B schema v1 remains readable.
+6. **Benchmark must demonstrate the new branch.** Added a deterministic
+   synthetic case in which the coarse schedule accepts 2 wide segments, while
+   adaptive width control performs 3 width splits and accepts 5 segments. The
+   benchmark asserts all methods validate and replay; timing remains descriptive.

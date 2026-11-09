@@ -1,0 +1,12 @@
+{
+  "description": "Synthetic benchmark example only; do not use as universal vehicle thresholds.",
+  "max_step_s": 0.4,
+  "max_tube_widths": [2.2, 0.8, 0.1, 0.3, 0.1, 0.01],
+  "max_width_subdivisions": 10000,
+  "max_steps": 10000,
+  "max_attempts": 20000,
+  "max_depth": 20,
+  "min_step_s": 1e-7,
+  "time_limit_s": null,
+  "state_order_and_units": ["px_m", "py_m", "psi_rad", "v_m_per_s", "a_m_per_s2", "delta_rad"]
+}

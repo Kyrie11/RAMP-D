@@ -8,12 +8,12 @@ if __name__=='__main__':
     root=Path(__file__).resolve().parents[1]
     ap=argparse.ArgumentParser()
     ap.add_argument('--report',type=Path)
-    ap.add_argument('--output',type=Path,default=root/'reports'/'RAMP-D_Phase1B_server_report.zip')
+    ap.add_argument('--output',type=Path,default=root/'reports'/'RAMP-D_Phase1C_server_report.zip')
     args=ap.parse_args()
     report=args.report
     if report is None:
-        choices=[p for p in (root/'reports').glob('phase1b_*') if p.is_dir() and (p/'validation.log').is_file()]
-        if not choices: raise SystemExit('No server report found. Run scripts/validate_phase1b.sh first.')
+        choices=[p for p in (root/'reports').glob('phase1c_*') if p.is_dir() and (p/'validation.log').is_file()]
+        if not choices: raise SystemExit('No server report found. Run scripts/validate_phase1c.sh first.')
         report=max(choices,key=lambda p:p.stat().st_mtime)
     report=report.resolve()
     if not report.is_dir(): raise SystemExit(f'Report directory does not exist: {report}')

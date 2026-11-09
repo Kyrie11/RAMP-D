@@ -56,8 +56,7 @@ def _load_library():
     explicit = os.environ.get("RAMPD_INTERVAL_LIB")
     root = Path(__file__).resolve().parents[2]
     candidates = [Path(explicit)] if explicit else [
-        root / "build_phase1b" / "librampd_interval.so",
-        root / "build" / "librampd_interval.so"]
+        root / "build_phase1c" / "librampd_interval.so"]
     for p in candidates:
         if not p.is_file():
             continue
@@ -67,9 +66,9 @@ def _load_library():
             if lib.rampd_abi_version() != 2:
                 raise AttributeError("ABI mismatch")
         except AttributeError as exc:
-            raise ImportError(f"Stale/incompatible backend at {p}. Build Phase 1B; do not load Phase 1A's .so.") from exc
+            raise ImportError(f"Stale/incompatible backend at {p}. Build Phase 1C; do not load a stale native library.") from exc
         return lib, str(p.resolve())
-    raise FileNotFoundError("Phase 1B backend not found. Run scripts/validate_phase1b.sh; "
+    raise FileNotFoundError("Phase 1B backend not found. Run scripts/validate_phase1c.sh; "
                             "or set RAMPD_INTERVAL_LIB to the NEW library's absolute path.")
 
 _LIB, LIBRARY_PATH = _load_library()

@@ -7,3 +7,6 @@ __pycache__/
 *.egg-info/
 reports/phase1b_*/
 .venv/
+
+build_phase1c/
+reports/phase1c_*/
