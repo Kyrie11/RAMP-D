@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.18)
+project(rampd_phase1a VERSION 0.1.0 LANGUAGES CXX)
+
+option(RAMPD_BUILD_TESTS "Build C++ tests" ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_library(rampd_interval SHARED cpp/src/interval_bicycle.cpp)
+target_include_directories(rampd_interval PUBLIC cpp/include)
+target_compile_options(rampd_interval PRIVATE -Wall -Wextra -Wpedantic -fno-fast-math -frounding-math)
+set_target_properties(rampd_interval PROPERTIES OUTPUT_NAME rampd_interval)
+
+if(RAMPD_BUILD_TESTS)
+  enable_testing()
+  add_executable(test_interval cpp/src/test_interval.cpp)
+  target_include_directories(test_interval PRIVATE cpp/include)
+  target_link_libraries(test_interval PRIVATE rampd_interval)
+  target_compile_options(test_interval PRIVATE -UNDEBUG)
+  target_compile_options(test_interval PRIVATE -Wall -Wextra -Wpedantic -fno-fast-math -frounding-math)
+  add_test(NAME interval_cpp COMMAND test_interval)
+endif()

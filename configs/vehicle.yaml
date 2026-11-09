@@ -1,0 +1,5 @@
+# Explicit engineering configuration; values below are placeholders for tests,
+# NOT calibrated values asserted by the paper or a production vehicle.
+wheelbase_m: 2.8
+friction_coefficient: 0.9
+gravity_mps2: 9.80665
