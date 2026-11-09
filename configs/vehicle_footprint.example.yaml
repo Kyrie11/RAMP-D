@@ -1,0 +1,9 @@
+# Example schema only. DO NOT use these values as calibrated vehicle geometry.
+# The paper's bicycle ODE does not specify whether (px,py) is rear-axle center
+# or body center. Set the reference convention and calibrate the offset first.
+footprint:
+  length_m: null
+  width_m: null
+  center_offset_x_m: null
+  center_offset_y_m: null
+  state_position_reference: null  # e.g. rear_axle_center or body_geometric_center

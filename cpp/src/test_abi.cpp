@@ -4,7 +4,7 @@
 #include <cstring>
 int main(){
     double lo=0,hi=0;
-    CHECK(rampd_abi_version()==2);
+    CHECK(rampd_abi_version()==3);
     CHECK(std::strstr(rampd_interval_backend(),"MPFR")!=nullptr);
     CHECK(rampd_interval_add(1,2,3,4,nullptr,&hi)!=0);
     CHECK(rampd_interval_add(2,1,3,4,&lo,&hi)!=0);

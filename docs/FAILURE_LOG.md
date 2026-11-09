@@ -98,3 +98,33 @@ claiming physical safety. See NUMERICS_AND_SCOPE.md.
    synthetic case in which the coarse schedule accepts 2 wide segments, while
    adaptive width control performs 3 width splits and accepts 5 segments. The
    benchmark asserts all methods validate and replay; timing remains descriptive.
+
+## Phase 1D development findings and resolutions
+
+1. **Local build did not find MPFR development files.** The local container has
+   the MPFR runtime but no official development header or unversioned linker
+   symlink. This is an environment limitation, not a project source defect.
+   Local bootstrap validation used the existing temporary declaration header
+   and explicit runtime library path. The delivered project does not include
+   that header. Target acceptance must use the server's official
+   `libmpfr-dev` headers (MPFR 4.0.2 was already confirmed in Phase 1C).
+2. **ABI compatibility needed to change.** Adding the MPFR interval square-root
+   entry point changes the native API; ABI was bumped 2 -> 3. The Python
+   loader was updated and a real ABI-2 shared library was tested and rejected.
+   A fresh `build_phase1d/` is mandatory.
+3. **Initial metric-clearance test expected 9 m, but geometry gives 8 m.**
+   Two 2 m-long boxes whose centers are 10 m apart have an 8 m gap. The code's
+   unnormalized-axis projection gap (16 for axis `(2,0)`) divided by axis norm
+   2 correctly gives 8 m. The test expectation was corrected; no algorithm
+   change was required.
+4. **AABB-only overlap is not collision.** The diagonal synthetic case has
+   overlapping x/y AABBs but is separable along a body-aligned axis. The
+   AABB-only result is correctly UNKNOWN; the oriented candidate-axis result
+   is SEPARATED with a positive 1.3 m lower bound.
+5. **Different adaptive time partitions require common refinement.** Added an
+   exact rational overlap partition and reused the enclosing whole-step tube
+   on each overlap. This is sound but conservative; tests cover all-separated
+   and one-unresolved subintervals.
+6. **Unrepresentable user axis.** Very large finite axis values can overflow
+   binary64 interval endpoints. The separation API now fails closed to UNKNOWN
+   for numerical enclosure failures rather than treating them as separated.

@@ -12,7 +12,7 @@ struct I {
 };
 void check_environment();
 I operator+(I,I); I operator-(I,I); I operator*(I,I); I operator/(I,I);
-I square(I); I sin(I); I cos(I); I tan(I); I pi(); I decimal(const char*);
+I square(I); I sqrt(I); I sin(I); I cos(I); I tan(I); I pi(); I decimal(const char*);
 I hull(I,I); I inflate(I,double,double);
 bool subset(I,I); bool interior(I,I);
 using Box=std::array<I,6>;

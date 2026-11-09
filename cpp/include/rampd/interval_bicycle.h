@@ -2,7 +2,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* ABI 2. Endpoints are finite binary64 values, interpreted exactly as reals.
+/* ABI 3. Endpoints are finite binary64 values, interpreted exactly as reals.
    rc=0: completed; rc!=0: error, output is NOT to be consumed.
    Error text is thread-local. All arrays have the sizes documented below. */
 int rampd_abi_version(void);
@@ -14,6 +14,7 @@ int rampd_interval_sub(double,double,double,double,double*,double*);
 int rampd_interval_mul(double,double,double,double,double*,double*);
 int rampd_interval_div(double,double,double,double,double*,double*);
 int rampd_interval_square(double,double,double*,double*);
+int rampd_interval_sqrt(double,double,double*,double*);
 int rampd_interval_sin(double,double,double*,double*);
 int rampd_interval_cos(double,double,double*,double*);
 /* tan rejects intervals possibly containing any pole. */

@@ -1,2 +1,2 @@
-pytest>=7,<9
+pytest>=7,<10
 mpmath>=1.2,<1.4

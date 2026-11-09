@@ -1,10 +1,22 @@
 {
-  "AnonymousSubmission2027(2).tex": {
+  "AnonymousSubmission2027(4).tex": {
     "sha256": "c48df23897404ec3176796020e442f2a319947ad573d75997c87a4f5bd93a7bb",
     "size_bytes": 72993
   },
-  "RAMP-D_Phase1A(1).zip": {
-    "sha256": "2f3c87a7a13bbd787f10f3b170e4e2fc804c19aedba57b901f209cfb2d94b564",
-    "size_bytes": 13406
+  "aaai2027.bib": {
+    "sha256": "43604825bdf4999919d1296da9fda9d05c4da5d8fafd8763743f1a86f7a19295",
+    "size_bytes": 22998
+  },
+  "开发建议.md": {
+    "sha256": "05801d545297e62521fd71f7f0c9a6aeaf1a38c6a68bf786097508f5bf81c1a3",
+    "size_bytes": 21803
+  },
+  "RAMP-D_Phase1C(1).zip": {
+    "sha256": "203f62ea82048fc6cf174bd1d37f54301043fba6547fc9258f7d05d3179a77da",
+    "size_bytes": 135810
+  },
+  "RAMP-D_Phase1C_server_report.zip": {
+    "sha256": "f5149b4d55d502a01a7c49af13395a8a152823b5d345a5b1b3cb2d70e4efaa9f",
+    "size_bytes": 24500
   }
 }

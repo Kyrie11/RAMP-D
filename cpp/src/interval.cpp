@@ -116,6 +116,12 @@ I decimal(const char* s) {
         throw std::invalid_argument("invalid decimal string");
     return finite_result(mpfr_get_d(l.v,MPFR_RNDD),mpfr_get_d(r.v,MPFR_RNDU));
 }
+I sqrt(I a) {
+    if (a.hi < 0.0) throw DomainError("sqrt interval is strictly negative");
+    const double lo = a.lo <= 0.0 ? 0.0 : unary(a.lo, mpfr_sqrt, MPFR_RNDD);
+    const double hi = unary(a.hi, mpfr_sqrt, MPFR_RNDU);
+    return finite_result(lo, hi);
+}
 I sin(I x){return trig(x,true);}
 I cos(I x){return trig(x,false);}
 I tan(I x) {

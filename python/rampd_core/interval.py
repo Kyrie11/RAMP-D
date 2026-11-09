@@ -56,19 +56,19 @@ def _load_library():
     explicit = os.environ.get("RAMPD_INTERVAL_LIB")
     root = Path(__file__).resolve().parents[2]
     candidates = [Path(explicit)] if explicit else [
-        root / "build_phase1c" / "librampd_interval.so"]
+        root / "build_phase1d" / "librampd_interval.so"]
     for p in candidates:
         if not p.is_file():
             continue
         lib = C.CDLL(str(p.resolve()))
         try:
             lib.rampd_abi_version.restype = C.c_int
-            if lib.rampd_abi_version() != 2:
+            if lib.rampd_abi_version() != 3:
                 raise AttributeError("ABI mismatch")
         except AttributeError as exc:
-            raise ImportError(f"Stale/incompatible backend at {p}. Build Phase 1C; do not load a stale native library.") from exc
+            raise ImportError(f"Stale/incompatible backend at {p}. Build Phase 1D; do not load a stale native library.") from exc
         return lib, str(p.resolve())
-    raise FileNotFoundError("Phase 1B backend not found. Run scripts/validate_phase1c.sh; "
+    raise FileNotFoundError("Phase 1D backend not found. Run scripts/validate_phase1d.sh; "
                             "or set RAMPD_INTERVAL_LIB to the NEW library's absolute path.")
 
 _LIB, LIBRARY_PATH = _load_library()
@@ -76,7 +76,7 @@ _D, _P = C.c_double, C.POINTER(C.c_double)
 for _name in ("add", "sub", "mul", "div"):
     fn = getattr(_LIB, "rampd_interval_" + _name)
     fn.argtypes, fn.restype = [_D, _D, _D, _D, _P, _P], C.c_int
-for _name in ("square", "sin", "cos", "tan"):
+for _name in ("square", "sqrt", "sin", "cos", "tan"):
     fn = getattr(_LIB, "rampd_interval_" + _name)
     fn.argtypes, fn.restype = [_D, _D, _P, _P], C.c_int
 _LIB.rampd_interval_decimal.argtypes = [C.c_char_p, _P, _P]
@@ -111,6 +111,7 @@ def sub(a, b): return _call_scalar("rampd_interval_sub", a.lo, a.hi, b.lo, b.hi)
 def mul(a, b): return _call_scalar("rampd_interval_mul", a.lo, a.hi, b.lo, b.hi)
 def div(a, b): return _call_scalar("rampd_interval_div", a.lo, a.hi, b.lo, b.hi)
 def square(a): return _call_scalar("rampd_interval_square", a.lo, a.hi)
+def sqrt(a): return _call_scalar("rampd_interval_sqrt", a.lo, a.hi)
 def sin(a): return _call_scalar("rampd_interval_sin", a.lo, a.hi)
 def cos(a): return _call_scalar("rampd_interval_cos", a.lo, a.hi)
 def tan(a): return _call_scalar("rampd_interval_tan", a.lo, a.hi)

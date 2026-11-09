@@ -21,6 +21,7 @@ int main(){
     for(int mode:{FE_TONEAREST,FE_UPWARD,FE_DOWNWARD,FE_TOWARDZERO}){
         CHECK(std::fesetround(mode)==0);
         CHECK(rampd_interval_sin(.1,.2,&lo,&hi)==0);
+        CHECK(rampd_interval_sqrt(4.0,9.0,&lo,&hi)==0 && lo==2.0 && hi==3.0);
         CHECK(std::fegetround()==mode);
         CHECK(rampd_interval_mul(.1,.2,.3,.4,&lo,&hi)==0);
         CHECK(std::fegetround()==mode);

@@ -1,10 +1,11 @@
 {
-  "release": "0.3.0",
-  "phase": "1C",
-  "phase1a": "server acceptance passed in Phase 1B report; regression suite retained",
-  "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, 32-step witness replay, 20480 empirical state-vector checks with zero misses",
-  "phase1c": "implemented; local bootstrap suite passed; target-server acceptance pending",
-  "phase1d": "not implemented",
+  "release": "0.4.0",
+  "phase": "1D",
+  "phase0": "completed",
+  "phase1a": "server acceptance passed; regression suite retained",
+  "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
+  "phase1c": "server acceptance passed: 3 native tests, 83 Python tests, three benchmark methods validated and replayed; adaptive accepted width ratio 0.9886314837",
+  "phase1d": "implemented; local bootstrap acceptance pending target-server rebuild and acceptance",
   "phase2_belief_support_and_invariant": "not implemented",
   "phase3_public_backup_controller": "not implemented",
   "phase4_protocol_full_support_verifier": "not implemented",
@@ -19,5 +20,5 @@
     "carla_api": "0.9.16",
     "simulator_mode": "headless"
   },
-  "local_limit": "The local container has no official MPFR development header; bootstrap compilation used a temporary public-API declaration header outside the distribution and the installed real MPFR runtime. Phase 1C target rebuild is required."
+  "local_limit": "The local container lacks the official MPFR development header; local bootstrap compilation may use a temporary declaration header with the real MPFR runtime. Target server must rebuild with official libmpfr-dev headers."
 }
