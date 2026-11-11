@@ -1,6 +1,6 @@
 # Phase 4 开发计划：协议分支与完整支持集验证器
 
-**文档性质：下一阶段的实现与验收计划，尚未实现。** 本文件不把 Phase 3 的局部物理证据、有限固定点或可执行 graph 升格为完整系统证书。路线继续严格遵循上传历史 Markdown 的 `0 → 1A → 1B → 1C → 1D → 2 → 3 → 4 → 5 → 6`，本轮之后先完成 Phase 4，再进入完整 CEGAR 和数据实验。
+**文档性质：Phase 4 目标、实现边界与后续验收基线。** Phase 4 首版已经实现，但只覆盖显式有限合成协议和连续证据合同；本文件不把它或 Phase 3 的局部物理证据、有限固定点、可执行 graph 升格为真实交通系统证书。路线继续严格遵循上传历史 Markdown 的 `0 → 1A → 1B → 1C → 1D → 2 → 3 → 4 → 5 → 6`，下一步进入完整 CEGAR 和数据实验。
 
 依据为用户单独上传的论文、历史设计记录中的 Phase 4/5/6 定义，以及本项目 `MATHEMATICAL_CORRECTIONS_PHASE3.md` 中已说明的数学修正。历史记录约第 4275—4287 行将 Phase 4 定为 Protocol automaton、Rule event、Resource state、Agent reachable tube、Observation branches、Continuous collision 和 Terminal invariant membership 的连接；约第 4289—4298 行将完整 CEGAR 留给 Phase 5。
 
@@ -33,9 +33,9 @@ Phase 4 不承担训练预测器、CARLA/SUMO 联合仿真、连续参数空间�
 | `compute_information_invariant` | 给定有限候选游戏上的公共动作固定点与整体后验单目标检查 | 使用完整协议后端重新验证每条动作，重建保留支持；局部有限固定点不能直接作为完整协议下的终端不变集 |
 | `BackupPolicyGraph` / `BackupExecutor` | 序列化/回放、契约 digest、状态支持、未知观测与采样时刻守卫 | 将 guard 扩展至完整协议/资源/观测/他车上下文和当前公共时间，执行前绑定真实使用中的契约 |
 
-当前 assurance scope 为 `LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS`。Phase 4 需要替换本阶段的 frozen discrete mode、静态场景及人工声明观测覆盖假设，并明确其证据来源。只改变字符串或将 `full_support_certified` 设为 `true` 不构成升级。
+Phase 3 的 assurance scope 为 `LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS`。当前 Phase 4 首版 scope 为 `PHASE4_EXPLICIT_PROTOCOL_SUPPORT`：它已经替换了协议/资源/观测接口并提供合成他车 tube，但真实场景的 frozen-mode、消息日志和观测覆盖仍未接入。只改变字符串或将 `full_support_certified` 设为 `true` 不构成升级。
 
-建议按职责新增协议、资源、他车管、观测与 full-support verifier 模块；具体文件名在实现时确定。不要通过扩大 `LocalEvidenceStore` 的名称含义掩盖旧证据的局部范围。
+已按职责实现 `protocol.py`、`resources.py`、`agents.py`、`observations.py` 和 `full_verifier.py`；不要通过扩大 `LocalEvidenceStore` 的名称含义掩盖旧证据的局部范围。
 
 ## 3. 开工前冻结的输入/输出契约
 
@@ -229,14 +229,14 @@ digest 是内容完整性与匹配机制，不能单独证明任何安全命题�
 
 继续用户指定的顺序：**明确本轮目标 → 实现代码 → 执行测试 → 分析失败案例 → 形成验收报告**。
 
-建议将 Phase 4 内部工作组织为以下顺序，不新增或改变外部阶段编号：
+本轮实际按以下 Phase 4 内部顺序完成，未新增或改变外部阶段编号：
 
-1. 冻结协议/时钟/资源/观测/他车接口和可独立穷举的最小基准，先记录所有假设与预期状态。
-2. 实现协议与消息转移、资源监视器和联合观测更新，验证离散分支覆盖及非预见性。
-3. 接入 ego/他车连续管和完整 footprint，验证事件区段的全部硬约束。
-4. 接入整体后验、单目标终端检查以及在完整协议下重新验证的 backup graph。
-5. 实现三值队列、最小具体化检查器、证据回放、缓存与执行契约守卫。
-6. 执行全工程回归、专门失败案例和预算实验，逐项解释失败原因，形成 Phase 4 本地验收及服务器待验收报告。
+1. 已冻结协议/时钟/资源/观测/他车接口和可独立穷举的最小基准，记录所有假设与预期状态。
+2. 已实现协议与消息转移、资源监视器和联合观测更新，验证离散分支覆盖及非预见性。
+3. 已接入 ego/他车连续管和完整 footprint 接口，并验证事件区段的保守硬约束。
+4. 已接入整体后验、单目标终端检查；Phase 3 backup graph 通过合同接口进入 verifier。
+5. 已实现三值队列、独立 counterexample replay 接口、证据 digest 和执行契约守卫。
+6. 已执行全工程回归和专门失败案例，逐项解释失败原因，形成 Phase 4 本地验收报告；真实服务器复核仍待用户执行。
 
 只有以下 gate 全部满足，才可宣称 Phase 4 在**所声明模型和有限基准**上通过：
 
@@ -264,4 +264,4 @@ digest 是内容完整性与匹配机制，不能单独证明任何安全命题�
 - `MATHEMATICAL_CORRECTIONS_PHASE3.md`：单个终端支持、信息支持向下闭包、外包围终端失配、占用时长区间、采样保持、证据绑定及解析界时间约定。
 - `DATASETS_AND_SIMULATORS.md`：官方数据/仿真来源、字段映射、数据边界与后续使用时机。
 
-本文提出的模块、验证器与验收 gate 均为下一阶段工作要求，不是 Phase 3 已实现功能列表。
+本文列出的 Phase 4 模块、验证器与验收 gate 已有首版实现；未完成的具体化、CEGAR、真实数据和仿真仍属于 Phase 5/6。

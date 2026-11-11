@@ -1,0 +1,24 @@
+{
+  "certified_fixture": true,
+  "current_scene_verified": false,
+  "full_support_certified": false,
+  "phase3_regression_included": true,
+  "real_datasets_used": false,
+  "resource_probe": {
+    "agent_model_reason": "MODEL_DECLARED",
+    "agent_model_valid": true,
+    "agent_tube_segments": 4,
+    "agent_tube_status": "VALIDATED",
+    "resource_reason": "RESOURCE_RULES_PROVED",
+    "resource_status": "SAFE"
+  },
+  "scope": "PHASE4_EXPLICIT_PROTOCOL_SUPPORT",
+  "simulators_used": false,
+  "status": "PHASE4_LOCAL_PASS",
+  "tex_bib_required": false,
+  "three_valued_examples": {
+    "certified": "CERTIFIED",
+    "counterexample": "COUNTEREXAMPLE",
+    "unknown": "UNKNOWN"
+  }
+}

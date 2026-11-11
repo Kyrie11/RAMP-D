@@ -1,8 +1,6 @@
-# RAMP-D Phase 3（0.6.0）
+# RAMP-D Phase 4（0.7.0）
 
-本版本沿用论文及既定路线，在 Phase 2 的有限 belief-support 固定点算法之上，
-增加公共采样反馈律的有限候选综合、局部连续时间证据、可执行 backup policy
-graph 和独立回放。Phase 1A–1D 的 MPFR/C++ 数值内核保留，**原生 ABI 仍为 3**。
+本版本在 Phase 3 的公共采样恢复策略之上，增加显式有限协议自动机、四时钟消息语义、资源占用/容量监视、声明式他车响应管、观测后验聚合，以及 `CERTIFIED / COUNTEREXAMPLE / UNKNOWN` 三值全支持验证接口。Phase 1A–1D 的 MPFR/C++ 数值内核保留，**原生 ABI 仍为 3**。
 
 开发顺序保持：明确目标 → 实现代码 → 执行测试 → 分析失败案例 → 形成验收报告。
 
@@ -23,19 +21,21 @@ graph 和独立回放。Phase 1A–1D 的 MPFR/C++ 数值内核保留，**原生
 Phase 2 服务器报告已复核通过其有限抽象范围。本轮同时修复了旧证据接口未绑定
 当前验证义务的问题，并移除了验证脚本对 `.tex` / `.bib` 的强依赖。
 
+Phase 4 首版只在可穷举的合成协议与显式连续证据契约上验真；它没有把 MTR++、QCNet、QCNeXt 的概率输出当作安全支持，也没有接入 WOMD、AV2、CARLA 或 SUMO。
+
 ## 保证边界
 
-本版本的局部保证范围固定为：
+本版本的首版合成保证范围固定为：
 
 ```text
-LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS
+PHASE4_EXPLICIT_PROTOCOL_SUPPORT
 full_support_certified = false
 current_scene_verified = false
 ```
 
-它覆盖声明的六状态 bicycle 模型、有界导数扰动与测量误差、冻结的离散模式、
-静态道路/gate/障碍，以及调用方显式提供的有限 observation cover。实际移动
-他车、协议时序、资源监视器和真实观测关系的完整支持验证属于 Phase 4。
+它覆盖有限协议、声明的六状态 bicycle/他车响应模型、有界导数扰动与测量误差、
+动态资源 monitor、完整 footprint 外包围，以及调用方显式提供的有限 observation
+cover。历史 Phase 3 的 `LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS` 范围仍保留在回归报告中；真实交通中的完整协议、动态资源、移动他车和观测关系仍需在声明式合同之外逐步接入，当前 Phase 4 的合成验证结果不等同于真实场景安全证书。
 
 四类模板在非零过程扰动和测量误差下验证的是**一次决策区间的局部目标**。
 `clear_merge` 示例证明受约束的横向推进，不代表已经完成合法合流；受扰
@@ -67,7 +67,7 @@ offset 含几何近似，实际 CARLA/车辆测试须重新校准。摩擦是场
 
 ## 服务器环境与一键验收
 
-继续使用你已有的服务器环境，无须为 Phase 3 升级 Python、GCC、CMake 或 MPFR：
+继续使用你已有的服务器环境，无须为 Phase 4 升级 Python、GCC、CMake 或 MPFR：
 
 | 项目 | 已知目标服务器环境 |
 |---|---|
@@ -80,20 +80,20 @@ offset 含几何近似，实际 CARLA/车辆测试须重新校准。摩擦是场
 
 本轮本地测试使用 Python 3.12、GCC 14.2、官方 MPFR 4.2.2 发布版头文件及
 4.2.2 运行库，**不是 declaration-only bootstrap**。本地结果不替代你的
-Phase 3 服务器复核；目标服务器兼容性仍以新报告为准。
+目标服务器复核；目标服务器兼容性仍以新报告为准。
 
-把 `RAMP-D_Phase3.zip` 放到 `/home/senzeyu2/code` 后运行：
+把 `RAMP-D_Phase4.zip` 放到 `/home/senzeyu2/code` 后运行：
 
 ```bash
 cd /home/senzeyu2/code
 conda activate mfrp
-unzip RAMP-D_Phase3.zip
-cd /home/senzeyu2/code/RAMP-D_Phase3
+unzip RAMP-D_Phase4.zip
+cd /home/senzeyu2/code/RAMP-D_Phase4
 python -m pip install -r requirements-test.txt
-PYTHON_BIN="$(command -v python)" bash scripts/validate_phase3.sh
+PYTHON_BIN="$(command -v python)" bash scripts/validate_phase4.sh
 ```
 
-压缩包使用新的 `RAMP-D_Phase3/` 顶层目录，原来的 `RAMP-D/` 工程可保留。
+压缩包使用新的 `RAMP-D_Phase4/` 顶层目录，原来的 `RAMP-D/` 工程可保留。
 首次解压应使用尚不存在的新目录；已有同名测试目录时请先保留旧结果。
 命令没有 `--upgrade`，不要求升级已有基础环境。
 
@@ -104,17 +104,17 @@ PYTHON_BIN="$(command -v python)" bash scripts/validate_phase3.sh
 最终报告位于：
 
 ```text
-reports/phase3_<UTC时间戳>/
-reports/RAMP-D_Phase3_server_report.zip
+reports/phase4_<UTC时间戳>/
+reports/RAMP-D_Phase4_server_report.zip
 ```
 
-请上传 `reports/RAMP-D_Phase3_server_report.zip`。脚本失败时也会尽力生成
+请上传 `reports/RAMP-D_Phase4_server_report.zip`。脚本失败时也会尽力生成
 包含失败阶段和日志的报告；不要只上传终端最后几行。
 
-自定义 MPFR 安装可从 Phase 3 入口传入 CMake 参数，例如：
+自定义 MPFR 安装可从 Phase 4 入口传入 CMake 参数，例如：
 
 ```bash
-PYTHON_BIN="$(command -v python)" bash scripts/validate_phase3.sh \
+PYTHON_BIN="$(command -v python)" bash scripts/validate_phase4.sh \
   -DCMAKE_PREFIX_PATH=/your/existing/mpfr/prefix
 ```
 
@@ -169,6 +169,19 @@ print(len(verified.nodes), terminal_v_zero, terminal_a_zero)
 生产调用方须从自身已核实的当前场景配置取得 `expected_contract_digest`。
 证书自述的 digest 只能标识其假设，不能证明当前真实场景满足这些假设。
 
+## Phase 4 API 示例
+
+```python
+from rampd_core.phase4_examples import run_examples
+from rampd_core.forecast import PredictionProposal, proposal_only, hard_support_from_prediction
+
+print(run_examples())  # synthetic CERTIFIED / COUNTEREXAMPLE / UNKNOWN
+# MTR/QCNet/QCNeXt proposals remain ranking metadata.
+```
+
+`OtherAgentModel` 必须绑定完整的动力学、扰动、ego 响应增益和模型 digest；
+`FullVerifierContract` 没有 model digest 时固定返回 `UNKNOWN`。
+
 ## 文档与下一阶段
 
 - [Phase 3 设计](docs/PHASE3_DESIGN.md)：本轮目标、接口、控制综合和保证边界。
@@ -179,8 +192,8 @@ print(len(verified.nodes), terminal_v_zero, terminal_a_zero)
 - [综合专项独立测试](docs/PHASE3_SYNTHESIS_TEST_REVIEW.md)：物理与证据绑定的失败分析。
 - [数据集及模拟器](docs/DATASETS_AND_SIMULATORS.md)：AV2/WOMD 格式、已有路径和分阶段接入。
 - [开发路线](docs/DEVELOPMENT_ROADMAP.md)：0 → 1A → 1B → 1C → 1D → 2 → 3 → 4 → 5 → 6。
+- [Phase 4 工程报告](docs/PHASE4_IMPLEMENTATION_REPORT.md)：协议、资源、他车、观测和验证器实现。
+- [Phase 4 验收](docs/PHASE4_ACCEPTANCE.md)：23 项专项测试、317 项历史回归及失败案例。
 
-下一阶段是 Phase 4：协议自动机、完整 agent/ego tube、资源监视器、真实观测
-支持、连续碰撞与终端不变成员检查，形成完整支持下的三值验证结果。
-Phase 5 再接 CEGAR，Phase 6 再做 AV2/WOMD 学习与 SUMO/CARLA 闭环实验。
+下一阶段是 Phase 5：把当前三值接口扩展为可恢复的 concrete/spurious counterexample 分流、时间和连续 cell refinement、master 更新及队列重验证。Phase 6 再做 AV2/WOMD 学习与 SUMO/CARLA 闭环实验。
 **本轮验收不需要下载数据集，也不需要启动 CARLA 0.9.16 或 SUMO 1.20。**

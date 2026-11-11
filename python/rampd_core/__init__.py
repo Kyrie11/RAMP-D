@@ -1,4 +1,4 @@
-"""RAMP-D verified numerics and public sampled-data backup core, Phase 3."""
+"""RAMP-D verified numerics, sampled-data backup core, and Phase 4 verifier."""
 from .interval import (Interval, IntervalError, backend_name, build_info, add, sub,
                        mul, div, square, sqrt, sin, cos, tan, pi_interval, bicycle_rhs, friction_lhs)
 from .model import (BicycleParameters, StateBounds, ControlBounds, rhs,
@@ -29,6 +29,21 @@ from .backup import (BackupContract, StaticObstacle, StepCheck, LocalEvidenceSto
 from .backup_graph import (BackupNode, BackupPolicyGraph, BackupExecutor,
                            BackupExecutionError, build_backup_graph,
                            save_backup_graph, load_backup_graph)
+from .protocol import (CausalStage, TimeWindow, ClockTrace, EffectiveInterval,
+                       MessageSpec, ProtocolState, ProtocolTransition,
+                       CoverageLedger, ProtocolAutomaton, branch_temporal_status,
+                       silence_knowledge_status, build_coverage_ledger)
+from .resources import (OccupancyStatus, ResourceStatus, ResourceRegion,
+                        ResourceState, ActorFootprint, Occupancy, ResourceCheck,
+                        occupancy, check_resources)
+from .agents import OtherAgentModel, AgentTubeEvidence, validate_agent_model
+from .observations import (ObservationBranch, PosteriorResult, ObservationModel)
+from .full_verifier import (VerifyStatus, BranchCheck, VerificationTask,
+                            VerificationResult, FullVerifierContract,
+                            FullSupportVerifier, policy_digest)
+from .forecast import (ProposalStatus, PredictionProposal, ProposalSet,
+                       ProposalAdapterResult, proposal_only,
+                       hard_support_from_prediction)
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __all__ = [name for name in globals() if not name.startswith("_")]

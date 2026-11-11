@@ -22,11 +22,11 @@
 | Analytic integrator-chain tightening | `analytic_bounds.py` | Sound intersection with Picard; exact quadratic velocity extrema, no speed clipping |
 | Context-bound transition evidence | `invariant.py`, `backup.py` | Full support/action/law/contract/transition binding and independent numerical replay |
 | Executable closed public backup graph | `backup_graph.py` | Phase 3; observation-only children, fixed-point closure, contract and execution guards |
-| Protocol product and full-support verifier | planned Phase 4 | Not implemented |
+| Protocol product and full-support verifier | `protocol.py`, `resources.py`, `agents.py`, `observations.py`, `full_verifier.py` | Phase 4 first explicit finite-support implementation; synthetic contracts only, real-scene integration pending |
 | CEGAR | planned Phase 5 | Not implemented |
 | AV2/WOMD training and SUMO/CARLA closed-loop experiments | planned Phase 6 | Not implemented |
 
 The paper's full planner `CERTIFIED` result is not produced by any Phase 1A-1D
 module. No current result authorizes physical control execution.
 
-Phase 3 exported graphs retain `full_support_certified=false`; physical execution in a real traffic scene still requires Phase 4 and calibration. Current per-template fixtures are local one-step recovery objectives; only the nominal brake/hold fixture is a complete closed invariant graph.
+Phase 3 exported graphs retain `full_support_certified=false`; Phase 4 synthetic verifier results retain the same real-traffic boundary. Physical execution in a real traffic scene still requires complete protocol/observation contracts and calibration. Current per-template fixtures are local one-step recovery objectives; only the nominal brake/hold fixture is a complete closed invariant graph.
