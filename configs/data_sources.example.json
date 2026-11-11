@@ -1,0 +1,87 @@
+{
+  "schema": "rampd.data-sources.example.v1",
+  "purpose": "Documentation-only paths and split plans for future Phase 6 adapters",
+  "runtime_dependency": false,
+  "adapters_implemented_by_this_config": false,
+  "activate_in_phase": "6",
+  "reviewed_on_user_date": "2026-11-10",
+  "server_paths_verified_in_this_session": false,
+  "project_root": "/home/senzeyu2/code/RAMP-D",
+  "argoverse2_motion": {
+    "enabled": false,
+    "root": "/data0/senzeyu2/dataset/Argoverse2/motion",
+    "format": "scenario parquet plus scenario-specific vector-map JSON",
+    "nominal_sample_rate_hz": 10,
+    "position_reference": "object_bounding_box_center",
+    "per_track_dimensions_available_in_standard_schema": false,
+    "split_paths_require_manifest_confirmation": true,
+    "split_directory_candidates": {
+      "train": ["train", "Train"],
+      "validation": ["val", "validation", "Validation"],
+      "test": ["test", "Test"]
+    },
+    "selected_split_paths": {
+      "train": null,
+      "validation": null,
+      "test": null
+    },
+    "initial_adapter_split": "validation",
+    "test_annotation_files_to_resolve_when_scoring": {
+      "single_agent": "av2_mf_focal_test_annotations.parquet",
+      "multi_agent": "av2_mf_multi_test_annotations.parquet"
+    },
+    "test_annotations_are_optional_for_phase3": true,
+    "official_url": "https://www.argoverse.org/av2.html"
+  },
+  "argoverse2_map_change": {
+    "enabled": false,
+    "root": "/data0/senzeyu2/dataset/Argoverse2/map",
+    "required_for_motion_forecasting_adapter": false,
+    "download_trigger": "A specified Phase 6 map-change experiment",
+    "split_paths_require_manifest_confirmation": true
+  },
+  "womd": {
+    "enabled": false,
+    "dataset_version": "1.3.1",
+    "root": "/data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed",
+    "primary_representation": "scenario",
+    "format": "TFRecord shards containing Scenario protobuf records",
+    "nominal_sample_rate_hz": 10,
+    "position_reference": "object_bounding_box_center",
+    "split_paths": {
+      "training": "scenario/training",
+      "training_20s": "scenario/training_20s",
+      "validation": "scenario/validation",
+      "validation_interactive": "scenario/validation_interactive",
+      "testing": "scenario/testing"
+    },
+    "initial_adapter_split": "validation",
+    "testing_future_ground_truth_available": false,
+    "training_20s_requires_window_and_split_overlap_audit": true,
+    "tf_example_required": false,
+    "objects_of_interest_identifier_type": "Track.id, not tracks array index",
+    "dynamic_map_state_is_received_message": false,
+    "official_url": "https://waymo.com/intl/en-ca/open/data/motion/"
+  },
+  "shared_assumptions": {
+    "current_input_must_exclude_future_ground_truth": true,
+    "data_provides_complete_activation_issue_receipt_observation_clocks": false,
+    "continuous_safety_follows_from_10hz_sampling": false,
+    "rear_axle_conversion_requires_geometry_and_uncertainty_contract": true,
+    "dataset_likelihood_is_full_support_evidence": false
+  },
+  "simulators": {
+    "required_for_phase3": false,
+    "launch_in_phase": "6",
+    "carla_server_version": "0.9.16",
+    "carla_python_api_version": "0.9.16",
+    "sumo_version": "1.20",
+    "python_version_family": "3.10",
+    "headless": true,
+    "carla_offscreen_required_if_gpu_sensors_used": true,
+    "carla_no_rendering_has_gpu_sensor_data": false,
+    "joint_version_compatibility_validated_in_this_session": false,
+    "fixed_step_seconds": null,
+    "event_message_clock_contract_required": true
+  }
+}

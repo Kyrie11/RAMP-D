@@ -1,89 +1,59 @@
 #!/usr/bin/env python3
-"""Build and replay the Phase 3 public backup-policy graph fixture."""
-from __future__ import annotations
-
+"""Local Phase 3 synthesis, closed graph, rational execution and failure audit."""
 import argparse
 import json
 from pathlib import Path
 
-from rampd_core import (
-    Interval, StateBounds, SupportAtom, BeliefCell, SafeDomain,
-    ActionWitness, AtomTransition, ObservationSuccessors, EvidenceVerdict,
-    compute_information_invariant, default_backup_limits,
-    synthesize_public_backup, save_backup_graph, replay_backup_graph,
-)
+from rampd_core import RecoveryKind, save_backup_graph, load_backup_graph
+from rampd_core.backup import BackupContract, ASSURANCE_SCOPE
+from rampd_core.phase3_examples import (benchmark_contract, build_braking_graph,
+    execute_braking_graph, run_template_example, expected_failures)
 
 
-def _state(px):
-    return StateBounds(Interval(*px), Interval(-1, 1), Interval(-.1, .1),
-                       Interval(0, 10), Interval(-2, 2), Interval(-.3, .3))
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--output', required=True)
+    parser.add_argument('--graph', required=True)
+    parser.add_argument('--trace', required=True)
+    parser.add_argument('--config', default='configs/backup_benchmark.json')
+    args = parser.parse_args()
+    base = BackupContract.from_dict(json.loads(Path(args.config).read_text()))
+    graph, searches = build_braking_graph(base)
+    save_backup_graph(graph, args.graph)
+    replayed = load_backup_graph(args.graph, expected_contract_digest=base.digest)
+    trace, stop_v, stop_a = execute_braking_graph(replayed, steps=20)
+    Path(args.trace).write_text(json.dumps({'scope': ASSURANCE_SCOPE,
+        'audit': 'exact_rational_nominal_straight_dynamics', 'trace': trace}, indent=2)+'\n')
+    rows = []
+    for kind in RecoveryKind:
+        result, _, _, _ = run_template_example(kind, base)
+        chosen = result.selected
+        rows.append({'kind': kind.value, 'status': result.status,
+                     'candidate_count': len(result.attempts), 'accepted_candidates': len(result.choices),
+                     'selected_has_feedback': bool(chosen and any(k != 0 for row in chosen.law.gain for k in row)),
+                     'reserve_lower': None if chosen is None else chosen.reserve_lower,
+                     'synthesis_s': result.elapsed_s,
+                     'attempts': list(result.attempts)})
+    failures = expected_failures(base)
+    success = (len(replayed.nodes) == 17 and stop_v and stop_a and
+               all(r['status'] == 'SYNTHESIZED_LOCAL' for r in rows) and
+               all(c['expected_rejection'] for c in failures))
+    report = {'status': 'PHASE3_LOCAL_DEMO_PASS' if success else 'PHASE3_LOCAL_DEMO_FAILED',
+              'assurance_scope': ASSURANCE_SCOPE, 'full_support_certified': False,
+              'contract_digest': base.digest,
+              'brake_graph': {'retained_nodes': len(replayed.nodes), 'graph_replay': True,
+                  'execution_steps': len(trace), 'exact_terminal_v_zero': stop_v,
+                  'exact_terminal_a_zero': stop_a, 'stop_displacement_m': trace[15]['px_m'],
+                  'nominal_stop_time_s': trace[15]['time_s'],
+                  'hidden_modes_per_node': 2, 'observation_label': 'silence',
+                  'synthesis_candidate_count': sum(len(r.attempts) for r in searches),
+                  'synthesis_s': sum(r.elapsed_s for r in searches)},
+              'templates': rows, 'failure_cases': failures}
+    Path(args.output).write_text(json.dumps(report, indent=2, allow_nan=False)+'\n')
+    print(json.dumps(report, indent=2))
+    if not success:
+        raise SystemExit(1)
 
 
-def _atom(aid, px):
-    return SupportAtom(aid, _state(px), (),
-                       (("monitor", "ok"), ("protocol", "open")))
-
-
-def build_fixture():
-    l0, l1 = _atom("l0", (0, .5)), _atom("l1", (.5, 1))
-    L = BeliefCell("L", (l0, l1), (
-        ActionWitness("hold", (0., 0.), (
-            AtomTransition("l0", EvidenceVerdict.PROVED, "demo-l0",
-                           (ObservationSuccessors("stay", (l0,)),)),
-            AtomTransition("l1", EvidenceVerdict.PROVED, "demo-l1",
-                           (ObservationSuccessors("stay", (l1,)),)),)),))
-    a0, a1 = _atom("a0", (2, 2.5)), _atom("a1", (2.5, 3))
-    A = BeliefCell("A", (a0, a1), (
-        ActionWitness("yield", (-1., 0.), (
-            AtomTransition("a0", EvidenceVerdict.PROVED, "demo-a0",
-                           (ObservationSuccessors("yielded", (l0,)),)),
-            AtomTransition("a1", EvidenceVerdict.PROVED, "demo-a1",
-                           (ObservationSuccessors("yielded", (l1,)),)),)),))
-    safe = SafeDomain(
-        StateBounds(Interval(-10, 10), Interval(-10, 10), Interval(-1, 1),
-                    Interval(0, 20), Interval(-5, 5), Interval(-.5, .5)),
-        allowed_modes=(("monitor", ("ok",)), ("protocol", ("open",))),
-        required_mode_fields=("monitor", "protocol"),
-    )
-    invariant = compute_information_invariant((A, L), safe,
-                                              lambda ref: ref.startswith("demo-"))
-    return (A, L), invariant
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--output", type=Path, default=Path("reports/phase3_demo.json"))
-    ap.add_argument("--graph", type=Path,
-                    default=Path("reports/phase3_backup_graph.json"))
-    args = ap.parse_args()
-    cells, invariant = build_fixture()
-    limits = default_backup_limits()
-    synthesis = synthesize_public_backup(cells, invariant, control_limits=limits)
-    if synthesis.graph is None:
-        raise SystemExit(json.dumps({"status": synthesis.status,
-                                     "reasons": synthesis.reasons}))
-    save_backup_graph(args.graph, synthesis.graph)
-    replay_ok, replay_message = replay_backup_graph(args.graph, limits)
-    payload = {
-        "classification": "finite_public_backup_graph_demo_not_vehicle_safety_experiment",
-        "status": synthesis.status,
-        "nodes": synthesis.executable_nodes,
-        "retained_cell_ids": list(invariant.retained_cell_ids),
-        "all_children_retained": synthesis.all_children_retained,
-        "common_control_violations": synthesis.common_control_violations,
-        "certificate_replay": replay_ok,
-        "certificate_replay_message": replay_message,
-        "assurance_scope": synthesis.assurance_scope,
-        "certified": synthesis.certified,
-        "graph": str(args.graph),
-    }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(payload, indent=2) + "\n")
-    print(json.dumps(payload, indent=2))
-    if (synthesis.status != "BACKUP_GRAPH_SYNTHESIZED" or
-            not replay_ok or synthesis.executable_nodes != len(invariant.retained_cell_ids)):
-        raise SystemExit(2)
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

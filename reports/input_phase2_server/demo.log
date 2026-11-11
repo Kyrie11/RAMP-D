@@ -1,0 +1,16 @@
+{
+  "status": "VALIDATED",
+  "reason": "COMPLETE_DYNAMICS_ENCLOSURE",
+  "backend": "MPFR-192/directed-binary64/ABI3",
+  "build": "compiler=9.4.0;mpfr_runtime=4.0.2;precision_bits=192;abi=3;api=0.4.0;mpfr_header=4.0.2",
+  "accepted_steps": 32,
+  "exact_horizon_covered": "1",
+  "final_px": [
+    7.999999998394508,
+    8.000000001605505
+  ],
+  "includes_analytic_px_8m": true,
+  "witness_replay": true,
+  "full_support_safety_verified": false,
+  "certificate": "/home/senzeyu2/code/RAMP-D/reports/phase2_20261111T034131Z/demo_certificate.json"
+}

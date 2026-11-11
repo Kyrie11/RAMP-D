@@ -18,10 +18,15 @@
 | Robust information-state predecessor and finite fixed point | `python/rampd_core/invariant.py` | Phase 2; common control per belief cell, posterior aggregation by observation, conservative cell coverage, fail-closed evidence callback |
 | Support-box refinement preserving observation equivalence | `python/rampd_core/refinement.py` | Phase 2; split does not create a new policy node and invalidates stale action evidence |
 | Finite invariant candidate certificate and replay | `python/rampd_core/invariant.py`, `scripts/replay_invariant_certificate.py` | Phase 2; explicitly `S_in_candidate`, `FINITE_ABSTRACTION_ONLY`, `certified=false` |
-| Public backup policy graph and constant common controller | `python/rampd_core/controller.py`, `scripts/demo_phase3.py` | Phase 3; compiles retained Phase 2 witnesses, routes only by realized observations, `PUBLIC_CONTROLLER_SYNTHESIS_ONLY`, `certified=false`; affine `K_B` extension deferred until interval image/tube verification |
+| Public sampled feedback and finite bias/gain synthesis | `control.py`, `backup.py` | Phase 3; finite search, MPFR input images, local static-scene hard checks; not global optimization |
+| Analytic integrator-chain tightening | `analytic_bounds.py` | Sound intersection with Picard; exact quadratic velocity extrema, no speed clipping |
+| Context-bound transition evidence | `invariant.py`, `backup.py` | Full support/action/law/contract/transition binding and independent numerical replay |
+| Executable closed public backup graph | `backup_graph.py` | Phase 3; observation-only children, fixed-point closure, contract and execution guards |
 | Protocol product and full-support verifier | planned Phase 4 | Not implemented |
 | CEGAR | planned Phase 5 | Not implemented |
 | AV2/WOMD training and SUMO/CARLA closed-loop experiments | planned Phase 6 | Not implemented |
 
 The paper's full planner `CERTIFIED` result is not produced by any Phase 1A-1D
 module. No current result authorizes physical control execution.
+
+Phase 3 exported graphs retain `full_support_certified=false`; physical execution in a real traffic scene still requires Phase 4 and calibration. Current per-template fixtures are local one-step recovery objectives; only the nominal brake/hold fixture is a complete closed invariant graph.

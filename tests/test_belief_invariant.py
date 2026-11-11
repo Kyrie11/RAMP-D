@@ -1,4 +1,6 @@
 from __future__ import annotations
+# These are finite abstract-game fixtures; unconditional callbacks deliberately
+# test only the fixed-point logic. Physical evidence is tested in Phase 3.
 import json
 from pathlib import Path
 import pytest
@@ -57,7 +59,8 @@ def test_fixed_point_keeps_cells_with_common_action_and_all_observation_posterio
         action('yield', [transition('a0', 'yielded', [l0]),
                          transition('a1', 'yielded', [l1])], control=(-1.0, 0.0)),
     ))
-    result = compute_information_invariant((A, L), domain(), lambda ref: ref.startswith('ev-'))
+    result = compute_information_invariant((A, L), domain(),
+        lambda context: context.evidence_ref.startswith('ev-'))
     assert result.retained_cell_ids == ('A', 'L')
     da = next(x for x in result.decisions if x.cell_id == 'A')
     assert da.selected_action_id == 'yield'
@@ -74,7 +77,7 @@ def test_fixed_point_removes_unsafe_cell_then_propagates_removal_backward():
     B = BeliefCell('B', (x,), ())
     y = atom('y', (3, 3))
     A = BeliefCell('A', (y,), (action('go_to_B', [transition('y', 'go', [x])]),))
-    result = compute_information_invariant((A, B, C), domain(), lambda _: True)
+    result = compute_information_invariant((A, B, C), domain(), lambda context: True)
     assert result.retained_cell_ids == ('C',)
     assert result.removals_per_iteration == (1, 1, 0)
     assert next(d for d in result.decisions if d.cell_id == 'B').retained is False
@@ -87,7 +90,7 @@ def test_one_unresolved_atom_transition_rejects_the_common_action():
         transition('a0', 'obs', [a0]),
         transition('a1', 'obs', [a1], verdict=EvidenceVerdict.UNKNOWN),
     ]),))
-    result = compute_information_invariant((A,), domain(), lambda _: True)
+    result = compute_information_invariant((A,), domain(), lambda context: True)
     assert result.retained_cell_ids == ()
     assert 'TRANSITION_UNKNOWN' in next(d for d in result.decisions if d.cell_id == 'A').reason
 
@@ -103,7 +106,7 @@ def test_no_evidence_verifier_fails_closed():
 def test_missing_source_transition_is_rejected():
     a0, a1 = atom('a0'), atom('a1', (1, 1))
     A = BeliefCell('A', (a0, a1), (action('incomplete', [transition('a0', 'obs', [a0])]),))
-    result = compute_information_invariant((A,), domain(), lambda _: True)
+    result = compute_information_invariant((A,), domain(), lambda context: True)
     assert result.retained_cell_ids == ()
     assert 'INCOMPLETE_SOURCE_COVERAGE' in result.decisions[0].reason
 
@@ -118,7 +121,7 @@ def test_each_observation_posterior_must_be_covered_by_one_retained_belief_cell(
     # B is safe but not invariant; after it is removed, the B observation branch
     # is no longer routed to a retained support.
     B = BeliefCell('B', (b,), ())
-    result = compute_information_invariant((A, B), domain(), lambda _: True)
+    result = compute_information_invariant((A, B), domain(), lambda context: True)
     assert result.retained_cell_ids == ()
     assert 'POSTERIOR_NOT_COVERED:seen_B' in next(d for d in result.decisions if d.cell_id == 'A').reason
 
@@ -138,7 +141,7 @@ def test_union_support_coverage_requires_same_mode_and_full_box_containment():
 def test_unsafe_initial_support_is_removed_even_if_transition_looks_good():
     bad = atom('bad', (30, 31))
     B = BeliefCell('B', (bad,), (action('stay', [transition('bad', 'same', [bad])]),))
-    result = compute_information_invariant((B,), domain(), lambda _: True)
+    result = compute_information_invariant((B,), domain(), lambda context: True)
     assert result.retained_cell_ids == ()
     assert result.decisions[0].reason.startswith('INITIAL_EGO_STATE_OUTSIDE')
 
@@ -181,7 +184,7 @@ def test_refinement_rejects_unrepresentable_midpoint():
 def test_certificate_replay_and_tamper_rejection(tmp_path):
     a = atom('a')
     A = BeliefCell('A', (a,), (action('hold', [transition('a', 'same', [a])]),))
-    verifier = lambda ref: ref == 'ev-a'
+    verifier = lambda context: context.evidence_ref == 'ev-a'
     result = compute_information_invariant((A,), domain(), verifier)
     path = tmp_path / 'invariant.json'
     save_invariant_certificate(path, (A,), domain(), result)
@@ -196,19 +199,19 @@ def test_certificate_replay_and_tamper_rejection(tmp_path):
 def test_certificate_cannot_claim_concrete_safety_certification(tmp_path):
     a = atom('a')
     A = BeliefCell('A', (a,), (action('hold', [transition('a', 'same', [a])]),))
-    result = compute_information_invariant((A,), domain(), lambda _: True)
+    result = compute_information_invariant((A,), domain(), lambda context: True)
     path = tmp_path / 'invariant.json'
     save_invariant_certificate(path, (A,), domain(), result)
     data = json.loads(path.read_text())
     data['certified'] = True
     path.write_text(json.dumps(data))
-    assert not replay_invariant_certificate(path, lambda _: True).ok
+    assert not replay_invariant_certificate(path, lambda context: True).ok
 
 
 def test_invalid_evidence_ref_is_rejected():
     a = atom('a')
     A = BeliefCell('A', (a,), (action('hold', [transition('a', 'same', [a])]),))
-    result = compute_information_invariant((A,), domain(), lambda _: False)
+    result = compute_information_invariant((A,), domain(), lambda context: False)
     assert result.retained_cell_ids == ()
     assert 'EVIDENCE_REPLAY_FAILED' in result.decisions[0].reason
 
@@ -224,6 +227,6 @@ def test_friction_domain_singularity_fails_closed_as_unresolved():
         allowed_modes=domain().allowed_modes,
         required_mode_fields=domain().required_mode_fields,
         friction=BicycleParameters(2.5,0.9))
-    result=compute_information_invariant((B,),d,lambda _:True)
+    result=compute_information_invariant((B,),d,lambda context: True)
     assert result.retained_cell_ids == ()
     assert result.decisions[0].reason.startswith('INITIAL_FRICTION_ENCLOSURE_UNRESOLVED')

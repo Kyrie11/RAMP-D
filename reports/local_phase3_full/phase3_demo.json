@@ -1,0 +1,151 @@
+{
+  "status": "PHASE3_LOCAL_DEMO_PASS",
+  "assurance_scope": "LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS",
+  "full_support_certified": false,
+  "contract_digest": "contract-sha256:3aea4513d30c3642b4a971b541914b6f26fbd345be71f8e09c177174807429c4",
+  "brake_graph": {
+    "retained_nodes": 17,
+    "graph_replay": true,
+    "execution_steps": 20,
+    "exact_terminal_v_zero": true,
+    "exact_terminal_a_zero": true,
+    "stop_displacement_m": 8.0,
+    "nominal_stop_time_s": 4.0,
+    "hidden_modes_per_node": 2,
+    "observation_label": "silence",
+    "synthesis_candidate_count": 50,
+    "synthesis_s": 1.144729699000436
+  },
+  "templates": [
+    {
+      "kind": "brake_to_stop",
+      "status": "SYNTHESIZED_LOCAL",
+      "candidate_count": 3,
+      "accepted_candidates": 2,
+      "selected_has_feedback": true,
+      "reserve_lower": 1.0,
+      "synthesis_s": 0.06445334399995772,
+      "attempts": [
+        {
+          "law": "brake_to_stop:000",
+          "controller_ref": "law-sha256:d25bd9f6d0386a5544b466b6098ce51080251997574e9a9f02276ab71ed335b1",
+          "status": "UNKNOWN",
+          "reason": "POSTERIOR_NOT_IN_SINGLE_TARGET:silence"
+        },
+        {
+          "law": "brake_to_stop:001",
+          "controller_ref": "law-sha256:cde1633a6bd185eeff378c01f9b2aa6224f7ac651c603450bbc9641fa37868ad",
+          "status": "VALIDATED_LOCAL",
+          "reserve_lower": 1.0
+        },
+        {
+          "law": "brake_to_stop:002",
+          "controller_ref": "law-sha256:462413492cbd47666f0613c28cb0231a5c2f94a85e7f7b1e70fa4dfbddbbb0f2",
+          "status": "VALIDATED_LOCAL",
+          "reserve_lower": 1.0
+        }
+      ]
+    },
+    {
+      "kind": "hold_before_gate",
+      "status": "SYNTHESIZED_LOCAL",
+      "candidate_count": 2,
+      "accepted_candidates": 2,
+      "selected_has_feedback": false,
+      "reserve_lower": 1.0,
+      "synthesis_s": 0.03667961200017089,
+      "attempts": [
+        {
+          "law": "hold_before_gate:000",
+          "controller_ref": "law-sha256:cd3a1a8ce0d8b467de5d521876b0d11f8aaf808bced1ccec23367620906bbdf7",
+          "status": "VALIDATED_LOCAL",
+          "reserve_lower": 1.0
+        },
+        {
+          "law": "hold_before_gate:001",
+          "controller_ref": "law-sha256:d14aeb8341ea4b5b3a0f4695ac8237f604b70113aa89ca079fc18788f563b76d",
+          "status": "VALIDATED_LOCAL",
+          "reserve_lower": 1.0
+        }
+      ]
+    },
+    {
+      "kind": "yield",
+      "status": "SYNTHESIZED_LOCAL",
+      "candidate_count": 3,
+      "accepted_candidates": 1,
+      "selected_has_feedback": true,
+      "reserve_lower": 1.0,
+      "synthesis_s": 0.08171474099981424,
+      "attempts": [
+        {
+          "law": "yield:000",
+          "controller_ref": "law-sha256:ee1b4ff4b22dcfc62ce1349b211cc4b45981782c190dd7f7f1d822513d576084",
+          "status": "UNKNOWN",
+          "reason": "POSTERIOR_NOT_IN_SINGLE_TARGET:silence"
+        },
+        {
+          "law": "yield:001",
+          "controller_ref": "law-sha256:5a56febd1114b18fb15f95e2929e906864978efaf08cc5288db23edead42d4c4",
+          "status": "UNKNOWN",
+          "reason": "POSTERIOR_NOT_IN_SINGLE_TARGET:silence"
+        },
+        {
+          "law": "yield:002",
+          "controller_ref": "law-sha256:83d730a5f2bec202e4e4013e500be0eed91bfed448f87b860acf8e8320b58649",
+          "status": "VALIDATED_LOCAL",
+          "reserve_lower": 1.0
+        }
+      ]
+    },
+    {
+      "kind": "clear_merge",
+      "status": "SYNTHESIZED_LOCAL",
+      "candidate_count": 2,
+      "accepted_candidates": 1,
+      "selected_has_feedback": true,
+      "reserve_lower": 1.0,
+      "synthesis_s": 0.03756948799991733,
+      "attempts": [
+        {
+          "law": "clear_merge:000",
+          "controller_ref": "law-sha256:13382ee51d97f0c55df6a8fac32c35e2d47caae42359a2b2ea92044418783217",
+          "status": "UNKNOWN",
+          "reason": "POSTERIOR_NOT_IN_SINGLE_TARGET:silence"
+        },
+        {
+          "law": "clear_merge:001",
+          "controller_ref": "law-sha256:3584a00af2cbc433cef5756a6e0f68834e71bd0dd629039668c5a11dbe28d4e6",
+          "status": "VALIDATED_LOCAL",
+          "reserve_lower": 1.0
+        }
+      ]
+    }
+  ],
+  "failure_cases": [
+    {
+      "name": "gate_inside_swept_body",
+      "status": "UNKNOWN",
+      "reason": "SPATIAL_CLEARANCE_NOT_PROVED",
+      "expected_rejection": true
+    },
+    {
+      "name": "blocked_static_corridor",
+      "status": "UNKNOWN",
+      "reason": "STATIC_OBSTACLE_SEPARATION_UNKNOWN:blocked",
+      "expected_rejection": true
+    },
+    {
+      "name": "friction_not_available",
+      "status": "UNKNOWN",
+      "reason": "FRICTION_NOT_PROVED_FEASIBLE",
+      "expected_rejection": true
+    },
+    {
+      "name": "disturbed_point_hold_not_invariant",
+      "status": "UNKNOWN_NO_VALIDATED_CANDIDATE",
+      "reason": "POSTERIOR_NOT_IN_SINGLE_TARGET:silence",
+      "expected_rejection": true
+    }
+  ]
+}

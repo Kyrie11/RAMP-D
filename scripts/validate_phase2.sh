@@ -7,13 +7,14 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 REPORT_DIR="${REPORT_DIR:-$ROOT/reports/phase2_$STAMP}"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build_phase1d}"
-mkdir -p "$REPORT_DIR"
+mkdir -p "$REPORT_DIR" "$BUILD_DIR"
 REPORT_DIR="$(cd "$REPORT_DIR" && pwd)"
+BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
 export REPORT_DIR BUILD_DIR
 # Phase 1D validator performs clean MPFR build, CTest discovery, all Python
 # tests (including Phase 2), Phase 1B/1C/1D regressions, and geometry audits.
 REPORT_DIR="$REPORT_DIR" BUILD_DIR="$BUILD_DIR" PYTHON_BIN="$PYTHON_BIN" \
-  bash "$ROOT/scripts/validate_phase1d.sh"
+  bash "$ROOT/scripts/validate_phase1d.sh" "$@"
 export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
 export RAMPD_INTERVAL_LIB="$BUILD_DIR/librampd_interval.so"
 "$PYTHON_BIN" "$ROOT/scripts/demo_phase2.py" \

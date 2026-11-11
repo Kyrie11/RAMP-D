@@ -1,4 +1,4 @@
-# Numerical contract and scope (Phase 1D)
+# Numerical contract and scope (Phase 1D foundation; Phase 3 additions below)
 
 The Phase 1A-1C numerical contract remains in force: MPFR directed rounding,
 192-bit internal precision, outward conversion to binary64, strict Picard
@@ -36,9 +36,8 @@ floating-point division. The absolute-value upper bounds are computed from
 the interval endpoints, and all radius/center operations use the MPFR-backed
 interval API. AABB is the pair of projections on `(1,0)` and `(0,1)`.
 
-The exact `px,py` reference point is not specified by the paper's bicycle ODE.
-Therefore geometry contains explicit `center_offset_x_m/y_m`; zero offset is
-not a universal assumption. Vehicle dimensions and offset are treated as fixed
+Phase 2 fixes `px,py` at the rear axle, consistently with the bicycle ODE.
+Geometry contains explicit `center_offset_x_m/y_m`; zero offset is not a universal assumption. Vehicle dimensions and offset are treated as fixed
 configured constants in this release. Their calibration/uncertainty must be
 addressed before physical claims on a real vehicle.
 
@@ -80,7 +79,7 @@ having come from complete sound dynamics tubes. A full-system certificate
 must bind and replay the parent tube certificates as well as protocol and
 resource branches.
 
-## Deliberate exclusions
+## Historical Phase 1D exclusions (current scope below)
 
 - No concrete collision/time-of-impact witness.
 - No static obstacle or road-resource polygon intersection.
@@ -93,3 +92,7 @@ resource branches.
 
 Unit tests, sanitizer runs and high-precision random corner audits can expose
 bugs but cannot prove the absence of implementation or modeling errors.
+
+## Phase 3 additions and current limits
+
+The native arithmetic and Picard search are unchanged (ABI 3). `analytic_bounds.py` intersects independent integrator-chain bounds and exact-rational quadratic extrema with the Picard enclosures. `backup.py` adds state/friction and static corridor/gate/rectangular-obstacle checks, content-bound physical replay, and finite public-law search. `backup_graph.py` connects the Phase 2 information invariant to guarded executable local graphs. These additions do not implement dynamic resource polygons/capacity/conflicts, protocol enumeration, moving-agent response tubes, full-support certification, CEGAR or simulator bridges. See PHASE3_DESIGN.md for exact assumptions.

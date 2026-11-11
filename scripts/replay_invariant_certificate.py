@@ -15,7 +15,8 @@ if __name__ == '__main__':
     ap.add_argument('--allow-prefix',default=None,
         help='TEST ONLY: accept evidence refs with this prefix (e.g. demo-)')
     args=ap.parse_args()
-    verifier=None if args.allow_prefix is None else lambda ref: bool(ref and ref.startswith(args.allow_prefix))
+    verifier=None if args.allow_prefix is None else lambda context: bool(
+        context.evidence_ref and context.evidence_ref.startswith(args.allow_prefix))
     result=replay_invariant_certificate(args.certificate,verifier)
     print({'ok':result.ok,'message':result.message})
     if not result.ok: raise SystemExit(2)

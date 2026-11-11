@@ -1,118 +1,186 @@
-# RAMP-D Phase 3 (0.6.0)
+# RAMP-D Phase 3（0.6.0）
 
-This release preserves the Phase 1A-1D MPFR/C++ numerical core and adds the
-finite belief-support abstraction and information-state invariant fixed-point
-engine, then adds a public common backup-policy graph and a validated-tube
-execution adapter. The Python API remains the top-level interface.
+本版本沿用论文及既定路线，在 Phase 2 的有限 belief-support 固定点算法之上，
+增加公共采样反馈律的有限候选综合、局部连续时间证据、可执行 backup policy
+graph 和独立回放。Phase 1A–1D 的 MPFR/C++ 数值内核保留，**原生 ABI 仍为 3**。
 
-## Important assurance statement
+开发顺序保持：明确目标 → 实现代码 → 执行测试 → 分析失败案例 → 形成验收报告。
 
-Phase 2 computes the exact greatest fixed point of the **supplied finite
-abstract information-state game**. It returns `S_in_candidate` with
-`assurance_scope=FINITE_ABSTRACTION_ONLY` and `certified=false`. This is not yet
-a concrete RAMP-D safety certificate. A production evidence verifier must be
-integrated with protocol branches, complete ego/agent reachable tubes,
-resource monitors, observation support, and the Phase 4 full-support verifier.
-The synthetic demo's evidence verifier is test-only.
+## 当前完成范围
 
-## Vehicle reference convention
+- `SampledFeedbackLaw`：共享参数的仿射反馈、显式控制饱和、测量误差区间像；
+  每个决策时刻由实际 ego 测量计算一次命令，并保持到下一个决策时刻。
+- `recovery_candidates` / `synthesize_backup`：对 brake-to-stop、hold-before-gate、
+  yield、clear/merge 四类模板作有限候选搜索，按已验证空间余量下界排序并保留备选。
+- `validate_feedback_step` / `inspect_step_proof`：生成并回放 Picard tube，结合
+  有证明的解析界检查状态边界、摩擦、完整车身 footprint、道路、gate 与静态障碍。
+- `LocalEvidenceStore`：将当前完整 belief support、公共律、源 atom、观测后继、
+  决策周期、扰动及场景契约与实际证据绑定；哈希不能替代数学回放。
+- `build_backup_graph`：复用 Phase 2 的信息状态固定点，获得所有观测续接均闭合的图。
+- `BackupExecutor`：按精确时间执行公共律，收到实际 observation 和 posterior 后
+  更新节点；证据失效、未知观测、时间错位或支持集越界时停止本执行器并报错。
 
-The paper's current bicycle ODE is the rear-axle-centre kinematic bicycle
-model. All `(px,py)` positions use the rear-axle midpoint; footprint geometry
-is shifted by an explicit rear-axle-to-body-centre offset. The bundled
-`commonroad_bmw_320i_benchmark()` profile uses a reproducible nominal profile
-(4.508 m x 1.610 m, wheelbase 2.5789128 m). Its 1.4227170936 m body-centre
-offset treats the CG as a proxy for the rectangle centre and must be replaced
-by measured geometry before physical safety claims. Friction is intentionally
-left unset because it is a scenario/tire-road parameter, not a chassis
-constant. See `docs/VEHICLE_REFERENCE_CONVENTION.md` and the updated paper
-Appendix `AnonymousSubmission2027_Phase2.tex`.
+Phase 2 服务器报告已复核通过其有限抽象范围。本轮同时修复了旧证据接口未绑定
+当前验证义务的问题，并移除了验证脚本对 `.tex` / `.bib` 的强依赖。
 
-## Environment
+## 保证边界
 
-The user's existing target environment is retained:
+本版本的局部保证范围固定为：
 
-- Python 3.10.20
-- GCC 9.4.0
-- CMake/CTest 3.18.0
-- MPFR/GMP development packages; MPFR 4.0.2 is sufficient
+```text
+LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS
+full_support_certified = false
+current_scene_verified = false
+```
 
-No C++ ABI change is introduced in Phase 2. Do not use a Phase 1A/1B/1C stale
-shared library: use a clean Phase 1D/Phase 2 build directory.
+它覆盖声明的六状态 bicycle 模型、有界导数扰动与测量误差、冻结的离散模式、
+静态道路/gate/障碍，以及调用方显式提供的有限 observation cover。实际移动
+他车、协议时序、资源监视器和真实观测关系的完整支持验证属于 Phase 4。
 
-## Build and test
+四类模板在非零过程扰动和测量误差下验证的是**一次决策区间的局部目标**。
+`clear_merge` 示例证明受约束的横向推进，不代表已经完成合法合流；受扰
+`hold_before_gate` 示例证明局部近零运动，不代表无限时间鲁棒驻停。
+
+17 节点制动/驻停闭图是单独的零过程扰动合成 fixture：每个节点同时保留
+`rule=open/closed` 两种隐藏模式，仅使用 `silence` 观测，不提前区分隐藏状态。
+车辆从 4 m/s 出发，前 2 s 使用 jerk −1、后 2 s 使用 jerk +1，在 **4 s、8 m**
+处达到 `v=a=0`；20 步、每步 0.25 s 的总执行时长是 **5 s**，包含后续 1 s
+驻停执行。其终端闭环不应解释成非零过程扰动下的无限时间驻停保证。
+
+配置 `configs/backup_benchmark.json` 的参数是明确标注的 benchmark 参数，
+不是已校准的真实车辆参数。通用局部模板允许小幅有符号速度，具体边界见配置；
+没有通过裁剪状态或容差把负速度伪装成精确停止。
+
+## 车辆与数值约定
+
+状态顺序为 `(px, py, psi, v, a, delta)`，控制顺序为 `(jerk, steering_rate)`。
+`(px,py)` 使用后轴中心；`VehicleGeometry` 的 `center_offset_x_m/y_m` 明确描述
+车身矩形中心相对后轴的位置，gate 和道路检查使用完整 footprint。
+
+附带 CommonRoad BMW 320i nominal profile 可用于可复现合成测试，其车身中心
+offset 含几何近似，实际 CARLA/车辆测试须重新校准。摩擦是场景参数。详见
+[车辆参考约定](docs/VEHICLE_REFERENCE_CONVENTION.md) 与
+[数学更正说明](docs/MATHEMATICAL_CORRECTIONS_PHASE3.md)。
+
+浮点输入表示对应的精确 binary64 常数。MPFR 运算使用有向舍入；Picard
+见证回放与解析二次极值外包提供数值依据，采样轨迹只作独立反证审计。
+
+## 服务器环境与一键验收
+
+继续使用你已有的服务器环境，无须为 Phase 3 升级 Python、GCC、CMake 或 MPFR：
+
+| 项目 | 已知目标服务器环境 |
+|---|---|
+| Conda 环境 | `mfrp` |
+| Python | 3.10.20 |
+| GCC | 9.4.0 |
+| CMake / CTest | 3.18.0 |
+| MPFR | 4.0.2，需官方开发头文件及 GMP |
+| 原生 ABI | 3，本轮未升级 |
+
+本轮本地测试使用 Python 3.12、GCC 14.2、官方 MPFR 4.2.2 发布版头文件及
+4.2.2 运行库，**不是 declaration-only bootstrap**。本地结果不替代你的
+Phase 3 服务器复核；目标服务器兼容性仍以新报告为准。
+
+把 `RAMP-D_Phase3.zip` 放到 `/home/senzeyu2/code` 后运行：
 
 ```bash
+cd /home/senzeyu2/code
+conda activate mfrp
+unzip RAMP-D_Phase3.zip
+cd /home/senzeyu2/code/RAMP-D_Phase3
 python -m pip install -r requirements-test.txt
-PYTHON_BIN="$(command -v python)" bash scripts/validate_phase2.sh
+PYTHON_BIN="$(command -v python)" bash scripts/validate_phase3.sh
 ```
 
-The script runs a clean MPFR build, mandatory CTest discovery and execution,
-all Phase 1A-1D regressions, all Phase 2 tests, a finite-game demo and
-certificate replay, and the scaling microbenchmark. It creates a timestamped
-report under `reports/phase2_*` and packages it as
-`reports/RAMP-D_Phase2_server_report.zip`.
+压缩包使用新的 `RAMP-D_Phase3/` 顶层目录，原来的 `RAMP-D/` 工程可保留。
+首次解压应使用尚不存在的新目录；已有同名测试目录时请先保留旧结果。
+命令没有 `--upgrade`，不要求升级已有基础环境。
 
-For direct debugging:
+验证脚本会重新编译到 `build_phase3/`，发现并运行原生测试，执行全部 Python
+测试、Phase 1A–2 回归、Phase 3 演示与微基准、图回放和验收门槛检查。
+`.tex` / `.bib` 仅在存在时作为可选来源哈希记录，缺失不影响验证。
+
+最终报告位于：
+
+```text
+reports/phase3_<UTC时间戳>/
+reports/RAMP-D_Phase3_server_report.zip
+```
+
+请上传 `reports/RAMP-D_Phase3_server_report.zip`。脚本失败时也会尽力生成
+包含失败阶段和日志的报告；不要只上传终端最后几行。
+
+自定义 MPFR 安装可从 Phase 3 入口传入 CMake 参数，例如：
 
 ```bash
-cmake -S . -B build_phase1d -DCMAKE_BUILD_TYPE=Release -DRAMPD_BUILD_TESTS=ON
-cmake --build build_phase1d --parallel 2
-(cd build_phase1d && ctest -N && ctest --output-on-failure)
-export PYTHONPATH="$PWD/python"
-export RAMPD_INTERVAL_LIB="$PWD/build_phase1d/librampd_interval.so"
-python -m pytest -q tests
-python scripts/demo_phase2.py
-python scripts/benchmark_phase2.py
+PYTHON_BIN="$(command -v python)" bash scripts/validate_phase3.sh \
+  -DCMAKE_PREFIX_PATH=/your/existing/mpfr/prefix
 ```
 
-## Phase 2 API
+如果单独运行 Python 调试命令，先明确使用本轮生成的库：
+
+```bash
+export PYTHONPATH="$PWD/python${PYTHONPATH:+:$PYTHONPATH}"
+export RAMPD_INTERVAL_LIB="$PWD/build_phase3/librampd_interval.so"
+python -m pytest -q tests/test_backup_synthesis.py tests/test_backup_graph.py
+```
+
+## 实际 API 示例
+
+以下例子在完成构建并设置上面的两个环境变量后可直接运行。它使用附带的
+合成 bounded-error yield 问题演示真实综合接口：
 
 ```python
-from rampd_core import (
-    SupportAtom, BeliefCell, SafeDomain,
-    ActionWitness, AtomTransition, ObservationSuccessors, EvidenceVerdict,
-    compute_information_invariant,
-)
+from rampd_core import RecoveryKind, synthesize_backup
+from rampd_core.phase3_examples import template_problem
+
+source, candidates, targets, store = template_problem(RecoveryKind.YIELD)
+result = synthesize_backup(source, candidates, targets, store)
+print(result.status, len(result.choices))
+if result.selected is not None:
+    print(result.selected.law.to_dict())
+    print(result.selected.observation_children)
 ```
 
-Every cell is one complete information-state support (union of atoms). Each
-candidate action is one common `(jerk, steering_rate)` control for all atoms
-in that support. For each observation, successor atoms from all compatible
-source atoms are aggregated into one posterior. The posterior must be covered
-by one retained belief cell. Missing source transitions, unverified evidence,
-unsafe tubes, or uncovered posteriors reject the action.
+同一 `BeliefCell` 的全部 source atoms 使用同一个反馈律及参数；同名 observation
+对应的所有后继必须合并后被**同一个** target belief 覆盖。`controller_ref`
+绑定完整公共律，`ActionWitness.control` 在反馈律存在时表示其 bias，不能被
+当成整个控制器。
 
-`split_support_atom` refines one continuous box but keeps the same
-`policy_node_id`; it never invents a new observation or allows a hidden-state
-branch. Existing action evidence is invalidated after a split.
-
-## Phase 3 API
+创建、保存和独立回放闭图：
 
 ```python
-from rampd_core import (
-    BackupMode, BackupControlLimits, BackupTemplate,
-    synthesize_public_backup, save_backup_graph, replay_backup_graph,
+from rampd_core import save_backup_graph, load_backup_graph
+from rampd_core.phase3_examples import (
+    benchmark_contract, build_braking_graph, execute_braking_graph,
 )
+
+contract = benchmark_contract()
+graph, search_reports = build_braking_graph(contract)
+save_backup_graph(graph, "backup_graph.json")
+verified = load_backup_graph(
+    "backup_graph.json", expected_contract_digest=contract.digest,
+)
+trace, terminal_v_zero, terminal_a_zero = execute_braking_graph(verified, steps=20)
+print(len(verified.nodes), terminal_v_zero, terminal_a_zero)
 ```
 
-`synthesize_public_backup` compiles one common action per retained complete
-belief support and preserves the Phase 2 observation children. The resulting
-graph exposes `control(node_id)`, `route(node_id, observation)`, and
-`execute_tube(...)`. It is an executable policy graph, not a concrete safety
-certificate. The first implementation is the constant-control subclass of
-the paper's public feedback controller; hidden atom-specific control is never
-available through the API.
+生产调用方须从自身已核实的当前场景配置取得 `expected_contract_digest`。
+证书自述的 digest 只能标识其假设，不能证明当前真实场景满足这些假设。
 
-## Phase order
+## 文档与下一阶段
 
-0 -> 1A -> 1B -> 1C -> 1D -> **2** -> 3 -> 4 -> 5 -> 6.
+- [Phase 3 设计](docs/PHASE3_DESIGN.md)：本轮目标、接口、控制综合和保证边界。
+- [Phase 3 验收](docs/PHASE3_ACCEPTANCE.md)：验收要求、结果文件和服务器步骤。
+- [Phase 3 失败记录](docs/FAILURE_LOG_PHASE3.md)：反例、修复依据及预期 UNKNOWN。
+- [Phase 2 审计与修正](docs/PHASE2_AUDIT_AND_FIXES.md)：上传服务器证据和接口更正。
+- [数学更正](docs/MATHEMATICAL_CORRECTIONS_PHASE3.md)：信息状态、数值界与理论边界。
+- [综合专项独立测试](docs/PHASE3_SYNTHESIS_TEST_REVIEW.md)：物理与证据绑定的失败分析。
+- [数据集及模拟器](docs/DATASETS_AND_SIMULATORS.md)：AV2/WOMD 格式、已有路径和分阶段接入。
+- [开发路线](docs/DEVELOPMENT_ROADMAP.md)：0 → 1A → 1B → 1C → 1D → 2 → 3 → 4 → 5 → 6。
 
-- Phase 3: public common backup controller synthesis and executable policy graph
-  (constant common-control subclass; affine public gain remains deferred).
-- Phase 4: protocol automata, full-support verifier and three-valued result.
-- Phase 5: concrete/spurious counterexamples and CEGAR.
-- Phase 6: AV2/WOMD model training and headless SUMO 1.20 + CARLA 0.9.16
-  closed-loop experiments.
-
-Phase 2 does not require datasets, SUMO, CARLA, GPU, or any simulator process.
+下一阶段是 Phase 4：协议自动机、完整 agent/ego tube、资源监视器、真实观测
+支持、连续碰撞与终端不变成员检查，形成完整支持下的三值验证结果。
+Phase 5 再接 CEGAR，Phase 6 再做 AV2/WOMD 学习与 SUMO/CARLA 闭环实验。
+**本轮验收不需要下载数据集，也不需要启动 CARLA 0.9.16 或 SUMO 1.20。**

@@ -1,0 +1,62 @@
+{
+  "benchmark": "phase1d_swept_footprint_axes",
+  "classification": "synthetic_geometry_microbenchmark_not_vehicle_experiment",
+  "time_interval_exact": [
+    "0",
+    "1/5"
+  ],
+  "geometry": {
+    "length_m": 4.0,
+    "width_m": 0.2
+  },
+  "repeats": 5,
+  "iterations_per_repeat": 100,
+  "rows": [
+    {
+      "method": "aabb_only",
+      "status": "UNKNOWN",
+      "axes_tested": 2,
+      "median_seconds": 0.0005388904299979913,
+      "samples_seconds": [
+        0.0005030670299993289,
+        0.0005418440500034194,
+        0.0007807768500015299,
+        0.0005388904299979913,
+        0.00048318059999928663
+      ],
+      "clearance_lower_m": null,
+      "witness_replay": false
+    },
+    {
+      "method": "oriented_candidate_axes",
+      "status": "SEPARATED",
+      "axes_tested": 4,
+      "median_seconds": 0.002165198920001785,
+      "samples_seconds": [
+        0.001087949729999309,
+        0.0015282066500003565,
+        0.005187582670000666,
+        0.002165198920001785,
+        0.0025991593699973238
+      ],
+      "clearance_lower_m": 1.2999999999999983,
+      "witness_replay": true
+    },
+    {
+      "method": "dense_16_plus_oriented",
+      "status": "SEPARATED",
+      "axes_tested": 20,
+      "median_seconds": 0.00689969986000051,
+      "samples_seconds": [
+        0.007194136339999204,
+        0.005794555249999576,
+        0.009683275430002141,
+        0.00689969986000051,
+        0.0036650618400017264
+      ],
+      "clearance_lower_m": 1.2999999999999983,
+      "witness_replay": true
+    }
+  ],
+  "interpretation": "AABB overlap is UNKNOWN; a strict outward support-projection gap proves swept-set separation. UNKNOWN is not collision."
+}

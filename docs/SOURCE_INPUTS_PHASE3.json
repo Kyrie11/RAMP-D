@@ -1,0 +1,29 @@
+{
+  "inputs": [
+    {
+      "file": "AnonymousSubmission2027.tex",
+      "sha256": "b59c7ad825e51c6b1de99a30ed73f6b96420b2d67251f4af35a37ba1a60cfa42",
+      "bytes": 76801
+    },
+    {
+      "file": "RAMP-D.zip",
+      "sha256": "9a6a72f70a5023c006fdf78526866af0609c78d37bd424bc721ba4e0089b6b57",
+      "bytes": 268577
+    },
+    {
+      "file": "RAMP-D_Phase2_server_report.zip",
+      "sha256": "193d0dc2fa988d61df83448dd0976df08c7562762568c0c35a3506406be5366f",
+      "bytes": 38011
+    },
+    {
+      "file": "自动驾驶规划实现分析.md",
+      "sha256": "7d413008d9cd4a8323ac09a926cd033519d9f7925558a8ba5e838d402d686432",
+      "bytes": 142130
+    }
+  ],
+  "paper_baseline": "separately uploaded AnonymousSubmission2027.tex; its hash equals the server-reported paper",
+  "code_baseline": "RAMP-D.zip / RAMP-D_Phase2",
+  "user_facing_date": "2026-11-10",
+  "implementation_phase": "3",
+  "original_attachments_kept_in_workspace": true
+}

@@ -1,0 +1,71 @@
+{
+  "benchmark": "phase2_finite_information_invariant",
+  "rows": [
+    {
+      "cells": 50,
+      "retained": 50,
+      "iterations": 1,
+      "removals": [
+        0
+      ],
+      "seconds": 0.0012599295005202293,
+      "status": "FIXPOINT_CONVERGED",
+      "classification": "finite_abstract_game_microbenchmark_not_vehicle_experiment"
+    },
+    {
+      "cells": 100,
+      "retained": 100,
+      "iterations": 1,
+      "removals": [
+        0
+      ],
+      "seconds": 0.0024164151400327682,
+      "status": "FIXPOINT_CONVERGED",
+      "classification": "finite_abstract_game_microbenchmark_not_vehicle_experiment"
+    },
+    {
+      "cells": 250,
+      "retained": 250,
+      "iterations": 1,
+      "removals": [
+        0
+      ],
+      "seconds": 0.005770479328930378,
+      "status": "FIXPOINT_CONVERGED",
+      "classification": "finite_abstract_game_microbenchmark_not_vehicle_experiment"
+    },
+    {
+      "cells": 500,
+      "retained": 500,
+      "iterations": 1,
+      "removals": [
+        0
+      ],
+      "seconds": 0.006901760585606098,
+      "status": "FIXPOINT_CONVERGED",
+      "classification": "finite_abstract_game_microbenchmark_not_vehicle_experiment"
+    },
+    {
+      "cells": 1000,
+      "retained": 1000,
+      "iterations": 1,
+      "removals": [
+        0
+      ],
+      "seconds": 0.013560258783400059,
+      "status": "FIXPOINT_CONVERGED",
+      "classification": "finite_abstract_game_microbenchmark_not_vehicle_experiment"
+    },
+    {
+      "cells": 2000,
+      "retained": 2000,
+      "iterations": 1,
+      "removals": [
+        0
+      ],
+      "seconds": 0.029051855206489563,
+      "status": "FIXPOINT_CONVERGED",
+      "classification": "finite_abstract_game_microbenchmark_not_vehicle_experiment"
+    }
+  ]
+}

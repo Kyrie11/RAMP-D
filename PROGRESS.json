@@ -6,9 +6,9 @@
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
   "phase1c": "server acceptance passed: 3 native tests, 83 Python tests, three benchmark methods validated and replayed; adaptive accepted width ratio 0.9886314837",
   "phase1d": "server accepted: 3 native tests, 109 Python tests, MPFR 4.0.2 official headers, all separation witnesses replayed; 40,000 projection falsification checks with zero misses",
-  "phase2_belief_support_and_invariant": "implemented finite abstract information-state game and greatest fixed-point engine; local bootstrap tests passed; target-server acceptance pending; output deliberately marked S_in_candidate / FINITE_ABSTRACTION_ONLY",
-  "phase3_public_backup_controller": "implemented constant common-control graph; acceptance pending target server",
-  "phase4_protocol_full_support_verifier": "not implemented",
+  "phase2_belief_support_and_invariant": "Uploaded target-server Phase2 baseline accepted: 3 native/129 Python; fixed-point semantics retained; context-bound evidence API and optional manuscript hashing repaired in Phase3.",
+  "phase3_public_backup_controller": "Implemented finite common bias/gain candidate synthesis, real local tube evidence, executable closed graph and guarded execution. Scope is local bicycle/static scene/declared observations; see machine-generated acceptance report. Target-server rerun pending.",
+  "phase4_protocol_full_support_verifier": "next: see docs/PHASE4_PLAN.md; not implemented",
   "phase5_cegar": "not implemented",
   "phase6_datasets_and_closed_loop_experiments": "not implemented",
   "requires_dataset": false,
@@ -20,5 +20,8 @@
     "carla_api": "0.9.16",
     "simulator_mode": "headless"
   },
-  "local_limit": "Local container lacks official MPFR development headers; bootstrap declaration header used only for local test build. Target server must rebuild with official libmpfr-dev headers. Phase 2 demo evidence verifier is a synthetic finite-game fixture, not a physical safety proof."
+  "local_limit": "Local build uses official MPFR 4.2.2 release header with system 4.2.2 runtime; no bootstrap header. Full-support safety and calibrated real-vehicle guarantees remain unimplemented.",
+  "full_support_certified": false,
+  "assurance_scope": "LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS",
+  "manuscript_files_required": false
 }

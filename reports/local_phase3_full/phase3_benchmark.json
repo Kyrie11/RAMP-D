@@ -1,0 +1,47 @@
+{
+  "benchmark": "phase3_local_public_backup_synthesis",
+  "rows": [
+    {
+      "kind": "brake_to_stop",
+      "status": "SYNTHESIZED_LOCAL",
+      "repeats": 3,
+      "median_s": 0.07617918100004317,
+      "p95_s": 0.08746253600020282,
+      "candidates": 3,
+      "accepted": 2,
+      "classification": "offline_finite_common_law_search_local_static_scene"
+    },
+    {
+      "kind": "hold_before_gate",
+      "status": "SYNTHESIZED_LOCAL",
+      "repeats": 3,
+      "median_s": 0.04927313899997898,
+      "p95_s": 0.054100049000226136,
+      "candidates": 2,
+      "accepted": 2,
+      "classification": "offline_finite_common_law_search_local_static_scene"
+    },
+    {
+      "kind": "yield",
+      "status": "SYNTHESIZED_LOCAL",
+      "repeats": 3,
+      "median_s": 0.07966805799969734,
+      "p95_s": 0.0871556629999759,
+      "candidates": 3,
+      "accepted": 1,
+      "classification": "offline_finite_common_law_search_local_static_scene"
+    },
+    {
+      "kind": "clear_merge",
+      "status": "SYNTHESIZED_LOCAL",
+      "repeats": 3,
+      "median_s": 0.05320279899979141,
+      "p95_s": 0.05344424299983075,
+      "candidates": 2,
+      "accepted": 1,
+      "classification": "offline_finite_common_law_search_local_static_scene"
+    }
+  ],
+  "full_support_certified": false,
+  "note": "p95 is nearest-rank over the listed few repeats, not a driving latency estimate"
+}

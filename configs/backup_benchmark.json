@@ -1,0 +1,153 @@
+{
+  "contract_id": "phase3_bmw_nominal_static_benchmark_v1",
+  "scope": "LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS",
+  "domain": {
+    "ego_bounds": [
+      [
+        -50.0,
+        100.0
+      ],
+      [
+        -4.0,
+        7.0
+      ],
+      [
+        -0.7,
+        0.7
+      ],
+      [
+        -0.25,
+        8.0
+      ],
+      [
+        -3.0,
+        2.0
+      ],
+      [
+        -0.45,
+        0.45
+      ]
+    ],
+    "other_bounds": {},
+    "allowed_modes": {
+      "rule": [
+        "closed",
+        "open"
+      ]
+    },
+    "required_mode_fields": [
+      "rule"
+    ],
+    "friction": {
+      "wheelbase_m": 2.5789128,
+      "friction_coefficient": 0.6,
+      "gravity_mps2": 9.81
+    }
+  },
+  "params": {
+    "wheelbase_m": 2.5789128,
+    "friction_coefficient": 0.6,
+    "gravity_mps2": 9.81
+  },
+  "control_limits": [
+    [
+      -2.0,
+      2.0
+    ],
+    [
+      -0.35,
+      0.35
+    ]
+  ],
+  "geometry": {
+    "length_m": 4.508,
+    "width_m": 1.61,
+    "center_offset_x_m": 1.4227170936,
+    "center_offset_y_m": 0.0
+  },
+  "decision_period_s": 0.25,
+  "road_x": [
+    -60.0,
+    120.0
+  ],
+  "road_y": [
+    -2.5,
+    5.5
+  ],
+  "derivative_disturbance": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "measurement_error": [
+    [
+      -1e-09,
+      1e-09
+    ],
+    [
+      -1e-09,
+      1e-09
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "gate_front_x": 15.0,
+  "minimum_clearance_m": 0.05,
+  "clearance_scale_m": 1.0,
+  "obstacles": [],
+  "options": {
+    "max_iterations": 16,
+    "relative_inflation": 0.125,
+    "absolute_inflation": [
+      1e-09,
+      1e-09,
+      1e-09,
+      1e-09,
+      1e-09,
+      1e-09
+    ],
+    "max_step_s": 0.03125,
+    "min_step_s": 1e-07,
+    "max_depth": 20,
+    "max_steps": 10000,
+    "max_attempts": 20000,
+    "time_limit_s": null,
+    "max_tube_widths": null,
+    "max_width_subdivisions": 10000
+  }
+}

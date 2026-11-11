@@ -25,7 +25,8 @@ def main():
                 EvidenceVerdict.PROVED,f'e{i}',(ObservationSuccessors('same',(atom,)),)),))
             cells.append(BeliefCell(f'B{i}',(atom,),(action,)))
         t=time.perf_counter()
-        result=compute_information_invariant(cells,safe,lambda ref: ref.startswith('e'))
+        result=compute_information_invariant(cells,safe,
+            lambda context: bool(context.evidence_ref and context.evidence_ref.startswith('e')))
         elapsed=time.perf_counter()-t
         rows.append({'cells':n,'retained':len(result.retained_cell_ids),
             'iterations':result.iterations,'removals':list(result.removals_per_iteration),

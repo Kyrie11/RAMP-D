@@ -1,0 +1,36 @@
+{
+  "status": "LOCAL_ACCEPTANCE_PASS",
+  "phase": "2",
+  "native_tests": 3,
+  "python": {
+    "tests": 142,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "official_mpfr_headers_used": true,
+  "phase1c_adaptive_width_regression": true,
+  "phase1d_benchmark_methods": 3,
+  "phase1d_aabb_overlap_status": "UNKNOWN",
+  "phase1d_oriented_separation_status": "SEPARATED",
+  "phase1d_all_separation_witnesses_replayed": true,
+  "phase1d_footprint_projection_checks": 2000,
+  "phase1d_footprint_projection_misses": 0,
+  "safety_verifier_implemented": false,
+  "report_directory": "/workspace/scratch/a5e017d913a8/work/phase2_no_paper_regression/reports/no_paper",
+  "phase2_status": "FIXPOINT_CONVERGED",
+  "phase2_demo_retained_cell_ids": [
+    "A",
+    "L"
+  ],
+  "phase2_certificate_replay": true,
+  "phase2_benchmark_sizes": [
+    50,
+    100,
+    250,
+    500
+  ],
+  "phase2_benchmark_all_fixtures_retained": true,
+  "phase2_assurance_scope": "FINITE_ABSTRACTION_ONLY",
+  "concrete_safety_certified": false
+}

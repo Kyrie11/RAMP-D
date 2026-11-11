@@ -1,0 +1,19 @@
+{
+  "tested_executable_source_unchanged": true,
+  "changed_after_validation": [
+    "docs/MATHEMATICAL_CORRECTIONS_PHASE3.md",
+    "AnonymousSubmission2027_Phase3.tex"
+  ],
+  "added_after_validation": [
+    "README.md",
+    "aaai2027_Phase3.bib",
+    "docs/FAILURE_LOG_PHASE3.md",
+    "docs/PHASE3_ACCEPTANCE.md",
+    "docs/PHASE3_DESIGN.md",
+    "docs/PHASE3_IMPLEMENTATION_REPORT.md",
+    "docs/PHASE4_PLAN.md",
+    "docs/SOURCE_INPUTS_PHASE3.json",
+    "requirements-test.txt"
+  ],
+  "note": "Only report/documentation and manuscript bibliography reconciliation were finalized after the successful run; original source_sha256.json retained."
+}

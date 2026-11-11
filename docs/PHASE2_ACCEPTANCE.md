@@ -86,11 +86,6 @@ tubes, protocol branches, resource monitors, and complete observation support.
    self-invariant fixture cells.
 8. Summary explicitly says `concrete_safety_certified=false`.
 
-The validator's provenance hash treats `AnonymousSubmission2027_Phase2.tex`
-and `aaai2027_Phase2.bib` as optional documentation inputs. Their absence no
-longer blocks Phase 2/Phase 3 code validation; when present, their hashes are
-still recorded in `source_sha256.json`.
-
 ## Simulator and dataset requirements
 
 None for Phase 2. No AV2, WOMD, SUMO, CARLA, GPU, or headless simulator

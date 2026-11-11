@@ -1,0 +1,31 @@
+{
+  "status": "BACKUP_GRAPH_REPLAY_PASS",
+  "ok": true,
+  "assurance_scope": "LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATIONS",
+  "full_support_certified": false,
+  "current_scene_verified": false,
+  "contract_digest": "contract-sha256:3aea4513d30c3642b4a971b541914b6f26fbd345be71f8e09c177174807429c4",
+  "caller_contract_pinned": false,
+  "retained_nodes": 17,
+  "retained_cell_ids": [
+    "B00",
+    "B01",
+    "B02",
+    "B03",
+    "B04",
+    "B05",
+    "B06",
+    "B07",
+    "B08",
+    "B09",
+    "B10",
+    "B11",
+    "B12",
+    "B13",
+    "B14",
+    "B15",
+    "B16"
+  ],
+  "closed_graph": true,
+  "message": "Graph, local evidence and finite fixed point replayed under the artifact's self-described contract."
+}

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Iterable
+import hashlib
 import json
 from pathlib import Path
 
@@ -63,6 +64,7 @@ class ActionWitness:
     action_id: str
     control: tuple[float, ...]
     transitions: tuple[AtomTransition, ...]
+    controller_ref: str | None = None
     def __post_init__(self):
         if not self.action_id:
             raise ValueError("action_id must be nonempty")
@@ -74,8 +76,31 @@ class ActionWitness:
             raise ValueError("action witness needs transitions")
         if len({t.source_atom_id for t in transitions}) != len(transitions):
             raise ValueError("one transition per source atom is required")
+        if self.controller_ref is not None and (
+                not isinstance(self.controller_ref, str) or not self.controller_ref):
+            raise ValueError("controller_ref must be a nonempty public-law digest or None")
         object.__setattr__(self, "control", control)
         object.__setattr__(self, "transitions", transitions)
+
+
+@dataclass(frozen=True)
+class EvidenceContext:
+    """The *current* obligation that an evidence artifact must establish.
+
+    Replaying a reference without comparing its recorded source support,
+    controller and observation successors to this context is insufficient.
+    ``control`` is a constant control when ``controller_ref`` is None, and the
+    public law's bias otherwise. The verifier must resolve the latter digest
+    and verify the full feedback law, including its gain and reference state.
+    """
+    cell: BeliefCell
+    source_atom: SupportAtom
+    action: ActionWitness
+    transition: AtomTransition
+
+    @property
+    def evidence_ref(self) -> str | None:
+        return self.transition.evidence_ref
 
 
 @dataclass(frozen=True)
@@ -165,7 +190,7 @@ def support_subset_cell(support: Iterable[SupportAtom], cell: BeliefCell) -> boo
 
 def _evaluate_action(cell: BeliefCell, action: ActionWitness,
                      current: dict[str, BeliefCell],
-                     evidence_verifier: Callable[[str], bool] | None,
+                     evidence_verifier: Callable[[EvidenceContext], bool] | None,
                      atom_index: dict[str, list[BeliefCell]]):
     source_ids = {a.atom_id for a in cell.atoms}
     transition_ids = {t.source_atom_id for t in action.transitions}
@@ -173,12 +198,17 @@ def _evaluate_action(cell: BeliefCell, action: ActionWitness,
         return None, "INCOMPLETE_SOURCE_COVERAGE"
     if evidence_verifier is None:
         return None, "NO_EVIDENCE_VERIFIER"
+    sources = {a.atom_id: a for a in cell.atoms}
     posterior: dict[str, list[SupportAtom]] = {}
     for tr in action.transitions:
         if tr.verdict is not EvidenceVerdict.PROVED:
             return None, "TRANSITION_" + tr.verdict.value
         try:
-            evidence_ok = bool(evidence_verifier(tr.evidence_ref))
+            context = EvidenceContext(cell, sources[tr.source_atom_id], action, tr)
+            # No fallback to the old ref-only callback: that API cannot bind a
+            # proof to the obligation currently being checked. Fail closed on
+            # exceptions and on non-boolean/truthy verifier return values.
+            evidence_ok = evidence_verifier(context) is True
         except Exception:
             evidence_ok = False
         if not evidence_ok:
@@ -207,7 +237,7 @@ def _evaluate_action(cell: BeliefCell, action: ActionWitness,
 
 
 def compute_information_invariant(cells: Iterable[BeliefCell], safe_domain: SafeDomain,
-                                  evidence_verifier: Callable[[str], bool] | None = None) -> InvariantResult:
+                                  evidence_verifier: Callable[[EvidenceContext], bool] | None = None) -> InvariantResult:
     """Compute the greatest fixed point of the supplied finite info-state game.
 
     S0 contains only cells wholly inside the hard-safe domain. A cell remains
@@ -299,7 +329,8 @@ def _atom_from(d):
         tuple((k, Interval(*v)) for k, v in d.get("other", {}).items()),
         tuple(d.get("mode", {}).items()))
 def _action(a):
-    return {"action_id": a.action_id, "control": list(a.control), "transitions": [
+    return {"action_id": a.action_id, "control": list(a.control),
+        "controller_ref": a.controller_ref, "transitions": [
         {"source_atom_id": t.source_atom_id, "verdict": t.verdict.value,
          "evidence_ref": t.evidence_ref, "branches": [
              {"observation": b.observation, "atoms": [_atom(x) for x in b.atoms]}
@@ -308,7 +339,46 @@ def _action_from(d):
     return ActionWitness(d["action_id"], tuple(d["control"]), tuple(
         AtomTransition(t["source_atom_id"], EvidenceVerdict(t["verdict"]), t.get("evidence_ref"),
             tuple(ObservationSuccessors(b["observation"], tuple(_atom_from(x) for x in b["atoms"]))
-                  for b in t["branches"])) for t in d["transitions"]))
+                  for b in t["branches"])) for t in d["transitions"]),
+        controller_ref=d.get("controller_ref"))
+
+
+def evidence_context_payload(context: EvidenceContext) -> dict:
+    """Canonical, JSON-ready contents of one transition proof obligation.
+
+    Bind the full current belief support, source atom, policy node, common
+    control/public controller digest and all observation successor supports.
+    The evidence reference and verdict are deliberately excluded: a proof's
+    name and acceptance label cannot be part of the content it is proving.
+    Remaining candidate actions are excluded because this is one-action
+    evidence, not a certificate that those other actions are also safe.
+    """
+    c, a, t = context.cell, context.action, context.transition
+    return {
+        "schema": "rampd.transition-obligation.v1",
+        "cell_id": c.cell_id,
+        "policy_node_id": c.policy_node_id,
+        "belief_support": [_atom(x) for x in sorted(c.atoms, key=lambda x: x.atom_id)],
+        "source_atom": _atom(context.source_atom),
+        "source_atom_id": t.source_atom_id,
+        "action_id": a.action_id,
+        "control": list(a.control),
+        "controller_ref": a.controller_ref,
+        "branches": [
+            {"observation": b.observation,
+             "atoms": [_atom(x) for x in sorted(b.atoms, key=lambda x: x.atom_id)]}
+            for b in sorted(t.branches, key=lambda b: b.observation)
+        ],
+    }
+
+
+def evidence_context_digest(context: EvidenceContext) -> str:
+    """SHA-256 content binding; a digest alone is not a safety proof."""
+    encoded = json.dumps(evidence_context_payload(context), sort_keys=True,
+                         separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _domain(d):
     return {"ego_bounds": _state(d.ego_bounds),
             "other_bounds": {k: _iv(v) for k, v in d.other_bounds},
@@ -329,7 +399,7 @@ def _domain_from(d):
 
 def save_invariant_certificate(path: str | Path, cells: Iterable[BeliefCell],
                                safe_domain: SafeDomain, result: InvariantResult):
-    payload = {"schema": "rampd.info-invariant-candidate.v1",
+    payload = {"schema": "rampd.info-invariant-candidate.v2",
         "assurance_scope": "FINITE_ABSTRACTION_ONLY", "certified": False,
         "safe_domain": _domain(safe_domain),
         "cells": [{"cell_id": c.cell_id, "policy_node_id": c.policy_node_id,
@@ -353,11 +423,16 @@ class ReplayResult:
 
 
 def replay_invariant_certificate(path: str | Path,
-        evidence_verifier: Callable[[str], bool] | None = None) -> ReplayResult:
+        evidence_verifier: Callable[[EvidenceContext], bool] | None = None) -> ReplayResult:
     try:
         d = json.loads(Path(path).read_text())
-        if d.get("schema") != "rampd.info-invariant-candidate.v1":
+        schema = d.get("schema")
+        if schema not in ("rampd.info-invariant-candidate.v1", "rampd.info-invariant-candidate.v2"):
             return ReplayResult(False, "unsupported schema")
+        if schema.endswith(".v1") and any(
+                a.get("controller_ref") is not None
+                for c in d["cells"] for a in c["actions"]):
+            return ReplayResult(False, "v1 certificates cannot represent public feedback laws")
         if d.get("certified") is not False or d.get("assurance_scope") != "FINITE_ABSTRACTION_ONLY":
             return ReplayResult(False, "invalid assurance claim")
         cells = tuple(BeliefCell(c["cell_id"], tuple(_atom_from(a) for a in c["atoms"]),

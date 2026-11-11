@@ -32,7 +32,7 @@ def main():
         required_mode_fields=('protocol','monitor'))
     # Explicit finite fixture verifier. Production must replace this with the
     # Phase 4 evidence verifier for full protocol/tube/resource proof artifacts.
-    verifier=lambda ref: ref.startswith('demo-')
+    verifier=lambda context: bool(context.evidence_ref and context.evidence_ref.startswith('demo-'))
     result=compute_information_invariant((A,L),safe,verifier)
     save_invariant_certificate(a.certificate,(A,L),safe,result)
     replay=replay_invariant_certificate(a.certificate,verifier)
