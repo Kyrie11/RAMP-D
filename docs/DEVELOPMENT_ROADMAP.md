@@ -8,7 +8,7 @@
 | 1C | Width metrics, adaptive subdivision, budgeted UNKNOWN | server accepted |
 | 1D | Swept rectangular footprint and fixed-axis strict separation | server accepted |
 | 2 | Finite joint belief-support cells and robust information-state fixed point | implemented; target-server acceptance pending |
-| 3 | Public common backup controller synthesis and executable policy graph | next |
+| 3 | Public common backup controller synthesis and executable policy graph | implemented; acceptance script ready |
 | 4 | Protocol automata, full-support tube/resource verifier, CERTIFIED/COUNTEREXAMPLE/UNKNOWN | pending |
 | 5 | Concrete/spurious counterexample handling and CEGAR | pending |
 | 6 | AV2/WOMD learning, SUMO/CARLA headless co-simulation, closed-loop experiments | pending |

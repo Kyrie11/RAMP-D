@@ -74,8 +74,16 @@ root=Path.cwd(); out={}
 for base in ('cpp','python','tests','scripts','docs','configs'):
  for p in sorted((root/base).rglob('*')):
   if p.is_file() and '__pycache__' not in p.parts: out[str(p.relative_to(root))]=hashlib.sha256(p.read_bytes()).hexdigest()
-for name in ('CMakeLists.txt','pyproject.toml','PROGRESS.json','AnonymousSubmission2027_Phase2.tex','aaai2027_Phase2.bib'):
+# The validator hashes executable/configuration inputs that define the test
+# harness.  The paper and bibliography are documentation inputs and are
+# intentionally optional: validation must remain runnable when a source
+# package omits the manuscript or uses a different filename.
+for name in ('CMakeLists.txt','pyproject.toml','PROGRESS.json'):
  p=root/name; out[name]=hashlib.sha256(p.read_bytes()).hexdigest()
+for name in ('AnonymousSubmission2027_Phase2.tex','aaai2027_Phase2.bib'):
+ p=root/name
+ if p.is_file():
+  out[name]=hashlib.sha256(p.read_bytes()).hexdigest()
 Path(sys.argv[1],'source_sha256.json').write_text(json.dumps(out,indent=2)+'\n')
 PY
 printf '\nPASS: Phase 1A-1D numerical and geometry checks completed.\nREPORT_DIR=%s\n' "$REPORT_DIR"

@@ -1,8 +1,9 @@
-# RAMP-D Phase 2 (0.5.0)
+# RAMP-D Phase 3 (0.6.0)
 
 This release preserves the Phase 1A-1D MPFR/C++ numerical core and adds the
 finite belief-support abstraction and information-state invariant fixed-point
-engine. The Python API remains the top-level interface.
+engine, then adds a public common backup-policy graph and a validated-tube
+execution adapter. The Python API remains the top-level interface.
 
 ## Important assurance statement
 
@@ -86,11 +87,29 @@ unsafe tubes, or uncovered posteriors reject the action.
 `policy_node_id`; it never invents a new observation or allows a hidden-state
 branch. Existing action evidence is invalidated after a split.
 
+## Phase 3 API
+
+```python
+from rampd_core import (
+    BackupMode, BackupControlLimits, BackupTemplate,
+    synthesize_public_backup, save_backup_graph, replay_backup_graph,
+)
+```
+
+`synthesize_public_backup` compiles one common action per retained complete
+belief support and preserves the Phase 2 observation children. The resulting
+graph exposes `control(node_id)`, `route(node_id, observation)`, and
+`execute_tube(...)`. It is an executable policy graph, not a concrete safety
+certificate. The first implementation is the constant-control subclass of
+the paper's public feedback controller; hidden atom-specific control is never
+available through the API.
+
 ## Phase order
 
 0 -> 1A -> 1B -> 1C -> 1D -> **2** -> 3 -> 4 -> 5 -> 6.
 
-- Phase 3: public common backup controller synthesis and executable policy graph.
+- Phase 3: public common backup controller synthesis and executable policy graph
+  (constant common-control subclass; affine public gain remains deferred).
 - Phase 4: protocol automata, full-support verifier and three-valued result.
 - Phase 5: concrete/spurious counterexamples and CEGAR.
 - Phase 6: AV2/WOMD model training and headless SUMO 1.20 + CARLA 0.9.16

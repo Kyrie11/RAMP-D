@@ -1,4 +1,4 @@
-"""RAMP-D verified-numerics and finite information-state core, Phase 2."""
+"""RAMP-D verified-numerics and public backup-policy core, Phase 3."""
 from .interval import (Interval, IntervalError, backend_name, build_info, add, sub,
                        mul, div, square, sqrt, sin, cos, tan, pi_interval, bicycle_rhs, friction_lhs)
 from .model import (BicycleParameters, StateBounds, ControlBounds, rhs,
@@ -19,6 +19,12 @@ from .invariant import (EvidenceVerdict, ObservationSuccessors, AtomTransition,
                         ReplayResult, support_subset_cell, compute_information_invariant,
                         save_invariant_certificate, replay_invariant_certificate)
 from .refinement import split_support_atom
+from .controller import (BackupMode, BackupControllerError,
+                         BackupControlLimits, default_backup_limits,
+                         BackupTemplate, BackupNode, ExecutionStep,
+                         TubeExecution, BackupPolicyGraph,
+                         BackupSynthesisResult, synthesize_public_backup,
+                         save_backup_graph, replay_backup_graph)
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __all__ = [name for name in globals() if not name.startswith("_")]

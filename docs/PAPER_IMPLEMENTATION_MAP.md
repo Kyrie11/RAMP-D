@@ -18,7 +18,7 @@
 | Robust information-state predecessor and finite fixed point | `python/rampd_core/invariant.py` | Phase 2; common control per belief cell, posterior aggregation by observation, conservative cell coverage, fail-closed evidence callback |
 | Support-box refinement preserving observation equivalence | `python/rampd_core/refinement.py` | Phase 2; split does not create a new policy node and invalidates stale action evidence |
 | Finite invariant candidate certificate and replay | `python/rampd_core/invariant.py`, `scripts/replay_invariant_certificate.py` | Phase 2; explicitly `S_in_candidate`, `FINITE_ABSTRACTION_ONLY`, `certified=false` |
-| Public backup policy graph | planned Phase 3 | Not implemented; Phase 2 consumes candidate common actions but does not synthesize feedback gains |
+| Public backup policy graph and constant common controller | `python/rampd_core/controller.py`, `scripts/demo_phase3.py` | Phase 3; compiles retained Phase 2 witnesses, routes only by realized observations, `PUBLIC_CONTROLLER_SYNTHESIS_ONLY`, `certified=false`; affine `K_B` extension deferred until interval image/tube verification |
 | Protocol product and full-support verifier | planned Phase 4 | Not implemented |
 | CEGAR | planned Phase 5 | Not implemented |
 | AV2/WOMD training and SUMO/CARLA closed-loop experiments | planned Phase 6 | Not implemented |

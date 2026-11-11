@@ -1,0 +1,16 @@
+{
+  "phase": "3",
+  "status": "STATIC_SMOKE_PASS_FULL_NATIVE_ACCEPTANCE_PENDING",
+  "controller_py_compile": true,
+  "shell_syntax": true,
+  "optional_manuscript_dependency_guard": true,
+  "controller_stub_smoke": true,
+  "public_backup_graph_built": "not_run_with_native_backend",
+  "concrete_safety_certified": false,
+  "assurance_scope": "PUBLIC_CONTROLLER_SYNTHESIS_ONLY",
+  "manuscript_dependencies": false,
+  "requires_dataset": false,
+  "requires_sumo": false,
+  "requires_carla": false,
+  "local_limit": "This workspace has no cmake, pytest executable, or MPFR development headers/shared build; run scripts/validate_phase3.sh on the target server."
+}
