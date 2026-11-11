@@ -10,10 +10,10 @@
 | 2 | Finite joint belief-support cells and robust information-state fixed point | uploaded server baseline accepted; evidence binding repaired |
 | 3 | Public common backup controller synthesis and executable policy graph | implemented and regression-tested in local physical scope; target server report available |
 | 4 | Protocol automata, full-support tube/resource verifier, CERTIFIED/COUNTEREXAMPLE/UNKNOWN | implemented first explicit synthetic-support verifier; real scene integration pending |
-| 5 | Concrete/spurious counterexample handling and CEGAR | pending |
+| 5 | Concrete/spurious counterexample handling and CEGAR | implemented locally; server gate pending |
 | 6 | AV2/WOMD learning, SUMO/CARLA headless co-simulation, closed-loop experiments | pending |
 
 Phase 2 does not require datasets or simulators. Phase 3 uses
-synthetic bounded dynamics and validated tubes. Phase 4 now provides versioned protocol/resource/agent/observation contracts and a conservative verifier. Its first release uses finite synthetic fixtures; complete real-scene contracts are still required before dataset integration. Phase 6 is the
+synthetic bounded dynamics and validated tubes. Phase 4 now provides versioned protocol/resource/agent/observation contracts and a conservative verifier. Phase 5 adds a version-bound CEGAR refinement layer over those finite synthetic fixtures; complete real-scene contracts are still required before dataset integration. Phase 6 is the
 first phase that requires AV2/WOMD and the SUMO/CARLA headless co-simulation
 bridge.

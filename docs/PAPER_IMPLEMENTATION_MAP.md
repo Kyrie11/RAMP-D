@@ -23,7 +23,7 @@
 | Context-bound transition evidence | `invariant.py`, `backup.py` | Full support/action/law/contract/transition binding and independent numerical replay |
 | Executable closed public backup graph | `backup_graph.py` | Phase 3; observation-only children, fixed-point closure, contract and execution guards |
 | Protocol product and full-support verifier | `protocol.py`, `resources.py`, `agents.py`, `observations.py`, `full_verifier.py` | Phase 4 first explicit finite-support implementation; synthetic contracts only, real-scene integration pending |
-| CEGAR | planned Phase 5 | Not implemented |
+| CEGAR | `python/rampd_core/cegar.py`, `scripts/validate_phase5.sh` | Phase 5 orchestration implemented locally; target-server gate pending; real-scene integration remains Phase 6 |
 | AV2/WOMD training and SUMO/CARLA closed-loop experiments | planned Phase 6 | Not implemented |
 
 The paper's full planner `CERTIFIED` result is not produced by any Phase 1A-1D

@@ -41,9 +41,18 @@ from .observations import (ObservationBranch, PosteriorResult, ObservationModel)
 from .full_verifier import (VerifyStatus, BranchCheck, VerificationTask,
                             VerificationResult, FullVerifierContract,
                             FullSupportVerifier, policy_digest)
+from .cegar import (PHASE5_SCOPE, CEGAR_SCHEMA, CounterexampleKind, ReplayAssessment,
+                    classify_counterexample, split_time_window, split_protocol_transition,
+                    refine_automaton_transition, RefinementKind, default_refinement_selector,
+                    RefinementAction,
+                    RefinementResult, split_observation_cell, apply_refinement,
+                    ContractVersion, EvidenceRecord, EvidenceRegistry, QueueItem,
+                    ResumableVerificationQueue, MasterProblem, update_backup_policy_graph,
+                    RefinementLogEntry,
+                    CegarResult, CegarEngine)
 from .forecast import (ProposalStatus, PredictionProposal, ProposalSet,
                        ProposalAdapterResult, proposal_only,
                        hard_support_from_prediction)
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 __all__ = [name for name in globals() if not name.startswith("_")]

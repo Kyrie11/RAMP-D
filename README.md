@@ -1,4 +1,4 @@
-# RAMP-D Phase 4（0.7.0）
+# RAMP-D Phase 5（0.8.0）
 
 本版本在 Phase 3 的公共采样恢复策略之上，增加显式有限协议自动机、四时钟消息语义、资源占用/容量监视、声明式他车响应管、观测后验聚合，以及 `CERTIFIED / COUNTEREXAMPLE / UNKNOWN` 三值全支持验证接口。Phase 1A–1D 的 MPFR/C++ 数值内核保留，**原生 ABI 仍为 3**。
 
@@ -182,6 +182,10 @@ print(run_examples())  # synthetic CERTIFIED / COUNTEREXAMPLE / UNKNOWN
 `OtherAgentModel` 必须绑定完整的动力学、扰动、ego 响应增益和模型 digest；
 `FullVerifierContract` 没有 model digest 时固定返回 `UNKNOWN`。
 
+## Phase 5 CEGAR
+
+Phase 5 adds concrete/spurious counterexample classification, event-time and support/observation refinement, version-bound evidence invalidation, master updates, and a resumable re-verification scheduling skeleton. Run `PYTHON_BIN="$(command -v python)" bash scripts/validate_phase5.sh` on the target server. The scope remains synthetic explicit protocol support; it does not certify real scenes.
+
 ## 文档与下一阶段
 
 - [Phase 3 设计](docs/PHASE3_DESIGN.md)：本轮目标、接口、控制综合和保证边界。
@@ -194,6 +198,9 @@ print(run_examples())  # synthetic CERTIFIED / COUNTEREXAMPLE / UNKNOWN
 - [开发路线](docs/DEVELOPMENT_ROADMAP.md)：0 → 1A → 1B → 1C → 1D → 2 → 3 → 4 → 5 → 6。
 - [Phase 4 工程报告](docs/PHASE4_IMPLEMENTATION_REPORT.md)：协议、资源、他车、观测和验证器实现。
 - [Phase 4 验收](docs/PHASE4_ACCEPTANCE.md)：23 项专项测试、317 项历史回归及失败案例。
+- [Phase 5 计划](docs/PHASE5_PLAN.md)：CEGAR 细化边界和契约。
+- [Phase 5 工程报告](docs/PHASE5_IMPLEMENTATION_REPORT.md)：实现、时序修正和本地验证限制。
+- [Phase 5 验收](docs/PHASE5_ACCEPTANCE.md)：具体/伪反例、细化、失效和队列 gate。
 
-下一阶段是 Phase 5：把当前三值接口扩展为可恢复的 concrete/spurious counterexample 分流、时间和连续 cell refinement、master 更新及队列重验证。Phase 6 再做 AV2/WOMD 学习与 SUMO/CARLA 闭环实验。
+下一阶段是 Phase 6：接入 AV2/WOMD adapters、四时钟仿真日志和 SUMO/CARLA 闭环实验。Phase 5 的 CEGAR 仍只针对显式合成协议。
 **本轮验收不需要下载数据集，也不需要启动 CARLA 0.9.16 或 SUMO 1.20。**

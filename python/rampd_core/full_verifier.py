@@ -21,6 +21,30 @@ from .observations import ObservationModel, ObservationBranch, PosteriorResult
 from .belief import SupportAtom, BeliefCell
 
 
+def _public_observation_time(transition: ProtocolTransition):
+    """Return the earliest time at which this observation is public.
+
+    ``change`` is an environment clock; it is not automatically an ego
+    observation.  A message branch becomes public at receipt, and when the
+    contract also supplies a local-first-observation clock we conservatively
+    wait until that clock as well.  Silence uses the local clock when one is
+    declared.  A non-point availability window cannot be collapsed to its
+    lower endpoint without inventing a decision instant, so it is returned as
+    unresolved by the caller.
+    """
+    clocks = transition.clocks
+    windows = [clocks.change]
+    if transition.message is not None:
+        if clocks.receipt is None:
+            return None, "PUBLIC_OBSERVATION_RECEIPT_CLOCK_MISSING"
+        windows.append(clocks.receipt)
+    if clocks.local is not None:
+        windows.append(clocks.local)
+    if any(window.lo != window.hi for window in windows):
+        return None, "PUBLIC_OBSERVATION_TIME_INTERVAL_REQUIRES_REFINEMENT"
+    return max(window.lo for window in windows), "PUBLIC_OBSERVATION_TIME_PROVED"
+
+
 class VerifyStatus:
     CERTIFIED = "CERTIFIED"
     COUNTEREXAMPLE = "COUNTEREXAMPLE"
@@ -134,12 +158,16 @@ class FullSupportVerifier:
                  branch_checker: Callable[[VerificationTask, ProtocolTransition, object], BranchCheck] | None = None,
                  terminal_checker: Callable[[VerificationTask], BranchCheck] | None = None,
                  action_for_state: Callable[[str], object] | None = None,
-                 counterexample_checker: Callable[[VerificationTask, ProtocolTransition, object, BranchCheck], bool] | None = None):
+                 counterexample_checker: Callable[[VerificationTask, ProtocolTransition, object, BranchCheck], bool] | None = None,
+                 interval_branch_checker: Callable[[VerificationTask, ProtocolTransition, object], BranchCheck] | None = None):
         self.contract = contract
         self.branch_checker = branch_checker
         self.terminal_checker = terminal_checker
         self.action_for_state = action_for_state
         self.counterexample_checker = counterexample_checker
+        # A non-point event window is never collapsed to an endpoint. Phase 5
+        # may provide an independent whole-window certificate here.
+        self.interval_branch_checker = interval_branch_checker
 
     def _unknown(self, reason, processed, pending, unresolved, *, counterexample=None):
         return VerificationResult(VerifyStatus.UNKNOWN, self.contract.scope, reason, processed, pending,
@@ -202,18 +230,19 @@ class FullSupportVerifier:
                 if temporal != "PROVED":
                     unresolved.append(f"{tr.transition_id}:{why}")
                     continue
-                # An interval-valued event time cannot be collapsed to its
-                # lower endpoint.  Doing so could manufacture a concrete
-                # counterexample at a time that is not the realized event
-                # time, or certify a successor with the wrong guard order.
-                # Keep the branch as a refinement obligation instead.
+                # Never collapse an interval to its lower endpoint. A Phase
+                # 5 caller may instead provide an independent whole-window
+                # certificate through interval_branch_checker.
                 if tr.clocks.change.lo != tr.clocks.change.hi:
-                    unresolved.append(f"{tr.transition_id}:EVENT_TIME_INTERVAL_REQUIRES_REFINEMENT")
-                    continue
-                if self.branch_checker is None:
-                    unresolved.append(f"{tr.transition_id}:CONTINUOUS_EVIDENCE_MISSING")
-                    continue
-                checked = self.branch_checker(task, tr, action)
+                    if self.interval_branch_checker is None:
+                        unresolved.append(f"{tr.transition_id}:EVENT_TIME_INTERVAL_REQUIRES_REFINEMENT")
+                        continue
+                    checked = self.interval_branch_checker(task, tr, action)
+                else:
+                    if self.branch_checker is None:
+                        unresolved.append(f"{tr.transition_id}:CONTINUOUS_EVIDENCE_MISSING")
+                        continue
+                    checked = self.branch_checker(task, tr, action)
                 if checked.status == VerifyStatus.COUNTEREXAMPLE:
                     if self.counterexample_checker is None or not self.counterexample_checker(task, tr, action, checked):
                         unresolved.append(f"{tr.transition_id}:COUNTEREXAMPLE_REPLAY_MISSING")
@@ -261,14 +290,22 @@ class FullSupportVerifier:
                     unresolved.append(f"{observation}:PUBLIC_CHILD_AMBIGUOUS")
                     continue
                 child_state = next(iter(child_state_ids))
-                # The next protocol time is part of the branch contract.  A
-                # non-point event window cannot be collapsed to an arbitrary
-                # float without losing a possible guard ordering.
-                next_times = {tr.clocks.change.lo for tr in matching}
-                if len(next_times) != 1:
+                # The next public decision time is determined by the
+                # observation clocks, not by the physical change clock alone.
+                # Routing at change.lo would let an ego act on an event before
+                # its message receipt/local observation and violate
+                # nonanticipativity.
+                public_times = []
+                for tr in matching:
+                    public_time, public_reason = _public_observation_time(tr)
+                    if public_time is None:
+                        unresolved.append(f"{observation}:{public_reason}")
+                        continue
+                    public_times.append(public_time)
+                if len(public_times) != len(matching) or len(set(public_times)) != 1:
                     unresolved.append(f"{observation}:PUBLIC_TIME_AMBIGUOUS")
                     continue
-                next_time = next(iter(next_times))
+                next_time = public_times[0]
                 if next_time <= task.time:
                     unresolved.append(f"{observation}:NONADVANCING_EVENT_TIME")
                     continue

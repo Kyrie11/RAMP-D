@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(rampd VERSION 0.7.0 LANGUAGES CXX)
+project(rampd VERSION 0.8.0 LANGUAGES CXX)
 option(RAMPD_BUILD_TESTS "Build mandatory native regression tests" ON)
 option(RAMPD_SANITIZE "Enable AddressSanitizer and UBSan (native tests)" OFF)
 set(CMAKE_CXX_STANDARD 17)
