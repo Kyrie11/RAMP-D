@@ -1,9 +1,16 @@
-# Example schema only. DO NOT use these values as calibrated vehicle geometry.
-# The paper's bicycle ODE does not specify whether (px,py) is rear-axle center
-# or body center. Set the reference convention and calibrate the offset first.
-footprint:
-  length_m: null
-  width_m: null
-  center_offset_x_m: null
-  center_offset_y_m: null
-  state_position_reference: null  # e.g. rear_axle_center or body_geometric_center
+# Nominal CommonRoad BMW 320i benchmark profile.
+# Rear-axle reference is consistent with the bicycle ODE. The body-centre
+# offset uses CG as a proxy for rectangle centre; replace with measured CARLA
+# bounding_box.location transformed into the rear-axle frame before physical claims.
+vehicle: commonroad_bmw_320i_nominal
+reference_point: rear_axle_center
+wheelbase_m: 2.5789128
+body_length_m: 4.508
+body_width_m: 1.610
+reference_to_body_center_x_m: 1.4227170936
+reference_to_body_center_y_m: 0.0
+front_axle_to_cg_m: 1.1561957064
+rear_axle_to_cg_m: 1.4227170936
+friction_coefficient: null  # required scenario-specific conservative lower bound
+gravity_mps2: 9.81
+geometry_calibration: nominal_CG_as_body_rectangle_center_proxy

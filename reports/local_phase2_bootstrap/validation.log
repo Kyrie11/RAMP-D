@@ -1,0 +1,322 @@
+ROOT=/mnt/data/RAMP-D_Phase2
+BUILD_DIR=/mnt/data/RAMP-D_Phase2/build_phase1d
+REPORT_DIR=/mnt/data/RAMP-D_Phase2/reports/local_phase2_bootstrap
+3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]
+cmake version 3.31.6
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+ctest version 3.31.6
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /mnt/data/RAMP-D_Phase2/build_phase1d
+[ 40%] Built target rampd_interval
+[ 80%] Built target test_interval
+[ 80%] Built target test_picard
+[100%] Built target test_abi
+Test project /mnt/data/RAMP-D_Phase2/build_phase1d
+  Test #1: interval_cpp
+  Test #2: picard_cpp
+  Test #3: abi_cpp
+
+Total Tests: 3
+Test project /mnt/data/RAMP-D_Phase2/build_phase1d
+    Start 1: interval_cpp
+1/3 Test #1: interval_cpp .....................   Passed    0.00 sec
+    Start 2: picard_cpp
+2/3 Test #2: picard_cpp .......................   Passed    0.00 sec
+    Start 3: abi_cpp
+3/3 Test #3: abi_cpp ..........................   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   0.01 sec
+........................................................................ [ 55%]
+.........................................................                [100%]
+129 passed in 1.77s
+environment metadata: /mnt/data/RAMP-D_Phase2/reports/local_phase2_bootstrap/environment.json
+{
+  "status": "VALIDATED",
+  "reason": "COMPLETE_DYNAMICS_ENCLOSURE",
+  "backend": "MPFR-192/directed-binary64/ABI3",
+  "build": "compiler=14.2.0;mpfr_runtime=4.2.2;precision_bits=192;abi=3;api=0.4.0;mpfr_header=bootstrap_public_API_declarations",
+  "accepted_steps": 32,
+  "exact_horizon_covered": "1",
+  "final_px": [
+    7.999999998394508,
+    8.000000001605505
+  ],
+  "includes_analytic_px_8m": true,
+  "witness_replay": true,
+  "full_support_safety_verified": false,
+  "certificate": "/mnt/data/RAMP-D_Phase2/reports/local_phase2_bootstrap/demo_certificate.json"
+}
+{
+  "ok": true,
+  "reason": "all dynamics inclusion witnesses replayed",
+  "checked_segments": 32
+}
+{
+  "audit": "numerical_falsification_only",
+  "reference": "ordinary_RK4_piecewise_constant_inputs",
+  "seed": 31701,
+  "rollouts": 64,
+  "checked_state_vectors": 20480,
+  "containment_misses": 0,
+  "first_misses": [],
+  "empirical_containment_fraction": 1.0,
+  "tube_status": "VALIDATED",
+  "accepted_steps": 32,
+  "witness_replay": true,
+  "false_safe_count": null,
+  "false_safe_note": "not defined: no safety verifier implemented",
+  "stats": {
+    "attempts": 32,
+    "native_iterations": 64,
+    "accepted_steps": 32,
+    "subdivisions": 31,
+    "schedule_subdivisions": 31,
+    "failure_subdivisions": 0,
+    "width_subdivisions": 0,
+    "width_rejections": 0,
+    "max_depth": 5,
+    "initial_widths": [
+      0.04,
+      0.04,
+      0.020000000000000004,
+      0.1999999999999993,
+      0.2,
+      0.019999999999999997
+    ],
+    "max_attempted_tube_widths": [
+      0.4884088756649545,
+      0.26951839362845087,
+      0.08881081035568104,
+      0.6883120759648786,
+      1.221171877000003,
+      0.06375000200000003
+    ],
+    "max_accepted_tube_widths": [
+      0.4884088756649545,
+      0.26951839362845087,
+      0.08881081035568104,
+      0.6883120759648786,
+      1.221171877000003,
+      0.06375000200000003
+    ],
+    "max_width_ratio": null,
+    "max_accepted_width_ratio": null,
+    "elapsed_s": 0.006327373999965857
+  }
+}
+{
+  "benchmark": "phase1c_fixed_vs_adaptive_width",
+  "classification": "deterministic_synthetic_numerical_benchmark_not_vehicle_experiment",
+  "seed": null,
+  "initial_support": "psi=[-0.03,0.03] rad; v=[7.9,8.1] m/s; other coordinates point",
+  "control": "j=0; steering_rate=0",
+  "horizon_s": 0.8,
+  "wheelbase_m": 2.8,
+  "repeats": 5,
+  "rows": [
+    {
+      "method": "fixed_coarse_no_width_cap",
+      "status": "VALIDATED",
+      "accepted_steps": 2,
+      "attempts": 2,
+      "total_subdivisions": 1,
+      "schedule_subdivisions": 1,
+      "failure_subdivisions": 0,
+      "width_subdivisions": 0,
+      "width_rejections": 0,
+      "max_tube_widths": [
+        4.206239264336226,
+        0.6092322178887499,
+        0.07500000490178572,
+        0.25000000300000025,
+        2e-09,
+        2e-09
+      ],
+      "max_accepted_width_ratio": null,
+      "median_wall_time_s": 0.0003490920000785991,
+      "timing_samples_s": [
+        0.0009346620001906558,
+        0.00045142199996917043,
+        0.0003388469999663357,
+        0.0003203300000222953,
+        0.0003490920000785991
+      ],
+      "witness_replay": true,
+      "witness_segments_replayed": 2,
+      "width_limits": null
+    },
+    {
+      "method": "fixed_fine_no_width_cap",
+      "status": "VALIDATED",
+      "accepted_steps": 32,
+      "attempts": 32,
+      "total_subdivisions": 31,
+      "schedule_subdivisions": 31,
+      "failure_subdivisions": 0,
+      "width_subdivisions": 0,
+      "width_rejections": 0,
+      "max_tube_widths": [
+        0.5324010716720435,
+        0.5901937211436922,
+        0.0750000076222099,
+        0.25000000393753563,
+        2e-09,
+        2e-09
+      ],
+      "max_accepted_width_ratio": null,
+      "median_wall_time_s": 0.0051175389999116305,
+      "timing_samples_s": [
+        0.0053816060001281585,
+        0.005059864000031666,
+        0.0053602640000463,
+        0.0051175389999116305,
+        0.00498511400019197
+      ],
+      "witness_replay": true,
+      "witness_segments_replayed": 32,
+      "width_limits": null
+    },
+    {
+      "method": "adaptive_width_cap",
+      "status": "VALIDATED",
+      "accepted_steps": 5,
+      "attempts": 8,
+      "total_subdivisions": 4,
+      "schedule_subdivisions": 1,
+      "failure_subdivisions": 0,
+      "width_subdivisions": 3,
+      "width_rejections": 3,
+      "max_tube_widths": [
+        2.1749892641620407,
+        0.5330781938523969,
+        0.07500000707812501,
+        0.2500000037499994,
+        2e-09,
+        2e-09
+      ],
+      "max_accepted_width_ratio": 0.9886314837100184,
+      "median_wall_time_s": 0.0014782089999698655,
+      "timing_samples_s": [
+        0.0016596450000179175,
+        0.0014664909999737574,
+        0.0013576520000242454,
+        0.0014782089999698655,
+        0.0019337120002091979
+      ],
+      "witness_replay": true,
+      "witness_segments_replayed": 5,
+      "width_limits": [
+        2.2,
+        0.8,
+        0.1,
+        0.3,
+        0.1,
+        0.01
+      ]
+    }
+  ],
+  "interpretation": "Width caps constrain local enclosure box diameters. They do not assert physical safety or reduce true uncertainty; inability to meet a cap must return UNKNOWN."
+}
+CSV=/mnt/data/RAMP-D_Phase2/reports/local_phase2_bootstrap/phase1c_benchmark.csv
+{
+  "benchmark": "phase1d_swept_footprint_axes",
+  "classification": "synthetic_geometry_microbenchmark_not_vehicle_experiment",
+  "time_interval_exact": [
+    "0",
+    "1/5"
+  ],
+  "geometry": {
+    "length_m": 4.0,
+    "width_m": 0.2
+  },
+  "repeats": 5,
+  "iterations_per_repeat": 100,
+  "rows": [
+    {
+      "method": "aabb_only",
+      "status": "UNKNOWN",
+      "axes_tested": 2,
+      "median_seconds": 0.00037168685999859006,
+      "samples_seconds": [
+        0.00037789926999948876,
+        0.00037319386000035594,
+        0.0003632539799991719,
+        0.00036837398999978177,
+        0.00037168685999859006
+      ],
+      "clearance_lower_m": null,
+      "witness_replay": false
+    },
+    {
+      "method": "oriented_candidate_axes",
+      "status": "SEPARATED",
+      "axes_tested": 4,
+      "median_seconds": 0.0008012331000008999,
+      "samples_seconds": [
+        0.0007572236300006808,
+        0.0007559002900006817,
+        0.0008611917700000049,
+        0.000840957079999498,
+        0.0008012331000008999
+      ],
+      "clearance_lower_m": 1.2999999999999983,
+      "witness_replay": true
+    },
+    {
+      "method": "dense_16_plus_oriented",
+      "status": "SEPARATED",
+      "axes_tested": 20,
+      "median_seconds": 0.0013867936600013308,
+      "samples_seconds": [
+        0.0014062569099996835,
+        0.0015584481199994115,
+        0.0013746142900004088,
+        0.0013420238700018671,
+        0.0013867936600013308
+      ],
+      "clearance_lower_m": 1.2999999999999983,
+      "witness_replay": true
+    }
+  ],
+  "interpretation": "AABB overlap is UNKNOWN; a strict outward support-projection gap proves swept-set separation. UNKNOWN is not collision."
+}
+{
+  "audit": "high_precision_corner_containment_falsification",
+  "seed": 9317,
+  "samples": 2000,
+  "checked_projections": 40000,
+  "misses": 0,
+  "containment_fraction": 1.0,
+  "mpmath_dps": 100,
+  "claim": "falsification_only_not_a_proof"
+}
+{
+  "status": "BOOTSTRAP_TEST_PASS_REQUIRES_OFFICIAL_HEADERS",
+  "phase": "1D",
+  "native_tests": 3,
+  "python": {
+    "tests": 129,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "official_mpfr_headers_used": false,
+  "phase1c_adaptive_width_regression": true,
+  "phase1d_benchmark_methods": 3,
+  "phase1d_aabb_overlap_status": "UNKNOWN",
+  "phase1d_oriented_separation_status": "SEPARATED",
+  "phase1d_all_separation_witnesses_replayed": true,
+  "phase1d_footprint_projection_checks": 40000,
+  "phase1d_footprint_projection_misses": 0,
+  "safety_verifier_implemented": false,
+  "report_directory": "/mnt/data/RAMP-D_Phase2/reports/local_phase2_bootstrap"
+}
+
+PASS: Phase 1A-1D numerical and geometry checks completed.
+REPORT_DIR=/mnt/data/RAMP-D_Phase2/reports/local_phase2_bootstrap

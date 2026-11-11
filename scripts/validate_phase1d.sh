@@ -74,7 +74,7 @@ root=Path.cwd(); out={}
 for base in ('cpp','python','tests','scripts','docs','configs'):
  for p in sorted((root/base).rglob('*')):
   if p.is_file() and '__pycache__' not in p.parts: out[str(p.relative_to(root))]=hashlib.sha256(p.read_bytes()).hexdigest()
-for name in ('CMakeLists.txt','pyproject.toml','PROGRESS.json'):
+for name in ('CMakeLists.txt','pyproject.toml','PROGRESS.json','AnonymousSubmission2027_Phase2.tex','aaai2027_Phase2.bib'):
  p=root/name; out[name]=hashlib.sha256(p.read_bytes()).hexdigest()
 Path(sys.argv[1],'source_sha256.json').write_text(json.dumps(out,indent=2)+'\n')
 PY

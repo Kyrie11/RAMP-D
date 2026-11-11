@@ -1,12 +1,12 @@
 {
-  "release": "0.4.0",
-  "phase": "1D",
+  "release": "0.5.0",
+  "phase": "2",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
   "phase1c": "server acceptance passed: 3 native tests, 83 Python tests, three benchmark methods validated and replayed; adaptive accepted width ratio 0.9886314837",
-  "phase1d": "implemented; local bootstrap acceptance pending target-server rebuild and acceptance",
-  "phase2_belief_support_and_invariant": "not implemented",
+  "phase1d": "server accepted: 3 native tests, 109 Python tests, MPFR 4.0.2 official headers, all separation witnesses replayed; 40,000 projection falsification checks with zero misses",
+  "phase2_belief_support_and_invariant": "implemented finite abstract information-state game and greatest fixed-point engine; local bootstrap tests passed; target-server acceptance pending; output deliberately marked S_in_candidate / FINITE_ABSTRACTION_ONLY",
   "phase3_public_backup_controller": "not implemented",
   "phase4_protocol_full_support_verifier": "not implemented",
   "phase5_cegar": "not implemented",
@@ -20,5 +20,5 @@
     "carla_api": "0.9.16",
     "simulator_mode": "headless"
   },
-  "local_limit": "The local container lacks the official MPFR development header; local bootstrap compilation may use a temporary declaration header with the real MPFR runtime. Target server must rebuild with official libmpfr-dev headers."
+  "local_limit": "Local container lacks official MPFR development headers; bootstrap declaration header used only for local test build. Target server must rebuild with official libmpfr-dev headers. Phase 2 demo evidence verifier is a synthetic finite-game fixture, not a physical safety proof."
 }

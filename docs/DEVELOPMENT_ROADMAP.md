@@ -1,29 +1,20 @@
-# RAMP-D development roadmap (preserved sequence)
+# RAMP-D development roadmap
 
-This project follows the agreed dependency order; later modules must not be
-implemented as substitutes for unaccepted earlier numerical modules.
+| Phase | Deliverable | Status |
+|---|---|---|
+| 0 | Project skeleton, contracts, build/test harness | complete |
+| 1A | MPFR interval arithmetic and six-state bicycle interval RHS | server accepted |
+| 1B | Picard validated integration and replayable inclusion witness | server accepted |
+| 1C | Width metrics, adaptive subdivision, budgeted UNKNOWN | server accepted |
+| 1D | Swept rectangular footprint and fixed-axis strict separation | server accepted |
+| 2 | Finite joint belief-support cells and robust information-state fixed point | implemented; target-server acceptance pending |
+| 3 | Public common backup controller synthesis and executable policy graph | next |
+| 4 | Protocol automata, full-support tube/resource verifier, CERTIFIED/COUNTEREXAMPLE/UNKNOWN | pending |
+| 5 | Concrete/spurious counterexample handling and CEGAR | pending |
+| 6 | AV2/WOMD learning, SUMO/CARLA headless co-simulation, closed-loop experiments | pending |
 
-| Order | Phase | Scope | Acceptance artifact |
-|---:|---|---|---|
-| 0 | Engineering foundation | Project skeleton, model/state contracts, build/test infrastructure | Reproducible environment report |
-| 1 | Phase 1A | MPFR-backed interval arithmetic and six-state bicycle vector field | Arithmetic/model unit tests |
-| 2 | Phase 1B | Picard validated continuous-time integration and endpoint enclosure | Complete-horizon inclusion witnesses and replay |
-| 3 | Phase 1C | Width-driven adaptive subdivision, budgets, fail-closed UNKNOWN | Fixed/coarse/fine/adaptive benchmark and replay |
-| 4 | Phase 1D | Swept oriented footprint outer enclosure and conservative continuous pairwise separation | Geometric containment audit and separation witnesses |
-| 5 | Phase 2 | Finite joint belief-support cells and certified inner approximation of S_infinity | Fixed-point/information-support tests |
-| 6 | Phase 3 | Public backup-controller synthesis and executable policy graph | Common-control and backup-transition tests |
-| 7 | Phase 4 | Protocol product and full-support verifier | CERTIFIED / COUNTEREXAMPLE / UNKNOWN tests |
-| 8 | Phase 5 | Concrete/spurious counterexample handling and CEGAR | Refinement correctness and termination tests |
-| 9 | Phase 6 | AV2/WOMD training, SUMO/CARLA controlled closed-loop experiments | Reproducible experimental tables and audits |
-
-Phase 1A-1D are mathematical/physical infrastructure. Phase 2 must consume
-sound state/footprint enclosures; Phase 3 must consume validated tubes and
-information-state semantics; Phase 4 must be independent of learned likelihoods;
-Phase 5 must refine only validated concrete/spurious cases; Phase 6 evaluates
-the completed system. No dataset or simulator is required before Phase 6,
-although synthetic geometry tests are used in Phase 1D.
-
-For Phase 2, the uploaded paper already cites Brown et al. (2023) and Schäfer
-et al. (2023). Uploading those two full papers before implementing the fixed
-point would help cross-check the invariant-set numerical assumptions. They are
-not required for Phase 1D.
+Phase 2 does not require datasets or simulators. Phase 3 will initially use
+synthetic bounded dynamics and validated tubes. Phase 4 will need the protocol
+specification and complete resource/agent transition contracts. Phase 6 is the
+first phase that requires AV2/WOMD and the SUMO/CARLA headless co-simulation
+bridge.

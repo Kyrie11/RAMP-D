@@ -90,12 +90,21 @@ aggregate `SEPARATED`.
   `TubeResult` inputs through `separate_tube_results`.
 - It does not establish the full planner's `CERTIFIED` status.
 
-## 6. Reference point is a required calibration decision
+## 6. Reference point is now fixed: rear-axle centre
 
-The paper gives the bicycle kinematics but does not say whether `(px,py)` is
-rear-axle center, vehicle geometric center, or another reference point. This
-release does not guess. `center_offset_x_m/y_m` are explicit. Before using
-real vehicle data or CARLA, fix the state reference convention and calibrate
-vehicle length, width, and reference-to-body-center offset. A wrong offset
-can invalidate physical footprint claims even when interval arithmetic is
-perfect.
+The current bicycle ODE is defined with `(px,py)` at the centre of the rear
+axle, `v` as signed longitudinal speed at that point, and `psi` as body
+heading. This is the standard kinematic single-track convention used by the
+model equations. The body rectangle is not assumed to be centred at the rear
+axle. `center_offset_x_m/y_m` are the explicit body-frame displacement from
+the rear-axle centre to the geometric centre of the rectangle.
+
+`python/rampd_core/vehicle.py` provides
+`commonroad_bmw_320i_benchmark()` as a reproducible nominal profile:
+4.508 m x 1.610 m, wheelbase 2.5789128 m, and rear-axle-to-body-centre offset
+1.4227170936 m. The latter is a nominal proxy obtained by assuming the CG is
+the rectangle centre; it is not exact body metrology. Replace it with measured
+CARLA bounding-box geometry and a calibrated rear-axle location before making
+physical safety claims. Surrounding actors should use per-actor dimensions or
+conservative class envelopes. Friction is not part of the chassis geometry;
+it must be supplied as a scenario-specific conservative tire-road bound.

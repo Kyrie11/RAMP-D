@@ -13,8 +13,12 @@
 | Different adaptive segment schedules | `python/rampd_core/footprint.py` | Exact common temporal refinement; reuse full source-segment tubes on overlap subintervals |
 | Fixed/adaptive resolution benchmark | `scripts/benchmark_phase1c.py` | Synthetic numerical benchmark only |
 | Swept-footprint axis benchmark and high-precision audit | `scripts/benchmark_phase1d.py`, `scripts/audit_phase1d.py` | Synthetic geometry microbenchmark and falsification audit only |
-| Finite joint information-support cells and S-infinity | planned Phase 2 | Not implemented |
-| Public backup policy graph | planned Phase 3 | Not implemented |
+| Rear-axle reference convention and explicit body-centre offset | `python/rampd_core/vehicle.py`, `python/rampd_core/footprint.py`, `AnonymousSubmission2027_Phase2.tex` | Rear-axle convention selected; CommonRoad BMW 320i nominal profile; CG-as-box-centre is explicitly a proxy requiring calibration |
+| Finite joint information-support cells | `python/rampd_core/belief.py` | Phase 2; union of continuous boxes and discrete protocol/resource/agent modes; one cell is one complete information support |
+| Robust information-state predecessor and finite fixed point | `python/rampd_core/invariant.py` | Phase 2; common control per belief cell, posterior aggregation by observation, conservative cell coverage, fail-closed evidence callback |
+| Support-box refinement preserving observation equivalence | `python/rampd_core/refinement.py` | Phase 2; split does not create a new policy node and invalidates stale action evidence |
+| Finite invariant candidate certificate and replay | `python/rampd_core/invariant.py`, `scripts/replay_invariant_certificate.py` | Phase 2; explicitly `S_in_candidate`, `FINITE_ABSTRACTION_ONLY`, `certified=false` |
+| Public backup policy graph | planned Phase 3 | Not implemented; Phase 2 consumes candidate common actions but does not synthesize feedback gains |
 | Protocol product and full-support verifier | planned Phase 4 | Not implemented |
 | CEGAR | planned Phase 5 | Not implemented |
 | AV2/WOMD training and SUMO/CARLA closed-loop experiments | planned Phase 6 | Not implemented |

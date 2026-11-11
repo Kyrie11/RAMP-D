@@ -1,0 +1,16 @@
+{
+  "classification": "finite_abstract_game_demo_not_vehicle_safety_experiment",
+  "status": "FIXPOINT_CONVERGED",
+  "retained_cell_ids": [
+    "A",
+    "L"
+  ],
+  "iterations": 1,
+  "removals_per_iteration": [
+    0
+  ],
+  "certificate_replay": true,
+  "assurance_scope": "FINITE_ABSTRACTION_ONLY",
+  "certified": false,
+  "certificate": "/mnt/data/RAMP-D_Phase2/reports/local_phase2_bootstrap/phase2_demo_certificate.json"
+}
