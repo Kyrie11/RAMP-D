@@ -54,5 +54,5 @@ from .forecast import (ProposalStatus, PredictionProposal, ProposalSet,
                        ProposalAdapterResult, proposal_only,
                        hard_support_from_prediction)
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 __all__ = [name for name in globals() if not name.startswith("_")]

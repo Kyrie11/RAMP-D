@@ -1,4 +1,4 @@
-# RAMP-D Phase 5（0.8.0）
+# RAMP-D Phase 5（0.8.1）
 
 本版本在 Phase 3 的公共采样恢复策略之上，增加显式有限协议自动机、四时钟消息语义、资源占用/容量监视、声明式他车响应管、观测后验聚合，以及 `CERTIFIED / COUNTEREXAMPLE / UNKNOWN` 三值全支持验证接口。Phase 1A–1D 的 MPFR/C++ 数值内核保留，**原生 ABI 仍为 3**。
 
@@ -184,7 +184,7 @@ print(run_examples())  # synthetic CERTIFIED / COUNTEREXAMPLE / UNKNOWN
 
 ## Phase 5 CEGAR
 
-Phase 5 adds concrete/spurious counterexample classification, event-time and support/observation refinement, version-bound evidence invalidation, master updates, and a resumable re-verification scheduling skeleton. Run `PYTHON_BIN="$(command -v python)" bash scripts/validate_phase5.sh` on the target server. The scope remains synthetic explicit protocol support; it does not certify real scenes.
+Phase 5 adds concrete/spurious counterexample classification, event-time and support/observation refinement, version-bound evidence invalidation, master updates, and a resumable re-verification scheduling skeleton. Evidence callbacks, replay callbacks, and verifier failures are fail-closed to `UNKNOWN`; receipt/local public-clock obligations carry the responsible clock so CEGAR can refine the correct clock. Run `PYTHON_BIN="$(command -v python)" bash scripts/validate_phase5.sh` on the target server. The scope remains synthetic explicit protocol support; it does not certify real scenes.
 
 ## 文档与下一阶段
 

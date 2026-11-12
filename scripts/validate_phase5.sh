@@ -56,7 +56,7 @@ counts = {"tests": len(cases), "errors": sum(c.find("error") is not None for c i
           "failures": sum(c.find("failure") is not None for c in cases),
           "skipped": sum(c.find("skipped") is not None for c in cases)}
 examples = json.loads((p / "phase5_examples.json").read_text())
-if counts["tests"] < 10 or any(counts[x] for x in ("errors", "failures", "skipped")):
+if counts["tests"] < 20 or any(counts[x] for x in ("errors", "failures", "skipped")):
     raise SystemExit("incomplete Phase 5 test gate: " + str(counts))
 if examples.get("status") != "PHASE5_EXAMPLES_PASS" or examples.get("evidence_valid_after_digest_change"):
     raise SystemExit("invalid Phase 5 example gate")

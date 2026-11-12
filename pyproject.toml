@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "rampd-core"
-version = "0.7.0"
+version = "0.8.1"
 requires-python = ">=3.10"
 dependencies = []
 [project.optional-dependencies]

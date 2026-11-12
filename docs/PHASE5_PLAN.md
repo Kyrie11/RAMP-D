@@ -5,7 +5,7 @@ Phase 5 严格承接 Phase 4 的三值全支持接口。目标是把 `UNKNOWN` �
 ## 本轮目标
 
 1. 对同一任务、协议转移、公共动作和源支持执行独立 concrete replay；replay 成功才返回 `CONCRETE`，replay 拒绝返回 `SPURIOUS`，缺失或异常返回 `UNKNOWN`。
-2. 将非点事件时间窗口按精确有理中点拆成两个闭子窗。两个子窗共享边界，因此不会丢失边界事件；不能把子窗下界当作实际事件时间。
+2. 将非点事件时间窗口按精确有理中点拆成两个闭子窗。两个子窗共享边界，因此不会丢失边界事件；不能把子窗下界当作实际事件时间。对收到消息的分支，公共决策时钟由 receipt/local 决定；selector 必须根据未决义务中的 clock 名称细化对应时钟，不能把 change 区间冒充 receipt。
 3. 对连续 support atom 按指定坐标细化。细化后清空旧 action/evidence，并保持同一 `policy_node_id`，因细化本身不创造观测。
 4. 对 observation cell 只有在显式证明可观测区间不相交时才允许创建不同 policy node；没有该证明时保留同一节点并只细化 support。
 5. 用版本绑定的 evidence registry、master problem 和队列调度骨架记录契约变更、责任轴、细化代数和重新验证结果。

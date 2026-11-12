@@ -1,5 +1,5 @@
 {
-  "release": "0.8.0",
+  "release": "0.8.1",
   "phase": "5",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
@@ -9,7 +9,7 @@
   "phase2_belief_support_and_invariant": "Uploaded target-server Phase2 baseline accepted: 3 native/129 Python; fixed-point semantics retained; context-bound evidence API and optional manuscript hashing repaired in Phase3.",
   "phase3_public_backup_controller": "Implemented and regression-tested in local physical scope; target server report available.",
   "phase4_protocol_full_support_verifier": "implemented first explicit synthetic-support verifier; corrected public observation timing and retained real-scene boundary",
-  "phase5_cegar": "implemented locally; target-server validation pending",
+  "phase5_cegar": "implemented and hardened locally; target-server validation pending",
   "phase6_datasets_and_closed_loop_experiments": "not implemented",
   "requires_dataset": false,
   "requires_sumo": false,
@@ -20,11 +20,11 @@
     "carla_api": "0.9.16",
     "simulator_mode": "headless"
   },
-  "local_limit": "Local container lacks CMake and official MPFR development headers; Phase 5 smoke used a temporary declaration-only header with the system MPFR runtime. Target-server validation must use official MPFR 4.0.2 headers. Full-support safety and calibrated real-vehicle guarantees remain unimplemented.",
+  "local_limit": "Local container lacks pytest, CMake, and official MPFR development headers; compile-only checks and the uploaded target-server report do not replace rerunning the hardened gate on the target server.",
   "full_support_certified": false,
   "assurance_scope": "PHASE5_CEGAR_EXPLICIT_PROTOCOL_SUPPORT",
   "manuscript_files_required": false,
   "current_scene_verified": false,
   "concrete_safety_certified": false,
-  "phase5_local_tests": "9 dedicated tests passed; Phase 4 protocol/full tests 26 passed; native smoke 3 passed with temporary local bootstrap backend"
+  "phase5_local_tests": "uploaded report: 10 dedicated tests; current hardening has 20 dedicated tests; target-server rerun required (callback, replay, clock-refinement, queue-generation, budget-digest cases)"
 }

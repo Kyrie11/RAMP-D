@@ -196,6 +196,13 @@ def default_refinement_selector(result: VerificationResult) -> "RefinementAction
                 return RefinementAction(RefinementKind.EVENT_TIME,
                                         item, "change", transition_id,
                                         item, clock_name="change")
+        marker = ":PUBLIC_OBSERVATION_TIME_INTERVAL_REQUIRES_REFINEMENT:"
+        if marker in item:
+            transition_id, clock_name = item.split(marker, 1)
+            if transition_id and clock_name in {"change", "receipt", "local"}:
+                return RefinementAction(RefinementKind.EVENT_TIME,
+                                        item, clock_name, transition_id,
+                                        item, clock_name=clock_name)
     return None
 
 
@@ -743,6 +750,8 @@ class CegarEngine:
                                                          generation=version.generation)
         if self.queue.contract_digest != contract.digest:
             raise ValueError("verification queue contract digest mismatch")
+        if self.queue.generation != self.registry.version.generation:
+            raise ValueError("verification queue generation mismatch")
         self.max_iterations = int(max_iterations)
         self.logs: list[RefinementLogEntry] = []
         self.results: list[VerificationResult] = []
@@ -796,9 +805,33 @@ class CegarEngine:
                 self.queue.push(QueueItem("root", {"state": self.contract.automaton.initial_state_id},
                                           iteration, "replenished"))
                 self.queue.pop()
-            verifier = self.verifier_factory(self.contract)
-            result = verifier.verify()
-            self.queue.ack()
+            try:
+                verifier = self.verifier_factory(self.contract)
+                result = verifier.verify()
+            except Exception as exc:
+                # A verifier callback is an evidence boundary.  Keep the
+                # outer task resumable and fail closed instead of leaking an
+                # exception that could be mistaken for a completed check.
+                self.queue.requeue_inflight()
+                return self._result(
+                    VerifyStatus.UNKNOWN,
+                    "VERIFIER_EXCEPTION:" + type(exc).__name__,
+                )
+            if not isinstance(result, VerificationResult):
+                self.queue.requeue_inflight()
+                return self._result(VerifyStatus.UNKNOWN,
+                                    "VERIFIER_INVALID_RESULT")
+            if result.status not in {VerifyStatus.CERTIFIED, VerifyStatus.COUNTEREXAMPLE,
+                                     VerifyStatus.UNKNOWN}:
+                self.queue.requeue_inflight()
+                return self._result(VerifyStatus.UNKNOWN,
+                                    "VERIFIER_INVALID_STATUS")
+            try:
+                self.queue.ack()
+            except Exception as exc:
+                self.queue.requeue_inflight()
+                return self._result(VerifyStatus.UNKNOWN,
+                                    "VERIFIER_QUEUE_ACK_EXCEPTION:" + type(exc).__name__)
             self.results.append(result)
             if result.status == VerifyStatus.CERTIFIED:
                 return self._result(VerifyStatus.CERTIFIED,
