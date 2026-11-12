@@ -1,4 +1,4 @@
-"""RAMP-D verified numerics, sampled-data backup core, and Phase 4 verifier."""
+"""RAMP-D verified numerics, sampled-data backup core, and Phase 6 contracts."""
 from .interval import (Interval, IntervalError, backend_name, build_info, add, sub,
                        mul, div, square, sqrt, sin, cos, tan, pi_interval, bicycle_rhs, friction_lhs)
 from .model import (BicycleParameters, StateBounds, ControlBounds, rhs,
@@ -53,6 +53,11 @@ from .cegar import (PHASE5_SCOPE, CEGAR_SCHEMA, CounterexampleKind, ReplayAssess
 from .forecast import (ProposalStatus, PredictionProposal, ProposalSet,
                        ProposalAdapterResult, proposal_only,
                        hard_support_from_prediction)
+from .scene_schema import (SceneManifest, TrackState, SceneTrack, UnifiedScene,
+                           build_scene_digest)
+from .dataset_audit import (AuditIssue, FileEntry, SplitAudit, DatasetAuditReport,
+                            audit_womd_scenario_root, audit_av2_motion_root,
+                            audit_from_config)
 
-__version__ = "0.8.1"
+__version__ = "0.8.0"
 __all__ = [name for name in globals() if not name.startswith("_")]

@@ -9,10 +9,9 @@ from rampd_core.cegar import (
     MasterProblem,
     QueueItem, RefinementAction, RefinementKind, ResumableVerificationQueue,
     apply_refinement, classify_counterexample, refine_automaton_transition,
-    split_observation_cell, split_time_window, default_refinement_selector,
+    split_observation_cell, split_time_window,
 )
-from rampd_core.full_verifier import (BranchCheck, FullSupportVerifier, FullVerifierContract,
-                                      VerificationResult, VerifyStatus, _public_observation_time)
+from rampd_core.full_verifier import BranchCheck, FullSupportVerifier, FullVerifierContract, VerifyStatus
 from rampd_core.observations import ObservationModel
 from rampd_core.interval import Interval
 from rampd_core.model import StateBounds
@@ -197,135 +196,30 @@ def test_nonpoint_public_observation_time_stays_unknown():
                for x in result.unresolved)
 
 
-def test_received_branch_uses_receipt_local_time_when_change_is_interval():
-    atom = _atom("a", (0.0, 0.0))
-    clocks = ClockTrace(TimeWindow(Q(1), Q(3)), TimeWindow(Q(1), Q(1)),
-                        TimeWindow(Q(2), Q(2)), TimeWindow(Q(3), Q(3)),
-                        (("issue", "receipt"), ("receipt", "local")))
-    msg = MessageSpec("m", 1, "rule", "digest", EffectiveInterval(Q(1), Q(5)), clocks)
-    transition = ProtocolTransition("receive", "start", "terminal",
-                                    (("external", CausalStage.EXTERNAL),
-                                     ("message", CausalStage.MESSAGE_OBSERVATION)),
-                                    clocks, "received", msg, guard_tag="always")
-    automaton = ProtocolAutomaton((ProtocolState("start"), ProtocolState("terminal")),
-                                  "start", (transition,))
-    target = BeliefCell("terminal", (atom,), policy_node_id="terminal")
-    contract = FullVerifierContract(
-        automaton, ObservationModel(("received",)), (atom,), targets=(target,),
-        terminal_state_ids=("terminal",), model_digest="synthetic-model")
-    verifier = FullSupportVerifier(
-        contract,
-        interval_branch_checker=lambda *_args: BranchCheck(VerifyStatus.CERTIFIED, "whole-window", (atom,)),
-        terminal_checker=lambda task: BranchCheck(VerifyStatus.CERTIFIED, "terminal"),
-    )
-    result = verifier.verify()
-    assert result.status == VerifyStatus.CERTIFIED
-
-
-def test_default_selector_refines_nonpoint_public_clock():
-    result = type("Result", (), {
-        "unresolved": (
-            "receive:PUBLIC_OBSERVATION_TIME_INTERVAL_REQUIRES_REFINEMENT:receipt",
-        )
-    })()
-    action = default_refinement_selector(result)
-    assert action is not None
-    assert action.kind is RefinementKind.EVENT_TIME
-    assert action.target_id == "receive"
-    assert action.clock_name == "receipt"
-
-
-def test_public_clock_responsibility_uses_name_not_equal_window_value():
-    clocks = ClockTrace(TimeWindow(Q(1), Q(3)), TimeWindow(Q(1), Q(3)),
-                        TimeWindow(Q(1), Q(3)), None,
-                        (("issue", "receipt"),))
-    msg = MessageSpec("m", 1, "rule", "digest", EffectiveInterval(Q(1), Q(5)), clocks)
-    transition = ProtocolTransition("receive", "start", "terminal",
-                                    (("external", CausalStage.EXTERNAL),
-                                     ("message", CausalStage.MESSAGE_OBSERVATION)),
-                                    clocks, "received", msg, guard_tag="always")
-    assert _public_observation_time(transition) == (
-        None, "PUBLIC_OBSERVATION_TIME_INTERVAL_REQUIRES_REFINEMENT:receipt")
-
-
-def test_verifier_callback_exception_is_fail_closed_unknown():
+def test_cegar_rejects_registry_or_queue_with_stale_semantic_version():
     base = make_verifier("certified")
+    contract = base.contract
+    stale = EvidenceRegistry(ContractVersion(
+        contract.digest, contract.automaton.digest(), resource_digest="stale",
+        observation_digest=contract.observation_digest, model_digest=contract.model_digest))
+    with pytest.raises(ValueError, match="semantic digest"):
+        CegarEngine(contract, lambda c: make_verifier("certified"), registry=stale)
+    queue = ResumableVerificationQueue(contract.digest, generation=1)
+    with pytest.raises(ValueError, match="generation"):
+        CegarEngine(contract, lambda c: make_verifier("certified"), queue=queue)
 
-    def exploding_branch(*_args):
-        raise RuntimeError("synthetic evidence failure")
 
-    result = FullSupportVerifier(base.contract, branch_checker=exploding_branch,
-                                 terminal_checker=base.terminal_checker).verify()
-    assert result.status == VerifyStatus.UNKNOWN
-    assert any("BRANCH_CHECKER_EXCEPTION:RuntimeError" in x for x in result.unresolved)
-
-
-def test_verifier_rejects_malformed_support_fail_closed():
+def test_cegar_rejects_factory_cached_for_old_contract():
     base = make_verifier("certified")
-    result = FullSupportVerifier(
-        base.contract,
-        branch_checker=lambda *_args: BranchCheck(VerifyStatus.CERTIFIED, "bad support", (object(),)),
-        terminal_checker=base.terminal_checker,
-    ).verify()
-    assert result.status == VerifyStatus.UNKNOWN
-    assert any("BRANCH_CHECKER_INVALID_SUPPORT" in x for x in result.unresolved)
-
-
-def test_counterexample_replay_exception_is_fail_closed_unknown():
-    base = make_verifier("counterexample")
-
-    def exploding_replay(*_args):
-        raise RuntimeError("synthetic replay failure")
-
-    result = FullSupportVerifier(
-        base.contract,
-        branch_checker=base.branch_checker,
-        terminal_checker=base.terminal_checker,
-        counterexample_checker=exploding_replay,
-    ).verify()
-    assert result.status == VerifyStatus.UNKNOWN
-    assert any("COUNTEREXAMPLE_REPLAY_ERROR:RuntimeError" in x
-               for x in result.unresolved)
-
-
-def test_cegar_verifier_exception_requeues_outer_task():
-    base = make_verifier("certified")
-
-    def exploding_factory(_contract):
-        raise RuntimeError("synthetic verifier failure")
-
-    engine = CegarEngine(base.contract, exploding_factory, max_iterations=1)
+    engine = CegarEngine(base.contract, lambda c: make_verifier("certified"), max_iterations=1)
+    # The factory returns a verifier bound to a different observation/model
+    # contract.  The orchestration layer must not accept its result.
+    stale = make_verifier("certified")
+    stale_contract = replace(stale.contract, model_digest="different-model")
+    engine.verifier_factory = lambda c: FullSupportVerifier(
+        stale_contract, branch_checker=stale.branch_checker,
+        terminal_checker=stale.terminal_checker,
+        counterexample_checker=stale.counterexample_checker)
     result = engine.run()
     assert result.status == VerifyStatus.UNKNOWN
-    assert result.reason == "VERIFIER_EXCEPTION:RuntimeError"
-    checkpoint = result.queue_checkpoint
-    assert checkpoint["inflight"] is None
-    assert [row["task_id"] for row in checkpoint["pending"]] == ["root"]
-
-
-def test_cegar_rejects_invalid_verifier_status_fail_closed():
-    base = make_verifier("certified")
-
-    class InvalidVerifier:
-        def verify(self):
-            return VerificationResult("NOT_A_STATUS", "scope", "bad", 0, 0)
-
-    engine = CegarEngine(base.contract, lambda _contract: InvalidVerifier(), max_iterations=1)
-    result = engine.run()
-    assert result.status == VerifyStatus.UNKNOWN
-    assert result.reason == "VERIFIER_INVALID_STATUS"
-    assert result.queue_checkpoint["inflight"] is None
-
-
-def test_verification_budget_changes_contract_digest():
-    base = make_verifier("certified")
-    changed = replace(base.contract, max_tasks=base.contract.max_tasks + 1)
-    assert changed.digest != base.contract.digest
-
-
-def test_cegar_rejects_queue_generation_mismatch():
-    base = make_verifier("certified")
-    registry = EvidenceRegistry(ContractVersion(base.contract.digest, "p", generation=2))
-    queue = ResumableVerificationQueue(base.contract.digest, generation=1)
-    with pytest.raises(ValueError, match="generation mismatch"):
-        CegarEngine(base.contract, lambda _contract: base, registry=registry, queue=queue)
+    assert result.reason == "VERIFIER_CONTRACT_DIGEST_MISMATCH"

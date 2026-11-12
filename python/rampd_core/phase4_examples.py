@@ -19,7 +19,11 @@ from .resources import ActorFootprint, ResourceRegion, ResourceState, ResourceSt
 
 
 def _clock(t=1):
-    return ClockTrace(TimeWindow(Q(t), Q(t)))
+    # The synthetic silence fixture explicitly declares that the ego locally
+    # observes the transition.  A physical ``change`` clock alone is not an
+    # observation and must not create a public policy branch.
+    window = TimeWindow(Q(t), Q(t))
+    return ClockTrace(window, local=window)
 
 
 def _atom():

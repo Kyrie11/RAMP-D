@@ -20,8 +20,16 @@ if [[ -z "${RAMPD_INTERVAL_LIB:-}" || ! -f "$RAMPD_INTERVAL_LIB" ]]; then
   export RAMPD_INTERVAL_LIB="$ROOT/build_phase3/librampd_interval.so"
 fi
 
+if [[ ! -f "$ROOT/build_phase3/CTestTestfile.cmake" ]]; then
+  echo "native CTest manifest missing: $ROOT/build_phase3/CTestTestfile.cmake" >&2
+  exit 1
+fi
 ctest --test-dir "$ROOT/build_phase3" --output-on-failure \
   | tee "$REPORT_DIR/phase4_ctest.log"
+if ! grep -Eq '([0-9]+) tests passed|100% tests passed' "$REPORT_DIR/phase4_ctest.log"; then
+  echo "native CTest gate produced no passing-test summary" >&2
+  exit 1
+fi
 
 "$PYTHON_BIN" -m pytest -q "$ROOT/tests" \
   --junitxml="$REPORT_DIR/all_pytest.xml" | tee "$REPORT_DIR/all_pytest.log"

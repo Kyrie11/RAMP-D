@@ -28,25 +28,28 @@ def _public_observation_time(transition: ProtocolTransition):
     observation.  A message branch becomes public at receipt, and when the
     contract also supplies a local-first-observation clock we conservatively
     wait until that clock as well.  Silence uses the local clock when one is
-    declared; if no local clock exists, its conservative public transition
-    time is the change clock.  A non-point availability window cannot be
-    collapsed to its lower endpoint without inventing a decision instant, so
-    it is returned as unresolved by the caller.
+    declared.  A non-point availability window cannot be collapsed to its
+    lower endpoint without inventing a decision instant, so it is returned as
+    unresolved by the caller.
     """
     clocks = transition.clocks
-    public_windows = []
+    # The physical change is not an information event.  A public policy may
+    # branch only after a received message or an explicitly declared local
+    # observation.  In particular, silence with no local clock cannot be
+    # routed at ``change`` merely because the environment transition is
+    # known to the verifier.
+    windows = []
     if transition.message is not None:
         if clocks.receipt is None:
             return None, "PUBLIC_OBSERVATION_RECEIPT_CLOCK_MISSING"
-        public_windows.append(("receipt", clocks.receipt))
+        windows.append(clocks.receipt)
     if clocks.local is not None:
-        public_windows.append(("local", clocks.local))
-    if not public_windows:
-        public_windows.append(("change", clocks.change))
-    for name, window in public_windows:
-        if window.lo != window.hi:
-            return None, "PUBLIC_OBSERVATION_TIME_INTERVAL_REQUIRES_REFINEMENT:" + name
-    return max(window.lo for _, window in public_windows), "PUBLIC_OBSERVATION_TIME_PROVED"
+        windows.append(clocks.local)
+    if not windows:
+        return None, "PUBLIC_OBSERVATION_CLOCK_MISSING"
+    if any(window.lo != window.hi for window in windows):
+        return None, "PUBLIC_OBSERVATION_TIME_INTERVAL_REQUIRES_REFINEMENT"
+    return max(window.lo for window in windows), "PUBLIC_OBSERVATION_TIME_PROVED"
 
 
 class VerifyStatus:
@@ -150,10 +153,6 @@ class FullVerifierContract:
                          "atoms": [atom(a) for a in c.atoms]}
                         for c in self.targets],
             "terminal_state_ids": self.terminal_state_ids,
-            # Budgets affect whether the verifier can return CERTIFIED or
-            # UNKNOWN, so changing them must invalidate cached evidence.
-            "max_tasks": int(self.max_tasks),
-            "max_path_length": int(self.max_path_length),
             "scope": self.scope, "policy": self.policy_digest,
             "model": self.model_digest,
         }
@@ -176,36 +175,6 @@ class FullSupportVerifier:
         # A non-point event window is never collapsed to an endpoint. Phase 5
         # may provide an independent whole-window certificate here.
         self.interval_branch_checker = interval_branch_checker
-
-    @staticmethod
-    def _safe_branch_callback(callback, *args, label):
-        """Run evidence callbacks behind a fail-closed assurance boundary."""
-        if callback is None:
-            return None, f"{label}_MISSING"
-        try:
-            checked = callback(*args)
-        except Exception as exc:
-            return None, f"{label}_EXCEPTION:{type(exc).__name__}"
-        if not isinstance(checked, BranchCheck):
-            return None, f"{label}_INVALID_RESULT"
-        if any(not isinstance(atom, SupportAtom) for atom in checked.support):
-            return None, f"{label}_INVALID_SUPPORT"
-        return checked, None
-
-    @staticmethod
-    def _safe_replay(callback, *args):
-        """Require a strict boolean independent replay result."""
-        if callback is None:
-            return False, "COUNTEREXAMPLE_REPLAY_MISSING"
-        try:
-            outcome = callback(*args)
-        except Exception as exc:
-            return False, "COUNTEREXAMPLE_REPLAY_ERROR:" + type(exc).__name__
-        if type(outcome) is not bool:
-            return False, "COUNTEREXAMPLE_REPLAY_NONBOOLEAN"
-        if not outcome:
-            return False, "COUNTEREXAMPLE_REPLAY_REJECTED"
-        return True, ""
 
     def _unknown(self, reason, processed, pending, unresolved, *, counterexample=None):
         return VerificationResult(VerifyStatus.UNKNOWN, self.contract.scope, reason, processed, pending,
@@ -243,15 +212,12 @@ class FullSupportVerifier:
             if len(task.path) > self.contract.max_path_length:
                 return self._unknown("PATH_LENGTH_BUDGET_EXHAUSTED", processed, len(q), unresolved)
             if task.state_id in self.contract.terminal_state_ids:
-                checked, callback_error = self._safe_branch_callback(
-                    self.terminal_checker, task, label="TERMINAL_EVIDENCE")
-                if callback_error is not None:
-                    return self._unknown(callback_error, processed, len(q), unresolved)
+                if self.terminal_checker is None:
+                    return self._unknown("TERMINAL_EVIDENCE_MISSING", processed, len(q), unresolved)
+                checked = self.terminal_checker(task)
                 if checked.status == VerifyStatus.COUNTEREXAMPLE:
-                    replayed, replay_error = self._safe_replay(
-                        self.counterexample_checker, task, None, None, checked)
-                    if not replayed:
-                        unresolved.append("TERMINAL:" + replay_error)
+                    if self.counterexample_checker is None or not self.counterexample_checker(task, None, None, checked):
+                        unresolved.append("TERMINAL:COUNTEREXAMPLE_REPLAY_MISSING")
                         continue
                     return VerificationResult(VerifyStatus.COUNTEREXAMPLE, self.contract.scope,
                                               checked.reason, processed, len(q), tuple(unresolved),
@@ -278,24 +244,15 @@ class FullSupportVerifier:
                     if self.interval_branch_checker is None:
                         unresolved.append(f"{tr.transition_id}:EVENT_TIME_INTERVAL_REQUIRES_REFINEMENT")
                         continue
-                    checked, callback_error = self._safe_branch_callback(
-                        self.interval_branch_checker, task, tr, action,
-                        label="INTERVAL_BRANCH_CHECKER")
+                    checked = self.interval_branch_checker(task, tr, action)
                 else:
                     if self.branch_checker is None:
                         unresolved.append(f"{tr.transition_id}:CONTINUOUS_EVIDENCE_MISSING")
                         continue
-                    checked, callback_error = self._safe_branch_callback(
-                        self.branch_checker, task, tr, action,
-                        label="BRANCH_CHECKER")
-                if callback_error is not None:
-                    unresolved.append(f"{tr.transition_id}:{callback_error}")
-                    continue
+                    checked = self.branch_checker(task, tr, action)
                 if checked.status == VerifyStatus.COUNTEREXAMPLE:
-                    replayed, replay_error = self._safe_replay(
-                        self.counterexample_checker, task, tr, action, checked)
-                    if not replayed:
-                        unresolved.append(f"{tr.transition_id}:{replay_error}")
+                    if self.counterexample_checker is None or not self.counterexample_checker(task, tr, action, checked):
+                        unresolved.append(f"{tr.transition_id}:COUNTEREXAMPLE_REPLAY_MISSING")
                         continue
                     return VerificationResult(VerifyStatus.COUNTEREXAMPLE, self.contract.scope,
                                               checked.reason, processed, len(q), tuple(unresolved),
@@ -349,7 +306,7 @@ class FullSupportVerifier:
                 for tr in matching:
                     public_time, public_reason = _public_observation_time(tr)
                     if public_time is None:
-                        unresolved.append(f"{tr.transition_id}:{public_reason}")
+                        unresolved.append(f"{observation}:{public_reason}")
                         continue
                     public_times.append(public_time)
                 if len(public_times) != len(matching) or len(set(public_times)) != 1:

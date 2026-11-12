@@ -26,7 +26,10 @@ from rampd_core.full_verifier import (
 
 def clocks(t, *, received=False):
     if not received:
-        return ClockTrace(TimeWindow(Q(t), Q(t)))
+        window = TimeWindow(Q(t), Q(t))
+        # A silence branch is publicly routable in this synthetic fixture only
+        # because local sensing is explicitly declared at the same instant.
+        return ClockTrace(window, local=window)
     return ClockTrace(TimeWindow(Q(t), Q(t)), TimeWindow(Q(t), Q(t)),
                       TimeWindow(Q(t) + Q(1, 10), Q(t) + Q(1, 10)),
                       TimeWindow(Q(t) + Q(1, 5), Q(t) + Q(1, 5)),

@@ -196,13 +196,6 @@ def default_refinement_selector(result: VerificationResult) -> "RefinementAction
                 return RefinementAction(RefinementKind.EVENT_TIME,
                                         item, "change", transition_id,
                                         item, clock_name="change")
-        marker = ":PUBLIC_OBSERVATION_TIME_INTERVAL_REQUIRES_REFINEMENT:"
-        if marker in item:
-            transition_id, clock_name = item.split(marker, 1)
-            if transition_id and clock_name in {"change", "receipt", "local"}:
-                return RefinementAction(RefinementKind.EVENT_TIME,
-                                        item, clock_name, transition_id,
-                                        item, clock_name=clock_name)
     return None
 
 
@@ -744,8 +737,19 @@ class CegarEngine:
                                   observation_digest=contract.observation_digest,
                                   model_digest=contract.model_digest)
         self.registry = registry or EvidenceRegistry(version)
-        if self.registry.version.contract_digest != contract.digest:
-            raise ValueError("evidence registry contract digest mismatch")
+        registry_version = self.registry.version
+        # A contract digest alone is not enough to identify physical evidence:
+        # resource, observation and model contracts may change while a caller
+        # accidentally reuses an old wrapper.  Reject that state before any
+        # verifier call; EvidenceRegistry.synchronize is intentionally not
+        # invoked here because silently accepting stale evidence would hide an
+        # integration error.
+        if (registry_version.contract_digest != version.contract_digest or
+                registry_version.protocol_digest != version.protocol_digest or
+                registry_version.resource_digest != version.resource_digest or
+                registry_version.observation_digest != version.observation_digest or
+                registry_version.model_digest != version.model_digest):
+            raise ValueError("evidence registry semantic digest mismatch")
         self.queue = queue or ResumableVerificationQueue(contract.digest,
                                                          generation=version.generation)
         if self.queue.contract_digest != contract.digest:
@@ -807,32 +811,40 @@ class CegarEngine:
                 self.queue.pop()
             try:
                 verifier = self.verifier_factory(self.contract)
-                result = verifier.verify()
             except Exception as exc:
-                # A verifier callback is an evidence boundary.  Keep the
-                # outer task resumable and fail closed instead of leaking an
-                # exception that could be mistaken for a completed check.
-                self.queue.requeue_inflight()
-                return self._result(
-                    VerifyStatus.UNKNOWN,
-                    "VERIFIER_EXCEPTION:" + type(exc).__name__,
-                )
-            if not isinstance(result, VerificationResult):
-                self.queue.requeue_inflight()
-                return self._result(VerifyStatus.UNKNOWN,
-                                    "VERIFIER_INVALID_RESULT")
-            if result.status not in {VerifyStatus.CERTIFIED, VerifyStatus.COUNTEREXAMPLE,
-                                     VerifyStatus.UNKNOWN}:
-                self.queue.requeue_inflight()
-                return self._result(VerifyStatus.UNKNOWN,
-                                    "VERIFIER_INVALID_STATUS")
-            try:
                 self.queue.ack()
-            except Exception as exc:
-                self.queue.requeue_inflight()
+                self.results.append(VerificationResult(
+                    VerifyStatus.UNKNOWN, self.contract.scope,
+                    "VERIFIER_FACTORY_ERROR:" + type(exc).__name__, 0, 1,
+                    (), None, self.contract.automaton.digest(),
+                    self.contract.policy_digest, self.contract.model_digest,
+                    self.contract.observation_digest, ""))
                 return self._result(VerifyStatus.UNKNOWN,
-                                    "VERIFIER_QUEUE_ACK_EXCEPTION:" + type(exc).__name__)
+                                    "VERIFIER_FACTORY_ERROR:" + type(exc).__name__)
+            if not isinstance(verifier, FullSupportVerifier):
+                self.queue.ack()
+                self.results.append(VerificationResult(
+                    VerifyStatus.UNKNOWN, self.contract.scope,
+                    "VERIFIER_TYPE_MISMATCH", 0, 1, (), None,
+                    self.contract.automaton.digest(), self.contract.policy_digest,
+                    self.contract.model_digest, self.contract.observation_digest, ""))
+                return self._result(VerifyStatus.UNKNOWN, "VERIFIER_TYPE_MISMATCH")
+            if verifier.contract.digest != self.contract.digest:
+                self.queue.ack()
+                self.results.append(VerificationResult(
+                    VerifyStatus.UNKNOWN, self.contract.scope,
+                    "VERIFIER_CONTRACT_DIGEST_MISMATCH", 0, 1, (), None,
+                    verifier.contract.automaton.digest(), verifier.contract.policy_digest,
+                    verifier.contract.model_digest, verifier.contract.observation_digest,
+                    verifier.contract.digest))
+                return self._result(VerifyStatus.UNKNOWN,
+                                    "VERIFIER_CONTRACT_DIGEST_MISMATCH")
+            result = verifier.verify()
+            self.queue.ack()
             self.results.append(result)
+            if result.contract_digest != self.contract.digest:
+                return self._result(VerifyStatus.UNKNOWN,
+                                    "VERIFICATION_RESULT_CONTRACT_DIGEST_MISMATCH")
             if result.status == VerifyStatus.CERTIFIED:
                 return self._result(VerifyStatus.CERTIFIED,
                                     "CEGAR_REACHED_CERTIFIED_RESULT")

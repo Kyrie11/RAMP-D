@@ -1,6 +1,6 @@
-# RAMP-D Phase 5（0.8.1）
+# RAMP-D Phase 6A（0.8.0）
 
-本版本在 Phase 3 的公共采样恢复策略之上，增加显式有限协议自动机、四时钟消息语义、资源占用/容量监视、声明式他车响应管、观测后验聚合，以及 `CERTIFIED / COUNTEREXAMPLE / UNKNOWN` 三值全支持验证接口。Phase 1A–1D 的 MPFR/C++ 数值内核保留，**原生 ABI 仍为 3**。
+本版本在 Phase 5 的显式 CEGAR 骨架之上，增加 Phase 6A 的只读数据清单审计和统一场景模式。Phase 1A–1D 的 MPFR/C++ 数值内核保留，**原生 ABI 仍为 3**。
 
 开发顺序保持：明确目标 → 实现代码 → 执行测试 → 分析失败案例 → 形成验收报告。
 
@@ -184,7 +184,31 @@ print(run_examples())  # synthetic CERTIFIED / COUNTEREXAMPLE / UNKNOWN
 
 ## Phase 5 CEGAR
 
-Phase 5 adds concrete/spurious counterexample classification, event-time and support/observation refinement, version-bound evidence invalidation, master updates, and a resumable re-verification scheduling skeleton. Evidence callbacks, replay callbacks, and verifier failures are fail-closed to `UNKNOWN`; receipt/local public-clock obligations carry the responsible clock so CEGAR can refine the correct clock. Run `PYTHON_BIN="$(command -v python)" bash scripts/validate_phase5.sh` on the target server. The scope remains synthetic explicit protocol support; it does not certify real scenes.
+Phase 5 adds concrete/spurious counterexample classification, event-time and support/observation refinement, version-bound evidence invalidation, master updates, and a resumable re-verification scheduling skeleton. Run `PYTHON_BIN="$(command -v python)" bash scripts/validate_phase5.sh` on the target server. The scope remains synthetic explicit protocol support; it does not certify real scenes.
+
+## Phase 6A 数据合同
+
+`rampd_core.scene_schema` defines `SceneManifest`, `TrackState`, `SceneTrack`
+and `UnifiedScene`.  The manifest preserves dataset/version/split/scenario ID,
+source file, timestamps, current index, coordinate frame and position
+reference.  `UnifiedScene.online_view()` exposes only the history and current
+state.  `rampd_core.dataset_audit` recursively inventories WOMD Scenario
+TFRecord shards and AV2 Motion parquet/map JSON files without writing to the
+dataset.  Missing optional reader dependencies are reported as `SKIP`.
+
+Run the first data audit with:
+
+```bash
+export PYTHONPATH="$PWD/python${PYTHONPATH:+:$PYTHONPATH}"
+python scripts/audit_phase6_data.py \
+  --config configs/data_sources.example.json \
+  --output reports/phase6a_dataset_audit.json
+```
+
+The user-provided WOMD Scenario and AV2 Motion directories are sufficient for
+this 6A audit.  Do not download AV2 Map Change or start CARLA/SUMO for this
+subphase.  See [Phase 6 plan](docs/PHASE6_PLAN.md), [Phase 6A implementation
+report](docs/PHASE6A_IMPLEMENTATION_REPORT.md), and [Phase 6A acceptance](docs/PHASE6A_ACCEPTANCE.md).
 
 ## 文档与下一阶段
 
@@ -202,5 +226,5 @@ Phase 5 adds concrete/spurious counterexample classification, event-time and sup
 - [Phase 5 工程报告](docs/PHASE5_IMPLEMENTATION_REPORT.md)：实现、时序修正和本地验证限制。
 - [Phase 5 验收](docs/PHASE5_ACCEPTANCE.md)：具体/伪反例、细化、失效和队列 gate。
 
-下一阶段是 Phase 6：接入 AV2/WOMD adapters、四时钟仿真日志和 SUMO/CARLA 闭环实验。Phase 5 的 CEGAR 仍只针对显式合成协议。
-**本轮验收不需要下载数据集，也不需要启动 CARLA 0.9.16 或 SUMO 1.20。**
+下一步是 Phase 6B：在 validation 少量真实记录上实现可选 WOMD/AV2 parser、中心参考点和四时钟注入合同。随后 6C 才接入预测 proposal 与 SUMO/CARLA 闭环；RuleNet 只用于软分支排序。
+**本轮验收不需要重新下载数据集，也不需要启动 CARLA 0.9.16 或 SUMO 1.20。**

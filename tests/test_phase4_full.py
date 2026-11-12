@@ -106,6 +106,31 @@ def test_silence_cannot_drop_a_hidden_mode_from_the_posterior():
     assert any("SILENCE_REMOVES_HIDDEN_HISTORY" in x for x in result.unresolved)
 
 
+def test_silence_without_local_observation_clock_stays_unknown():
+    """A physical event clock cannot be used as an information clock."""
+    from rampd_core.protocol import (CausalStage, ClockTrace, ProtocolAutomaton,
+                                     ProtocolState, ProtocolTransition, TimeWindow)
+    from rampd_core.observations import ObservationModel
+    atom = SupportAtom("a", StateBounds.point([0, 0, 0, 0, 0, 0]))
+    transition = ProtocolTransition(
+        "quiet", "s0", "terminal", (("external", CausalStage.EXTERNAL),),
+        ClockTrace(TimeWindow(Q(1), Q(1))), "silence", silence=True,
+        guard_tag="always")
+    automaton = ProtocolAutomaton((ProtocolState("s0"), ProtocolState("terminal")),
+                                  "s0", (transition,))
+    contract = FullVerifierContract(automaton, ObservationModel(("silence",)),
+                                   (atom,), terminal_state_ids=("terminal",),
+                                   model_digest="synthetic-model-sha256:clock-test")
+    result = FullSupportVerifier(
+        contract,
+        branch_checker=lambda task, tr, action: BranchCheck(
+            VerifyStatus.CERTIFIED, "branch", (atom,)),
+        terminal_checker=lambda task: BranchCheck(VerifyStatus.CERTIFIED, "terminal"),
+    ).verify()
+    assert result.status == VerifyStatus.UNKNOWN
+    assert any("PUBLIC_OBSERVATION_CLOCK_MISSING" in x for x in result.unresolved)
+
+
 def test_resource_and_agent_probe_has_no_hidden_data_dependency():
     probe = resource_and_agent_probe()
     assert probe["resource_status"] == "SAFE"
