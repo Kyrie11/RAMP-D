@@ -58,6 +58,13 @@ from .scene_schema import (SceneManifest, TrackState, SceneTrack, UnifiedScene,
 from .dataset_audit import (AuditIssue, FileEntry, SplitAudit, DatasetAuditReport,
                             audit_womd_scenario_root, audit_av2_motion_root,
                             audit_from_config)
+from .record_adapters import (
+    PHASE6B_SCHEMA, WOMD_PARSER_VERSION, AV2_PARSER_VERSION,
+    OptionalDependencyError, RecordParseError, FourClockInjection, ParsedScene,
+    sha256_file, parse_womd_scenario_proto, iter_womd_scenario_file,
+    iter_womd_validation, resolve_av2_map, parse_av2_rows, parse_av2_parquet,
+    iter_av2_validation, localize_scene, convert_center_scene_to_rear_axle,
+)
 
 __version__ = "0.8.0"
 __all__ = [name for name in globals() if not name.startswith("_")]

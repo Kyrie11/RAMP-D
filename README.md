@@ -225,6 +225,9 @@ report](docs/PHASE6A_IMPLEMENTATION_REPORT.md), and [Phase 6A acceptance](docs/P
 - [Phase 5 计划](docs/PHASE5_PLAN.md)：CEGAR 细化边界和契约。
 - [Phase 5 工程报告](docs/PHASE5_IMPLEMENTATION_REPORT.md)：实现、时序修正和本地验证限制。
 - [Phase 5 验收](docs/PHASE5_ACCEPTANCE.md)：具体/伪反例、细化、失效和队列 gate。
+- [Phase 6B 计划](docs/PHASE6B_PLAN.md)：validation 记录解析、mask、参考点和四时钟边界。
+- [Phase 6B 工程报告](docs/PHASE6B_IMPLEMENTATION_REPORT.md)：adapter、抽样 hash、测试和服务器验收命令。
+- [Phase 6B 验收模板](docs/PHASE6B_ACCEPTANCE.md)：真实数据 PASS/SKIP/ERROR 分流。
 
-下一步是 Phase 6B：在 validation 少量真实记录上实现可选 WOMD/AV2 parser、中心参考点和四时钟注入合同。随后 6C 才接入预测 proposal 与 SUMO/CARLA 闭环；RuleNet 只用于软分支排序。
+Phase 6B 已加入可选 WOMD/AV2 validation parser、稠密 timestep/mask 转换、中心参考点工具、内容 hash 和四时钟注入合同。服务器仍需运行 `scripts/validate_phase6b.sh` 完成真实样本门；只有通过后才进入 Phase 6C 的 prediction proposal、RuleNet 软分支排序与 SUMO/CARLA 闭环。
 **本轮验收不需要重新下载数据集，也不需要启动 CARLA 0.9.16 或 SUMO 1.20。**

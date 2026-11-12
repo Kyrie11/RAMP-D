@@ -1,6 +1,6 @@
 {
   "release": "0.8.0",
-  "phase": "5",
+  "phase": "6B",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
@@ -10,8 +10,8 @@
   "phase3_public_backup_controller": "Implemented and regression-tested in local physical scope; target server report available.",
   "phase4_protocol_full_support_verifier": "implemented first explicit synthetic-support verifier; corrected public observation timing and retained real-scene boundary",
   "phase5_cegar": "server regression passed: 10 Phase 5 tests, 23 Phase 4 protocol/full/adapter tests, 328 total Python tests; native CTest manifest must be present and its summary must be checked",
-  "phase6_datasets_and_closed_loop_experiments": "Phase 6A implemented: read-only WOMD/AV2 manifest audit and unified scene contract; 6B record parsers and 6C co-simulation pending",
-  "requires_dataset": false,
+  "phase6_datasets_and_closed_loop_experiments": "Phase 6A accepted; Phase 6B adapters implemented locally with synthetic regression; server validation sample pending; Phase 6C co-simulation pending",
+  "requires_dataset": true,
   "requires_sumo": false,
   "requires_carla": false,
   "user_reported_target": {
@@ -22,7 +22,7 @@
   },
   "local_limit": "Local container lacks CMake and official MPFR development headers; Phase 5 smoke used a temporary declaration-only header with the system MPFR runtime. Target-server validation must use official MPFR 4.0.2 headers. Full-support safety and calibrated real-vehicle guarantees remain unimplemented.",
   "full_support_certified": false,
-  "assurance_scope": "PHASE5_CEGAR_EXPLICIT_PROTOCOL_SUPPORT",
+  "assurance_scope": "PHASE6B_RECORD_ADAPTER_CONTRACTS_ONLY",
   "manuscript_files_required": false,
   "current_scene_verified": false,
   "concrete_safety_certified": false,
@@ -35,5 +35,6 @@
     "native_ctest_expected": 3,
     "native_ctest_verified_by_original_report": false
   },
-  "phase5_local_limit": "Local container lacks CMake and official MPFR development headers; local Python/Phase 5 smoke used a temporary declaration-only header with the system MPFR runtime."
+  "phase5_local_limit": "Local container lacks CMake and official MPFR development headers; local Python/Phase 5 smoke used a temporary declaration-only header with the system MPFR runtime.",
+  "phase6b": "local implementation complete: WOMD/AV2 parsers, dense masks, content hashes, explicit four-clock injection, reference conversion; real_scene_verified remains false until server gate"
 }
