@@ -24,11 +24,14 @@
 | Executable closed public backup graph | `backup_graph.py` | Phase 3; observation-only children, fixed-point closure, contract and execution guards |
 | Protocol product and full-support verifier | `protocol.py`, `resources.py`, `agents.py`, `observations.py`, `full_verifier.py` | Phase 4 first explicit finite-support implementation; synthetic contracts only, real-scene integration pending |
 | CEGAR | `python/rampd_core/cegar.py`, `scripts/validate_phase5.sh` | Phase 5 orchestration implemented locally; target-server gate pending; real-scene integration remains Phase 6 |
-| AV2/WOMD training and SUMO/CARLA closed-loop experiments | planned Phase 6 | Not implemented |
-| Dataset history/future separation and benchmark-target masks | `python/rampd_core/phase6c.py` | Phase 6C-A contract; encoder-side history and label-side future are separate; no training run yet |
-| Correlated joint traffic modes and future observation histories | `python/rampd_core/phase6c.py` | Phase 6C-A schema; never forms joint modes by Cartesian product of independent marginals; proposals are not complete support |
-| RuleNet-inspired normalized soft risk ordering | `python/rampd_core/phase6c.py` | Phase 6C-A; bounded heuristic only, with explicit TTC non-closing guard; no hard pruning and no verifier evidence |
-| Fixed-step CARLA/SUMO timebase, frame ledger, actor IDs, sensor production/delivery | `python/rampd_core/phase6c.py` | Phase 6C-A pure contracts only; actual bridge and simulator smoke pending |
+| WOMD Scenario / AV2 Motion train+validation adapters | `record_adapters.py`, `evaluate_phase6c.py` | Phase 6B repairs and bounded Phase6C gate; original WOMD real validation PASS (3), AV2 real validation SKIP, train unverified |
+| Forecast online prefix + baseline ADE/FDE | `scene_schema.py`, `phase6c.py` | Phase 6C untrained constant-velocity diagnostic; no learned joint conditional decoder |
+| RuleNet soft ranking | `phase6c.py` | Score-combination API only; NOT trained RuleNet, no support narrowing |
+| SUMO/CARLA sync smoke | `clock_ledger.py`, `smoke_phase6c_cosim.py` | Synthetic ledger tests pass; target simulator required; protocol four clocks not observed |
+| Terminal task-winning certificate and persistent rank | latest TeX Appendix Verification | MISSING: safety invariant and backup graph are not task-reaching terminals |
+| ICG same-prefix guaranteed observation separation vs decision-deferral | latest TeX CCG appendix | MISSING: cannot infer from mean delay |
+| Task-conditioned SCO / CCG / dynamic scheduling and continuous policy optimization | latest TeX Planning Method | MISSING: recovery candidates are not task-certified SCOs |
+| Eight supervised losses | latest TeX Appendix Network | Only logged-action motion baseline evaluated; see PHASE6C_MATHEMATICAL_AUDIT.md for sources/masks |
 
 The paper's full planner `CERTIFIED` result is not produced by any Phase 1A-1D
 module. No current result authorizes physical control execution.

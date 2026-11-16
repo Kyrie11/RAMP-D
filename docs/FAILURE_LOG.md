@@ -128,12 +128,3 @@ claiming physical safety. See NUMERICS_AND_SCOPE.md.
 6. **Unrepresentable user axis.** Very large finite axis values can overflow
    binary64 interval endpoints. The separation API now fails closed to UNKNOWN
    for numerical enclosure failures rather than treating them as separated.
-
-
-7. **Phase 6B AV2 test fixture imported pandas after mocking pyarrow.**
-   Newer pandas reads `pyarrow.__version__` at import time, while the
-   deliberately minimal test double only provided `pyarrow.parquet`.
-   The test now supplies minimal pandas and pyarrow stubs, isolating
-   the adapter projection/hash contract from pandas internals. No
-   production parser code or package version was changed. See
-   `docs/PHASE6B_PANDAS_PYARROW_TEST_FIX.md`.

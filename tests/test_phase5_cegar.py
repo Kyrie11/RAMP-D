@@ -145,11 +145,11 @@ def test_cegar_engine_refines_support_then_reaches_certified():
     assert result.queue_checkpoint["contract_digest"] == result.contract_digest
 
 
-def test_received_branch_routes_at_receipt_without_waiting_for_later_local_detection():
+def test_received_branch_routes_after_receipt_and_local_observation():
     atom = _atom("a", (0.0, 0.0))
     clocks = ClockTrace(TimeWindow(Q(1), Q(1)), TimeWindow(Q(1), Q(1)),
                         TimeWindow(Q(2), Q(2)), TimeWindow(Q(3), Q(3)),
-                        (("issue", "receipt"),))
+                        (("issue", "receipt"), ("receipt", "local")))
     msg = MessageSpec("m", 1, "rule", "digest", EffectiveInterval(Q(1), Q(5)), clocks)
     transition = ProtocolTransition("receive", "start", "terminal",
                                     (("external", CausalStage.EXTERNAL),
@@ -169,14 +169,14 @@ def test_received_branch_routes_at_receipt_without_waiting_for_later_local_detec
                                        BranchCheck(VerifyStatus.CERTIFIED, "terminal")),
     )
     assert verifier.verify().status == VerifyStatus.CERTIFIED
-    assert observed == [Q(2)]
+    assert observed == [Q(3)]
 
 
 def test_nonpoint_public_observation_time_stays_unknown():
     atom = _atom("a", (0.0, 0.0))
     clocks = ClockTrace(TimeWindow(Q(1), Q(1)), TimeWindow(Q(1), Q(1)),
-                        TimeWindow(Q(2), Q(3)), TimeWindow(Q(4), Q(4)),
-                        (("issue", "receipt"),))
+                        TimeWindow(Q(2), Q(2)), TimeWindow(Q(3), Q(4)),
+                        (("issue", "receipt"), ("receipt", "local")))
     msg = MessageSpec("m", 1, "rule", "digest", EffectiveInterval(Q(1), Q(5)), clocks)
     transition = ProtocolTransition("receive", "start", "terminal",
                                     (("external", CausalStage.EXTERNAL),

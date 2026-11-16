@@ -16,17 +16,11 @@
 
 ## 3. 关键语义修正
 
-历史版本曾把后继时间取为 `change.lo`，随后又曾采用 `max(receipt, local)` 的保守策略。该 max 策略已在 2026-11-16 的跨阶段数学复核中被修正：四个时钟独立，message branch 使用 receipt，local-detection branch 使用 local，不要求 receipt→local。详见下方“后续数学复核修正”。
+Phase 4 原先把后继时间取为 `change.lo`。对收到消息的分支，这可能在 receipt 或 local first observation 之前切换 public policy node。现在 `_public_observation_time` 至少要求 change、receipt（有消息时）和已声明 local 窗口的可用点时间一致，并取其中最大值；任何非点窗口或缺失 receipt 都是未决义务。
 
 事件时间细化同步替换消息中的 `ClockTrace`，保持 message/transition clock identity。闭子窗共享中点，边界事件不会被漏掉。Phase 5 提供的 `interval_branch_checker` 只能由调用方用覆盖整个时间窗的独立证据实现，不能把某个采样时刻当作全窗证明。
 
 本轮回归又发现并修正了两个边界。首先，`change` 是物理时钟，不是信息时钟；没有 message receipt 或显式 local observation 时，silence 分支不再在 `change` 时刻路由。其次，CEGAR 启动与每次重验证都检查完整的 protocol/resource/observation/model digest、queue generation 以及 verifier/result contract digest，避免缓存旧验证器或旧证据被当成当前合同的结果。
-
-### 2026-11-16 后续数学复核修正
-
-上述“receipt 与 local 取 max”的策略是额外的保守假设，不是论文定义。论文将 issue、receipt、first-local-detection 作为独立时钟，并明确报告可乱序到达。当前实现已将 message-receipt 分支的 public time 改为 receipt，将 local-detection/silence-with-local 分支的 public time 改为 local；不再要求 `receipt→local`。同时，协议后继过滤从 `change.hi >= at_time` 改为检查已证明的 public-observation window，避免物理 change 已发生但消息尚未 receipt 时把隐藏规则状态错误删除。历史测试/报告中的旧 max 规则不再作为当前实现定义。
-
-协议 schema 也允许 `message=None, silence=False, local!=None` 的正向 local-detection transition；只有 message branch 才要求 issue→receipt 关系。这样 local-first event 可以作为独立 observation branch 表达。
 
 ## 4. 失败案例和预期结果
 

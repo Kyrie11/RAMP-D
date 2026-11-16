@@ -5,13 +5,12 @@ Phase 6B 把 Phase 6A 的目录清单推进到少量真实记录，但仍然不�
 ## 本轮目标
 
 1. 用可选依赖解析 WOMD Scenario protobuf，验证 `scenario_id`、严格递增 `timestamps_seconds`、`current_time_index`、`Track.id`、`sdc_track_index`、`tracks_to_predict`、`dynamic_map_states` 和 10 Hz 元数据。`Track.id` 与 tracks 数组索引始终分开保存。
-2. 解析 AV2 Motion 的 scenario parquet 和同目录 map archive 元数据/哈希。把稀疏的 per-track rows 补成全局 dense timestep 轴，保留 `valid=False` 和 `observed=None` 的缺失槽位，不以零填充；完整 map geometry 留给 Phase 6C-A2。
+2. 解析 AV2 Motion 的 scenario parquet 和同目录 map archive。把稀疏的 per-track rows 补成全局 dense timestep 轴，保留 `valid=False` 和 `observed=None` 的缺失槽位，不以零填充。
 3. 保留中心参考点；只有调用者提供显式的后轴偏移时才应用
    \(p_r=p_c-R(\psi)o\)，并且只有提供角速度时才应用
    \(v_r=v_c-\dot\psi R(\psi)J o\)。缺少几何或角速度时在 metadata 中明确标记，不静默套用车型尺寸。
 4. 用 `FourClockInjection` 显式记录 `t_activation`、`t_issue`、`t_receipt`、`t_first_local_observation` 以及 simulator/sensor frame 和 production/delivery time。任何 clock ordering 只有在 `declared_relations` 中声明后才能进入 `ClockTrace`。
-5. 对抽样源文件分别记录 `source_file_sha256`、WOMD `record_sha256`、canonical `scenario_content_sha256`、map digest、parser version 和 schema version，支持之后的场景重放。
-6. AV2 `focal_track_id` 单独标记为 `is_focal`，不映射为 SDC；官方 AV2 API 的 `track_id == "AV"` convention 标记 ego/SDC。WOMD 使用 `sdc_track_index`。
+5. 对抽样源文件记录完整 `content_sha256`、parser version 和 schema version，支持之后的场景重放。
 
 ## 明确边界
 

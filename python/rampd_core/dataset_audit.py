@@ -104,6 +104,15 @@ def _config_digest(config: Mapping[str, Any]) -> str:
 
 
 def _dependency_available(name: str) -> bool:
+    # The AV2 Parquet adapter intentionally uses pandas, not the optional
+    # `av2` Python API.  Auditing the wrong module would falsely report SKIP.
+    if name == "av2":
+        return (importlib.util.find_spec("pandas") is not None and
+                any(importlib.util.find_spec(engine) is not None
+                    for engine in ("pyarrow", "fastparquet")))
+    if name == "waymo_open_dataset":
+        return (importlib.util.find_spec("waymo_open_dataset") is not None and
+                importlib.util.find_spec("tensorflow") is not None)
     return importlib.util.find_spec(name) is not None
 
 
@@ -204,7 +213,7 @@ def audit_av2_motion_root(root: str | Path, split: str = "validation",
     else:
         future = True
     return _base_audit("av2_motion", split, root_path, resolved, name, files,
-                       "av2 official parquet/map reader", "av2", future,
+                       "pandas and pyarrow/fastparquet (av2 API optional)", "av2", future,
                        issues, max_files)
 
 

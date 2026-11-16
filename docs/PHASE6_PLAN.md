@@ -6,12 +6,9 @@ Phase 6 不会把公开数据集的概率覆盖误当成形式化安全支持。
 |---|---|---|
 | 6A | 只读目录/分片清单、统一 `UnifiedScene` 模式、future-leakage 和 digest 回归 | WOMD/AV2 路径；可选 parser 依赖 |
 | 6B | 解析 validation 少量场景，完成中心参考点/valid mask/局部地图转换，并记录四时钟注入合同 | 6A 通过；不需要训练 |
-| 6C-A | history/future 监督拆分、joint-mode/observation proposal、RuleNet 软排序、branch ordering 和同步合同 | 6B 真实数据验收通过后才接受；纯 Python 可先开发 |
-| 6C-A2 | WOMD/AV2 统一 vector-map geometry、lane topology、crosswalk/drivable polygon 和 dynamic-signal timeline | 6B 真实数据验收通过；map-aware training 前必须完成 |
-| 6C-B | CARLA/SUMO 固定步长 bridge、单一 tick owner、actor/TLS 映射、sensor latency、FourClockInjection、headless smoke | 6B 通过且 Phase 2–5 verifier 数学门通过；需要用户启动模拟器 |
-| 6C-C | 接入训练 split、joint prediction model、规划导向监督和闭环实验 | 6C-A2/6C-B 同步合同通过；需要数据与模拟器 |
+| 6C | 固定 validation split 后接入 train、预测 proposal、RuleNet 软排序和 SUMO/CARLA 同步 smoke | 6B 通过；需要用户启动模拟器 |
 
-Phase 6A 已完成；Phase 6B 已实现并经过本地 schema/math audit，但原始服务器报告中的 AV2 仍因缺少 `pyarrow` 而 SKIP，故尚未整体验收。Phase 6C-A 纯 Python contracts 已实现并通过 46 个定向测试。`audit_phase6_data.py` 只递归读取目录和文件元数据，不写入数据目录；缺少可选 parser 依赖时返回 `SKIP`，绝不伪造解析通过。
+本轮只完成 6A。`audit_phase6_data.py` 只递归读取目录和文件元数据，不写入数据目录；缺少 `waymo_open_dataset`、`av2`、TensorFlow 或 parquet 依赖时返回 `SKIP`，绝不伪造解析通过。
 
 ## 统一场景合同
 

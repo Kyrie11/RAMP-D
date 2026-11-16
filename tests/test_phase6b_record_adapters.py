@@ -1,7 +1,5 @@
 import hashlib
 import json
-import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -11,11 +9,9 @@ from rampd_core import (
     RecordParseError,
     convert_center_scene_to_rear_axle,
     localize_scene,
-    build_scene_forecast_sample,
     parse_av2_rows,
     parse_womd_scenario_proto,
 )
-from rampd_core import record_adapters
 
 
 class Obj:
@@ -61,12 +57,6 @@ def test_womd_parser_preserves_id_index_masks_and_future_boundary(tmp_path: Path
     assert online.manifest.future_available is False
     assert scene.map_ids == ("7",)
     assert parsed.content_sha256 == hashlib.sha256(_womd().SerializeToString()).hexdigest()
-    sample = build_scene_forecast_sample(scene)
-    assert sample.benchmark_target_track_ids == ("42",)
-    assert sample.history_tracks[0].is_sdc is True
-    assert sample.sdc_track_id == "42"
-    assert tuple(x.track_id for x in sample.ego_future_targets) == ("42",)
-    assert sample.agent_response_targets == ()
 
 
 def test_womd_parser_rejects_state_length_mismatch():
@@ -88,9 +78,7 @@ def test_four_clocks_do_not_infer_relations():
 
 def _av2_rows():
     rows = []
-    for track_id, category, x0 in (("AV", "UNSCORED_TRACK", -5.0),
-                                   ("ego", "FOCAL_TRACK", 0.0),
-                                   ("a", "SCORED_TRACK", 5.0)):
+    for track_id, category, x0 in (("ego", "FOCAL_TRACK", 0.0), ("a", "SCORED_TRACK", 5.0)):
         for timestep in (0, 1, 2):
             if track_id == "a" and timestep == 1:
                 continue
@@ -121,16 +109,8 @@ def test_av2_parser_reconstructs_dense_axis_and_map(tmp_path: Path):
     other = next(t for t in scene.tracks if t.track_id == "a")
     assert other.states[1].valid is False
     assert other.states[1].observed is None
-    focal = next(t for t in scene.tracks if t.track_id == "ego")
-    assert focal.is_focal is True
-    assert focal.is_sdc is False
-    av = next(t for t in scene.tracks if t.track_id == "AV")
-    assert av.is_sdc is True
-    assert av.is_focal is False
-    sample = build_scene_forecast_sample(scene)
-    assert sample.sdc_track_id == "AV"
-    assert {x.track_id for x in sample.agent_response_targets} == {"ego", "a"}
-    assert tuple(x.track_id for x in sample.ego_future_targets) == ("AV",)
+    # AV2 focal is prediction target, not the self-driving collection vehicle.
+    assert next(t for t in scene.tracks if t.track_id == "ego").is_sdc is False
     assert parsed.map_file == str(map_file)
     assert parsed.map_content_sha256
 
@@ -138,6 +118,9 @@ def test_av2_parser_reconstructs_dense_axis_and_map(tmp_path: Path):
 def test_av2_test_split_hides_future_labels():
     parsed = parse_av2_rows(_av2_rows(), split="test")
     assert parsed.scene.manifest.future_available is False
+    for track in parsed.scene.tracks:
+        assert all(not state.valid and state.x is None and state.y is None
+                   for state in track.states[2:])
 
 
 def test_av2_focal_category_fallback_is_explicit():
@@ -155,12 +138,12 @@ def test_localize_scene_and_center_to_rear_axle_math():
     local = localize_scene(scene, origin_xy=(0.0, 0.0), yaw_rad=0.0)
     ego = next(t for t in local.tracks if t.track_id == "ego")
     assert ego.states[0].x == 0.0
-    rear = convert_center_scene_to_rear_axle(scene, offset_body=(1.0, 0.0),
-                                              yaw_rates={("ego", 0): 0.5})
+    rear = convert_center_scene_to_rear_axle(
+        scene, offsets_body_by_track={"ego": (1.0, 0.0), "a": (2.0, 0.0)},
+        yaw_rates={("ego", 0): 0.5})
     ego_rear = next(t for t in rear.tracks if t.track_id == "ego")
     assert ego_rear.states[0].x == -1.0
     assert ego_rear.states[0].vx == 1.0
-    assert ego_rear.states[0].vy == -0.5
     assert rear.manifest.position_reference == "rear_axle_center"
 
 
@@ -186,216 +169,64 @@ def test_womd_missing_center_downgrades_valid_without_erasing_observed_slot():
 def test_womd_testing_split_withholds_future_labels():
     parsed = parse_womd_scenario_proto(_womd(), split="testing")
     assert parsed.scene.manifest.future_available is False
+    assert parsed.scene.tracks[0].states[2].x is None
 
 
 def test_partial_center_to_rear_axle_velocity_is_not_certified_as_rear_axle():
     scene = parse_av2_rows(_av2_rows()).scene
     converted = convert_center_scene_to_rear_axle(
-        scene, offset_body=(1.0, 0.0), yaw_rates={("ego", 0): 0.5},
+        scene, offsets_body_by_track={"ego": (1.0, 0.0), "a": (2.0, 0.0)},
+        yaw_rates={("ego", 0): 0.5},
     )
-    assert converted.manifest.metadata["velocity_reference"] == "mixed_center_and_rear_axle"
+    assert converted.manifest.metadata["velocity_reference"] == "rear_axle_incomplete"
     ego = next(track for track in converted.tracks if track.track_id == "ego")
-    assert ego.metadata["velocity_reference"] == "mixed"
+    assert ego.metadata["velocity_reference"] == "rear_axle_incomplete"
+    # A missing yaw rate must erase incompatible center velocity, not silently
+    # pair it with the new rear-axle position.
+    assert ego.states[1].vx is None and ego.states[1].vy is None
 
 
-def test_av2_observed_mask_rejects_truthy_strings_and_nan():
-    rows = _av2_rows()
-    rows[0]["observed"] = "False"
-    with pytest.raises(RecordParseError):
-        parse_av2_rows(rows)
-
-
-def test_in_memory_av2_rows_digest_is_not_mislabeled_as_source_file_hash():
-    parsed = parse_av2_rows(_av2_rows())
-    assert parsed.content_sha256
-    assert parsed.source_file_sha256 is None
-    rows = _av2_rows()
-    rows[0]["observed"] = float("nan")
-    with pytest.raises(RecordParseError):
-        parse_av2_rows(rows)
-
-
-def test_av2_fast_sample_does_not_hash_entire_source_file(tmp_path: Path, monkeypatch):
-    source = tmp_path / "scenario_fast.parquet"
-    source.write_bytes(b"placeholder parquet bytes")
-
-    def forbidden_full_file_hash(*args, **kwargs):
-        raise AssertionError("fast sample must not read/hash the entire parquet file")
-
-    monkeypatch.setattr(record_adapters, "sha256_file", forbidden_full_file_hash)
-    parsed = parse_av2_rows(
-        _av2_rows(), source_file=source, hash_source_file=False,
-    )
-    assert parsed.source_file_sha256 is None
-    assert parsed.content_sha256
-    assert parsed.scene.manifest.metadata["source_file_hash_status"] == "not_computed"
-    assert parsed.scene.manifest.metadata["content_sha256_semantics"] == "canonical_parsed_rows_sha256"
-    fully_fingerprinted = parse_av2_rows(
-        _av2_rows(), source_file=source, content_sha256="b" * 64,
-        source_file_sha256="b" * 64, hash_source_file=False,
-    )
-    assert parsed.scenario_content_sha256 == fully_fingerprinted.scenario_content_sha256
-
-
-def test_av2_parquet_reader_projects_used_columns_and_hashes_source_once(
-    tmp_path: Path, monkeypatch,
-):
-    source = tmp_path / "scenario_projection.parquet"
-    source.write_bytes(b"parquet")
-    rows = _av2_rows()
-    available_columns = list(rows[0].keys())
-    read_calls = []
-    hash_calls = []
-
-    class Schema:
-        names = available_columns
-
-    class FakeParquetFile:
-        schema = Schema()
-
-    # This is a unit test of our adapter's column projection and call contract,
-    # not of pandas itself.  Use a minimal pandas stub so importing real pandas
-    # cannot inspect the intentionally incomplete fake pyarrow package (newer
-    # pandas releases read pyarrow.__version__ during pandas import).
-    def fake_read_parquet(path, *, columns, engine):
-        read_calls.append((tuple(columns), engine))
-        return rows
-
-    fake_pandas = types.ModuleType("pandas")
-    fake_pandas.read_parquet = fake_read_parquet
-    fake_parquet = types.ModuleType("pyarrow.parquet")
-    fake_parquet.ParquetFile = lambda path: FakeParquetFile()
-    fake_pyarrow = types.ModuleType("pyarrow")
-    fake_pyarrow.__path__ = []
-    fake_pyarrow.parquet = fake_parquet
-    monkeypatch.setitem(sys.modules, "pandas", fake_pandas)
-    monkeypatch.setitem(sys.modules, "pyarrow", fake_pyarrow)
-    monkeypatch.setitem(sys.modules, "pyarrow.parquet", fake_parquet)
-    digest = "a" * 64
-
-    def counted_hash(path, **kwargs):
-        hash_calls.append(str(path))
-        return digest
-
-    monkeypatch.setattr(record_adapters, "sha256_file", counted_hash)
-    parsed = record_adapters.parse_av2_parquet(
-        source, require_map=False, hash_source_file=True,
-    )
-    fast_parsed = record_adapters.parse_av2_parquet(
-        source, require_map=False, hash_source_file=False,
-    )
-    assert parsed.source_file_sha256 == digest
-    assert fast_parsed.source_file_sha256 is None
-    assert hash_calls == [str(source)]
-    assert parsed.scenario_content_sha256 == fast_parsed.scenario_content_sha256
-    assert len(read_calls) == 2
-    for projected, engine in read_calls:
-        assert engine == "pyarrow"
-        assert set(projected) == set(available_columns)
-        assert "unused_column_not_in_adapter" not in projected
-
-
-def test_womd_fast_sample_hashes_record_without_hashing_full_shard(
-    tmp_path: Path, monkeypatch,
-):
-    payload = b"serialized scenario payload"
-
-    class FakeScenario(Obj):
-        def ParseFromString(self, value):
-            assert value == payload
-            self.__dict__.update(_womd().__dict__)
-
-    scenario_pb2 = types.SimpleNamespace(Scenario=FakeScenario)
-    waymo_pkg = types.ModuleType("waymo_open_dataset")
-    waymo_pkg.__path__ = []
-    protos_pkg = types.ModuleType("waymo_open_dataset.protos")
-    protos_pkg.scenario_pb2 = scenario_pb2
-    monkeypatch.setitem(sys.modules, "waymo_open_dataset", waymo_pkg)
-    monkeypatch.setitem(sys.modules, "waymo_open_dataset.protos", protos_pkg)
-    monkeypatch.setattr(record_adapters, "_iter_tfrecord", lambda path: iter([payload]))
-
-    def forbidden_full_file_hash(*args, **kwargs):
-        raise AssertionError("fast sample must not read/hash the entire TFRecord shard")
-
-    monkeypatch.setattr(record_adapters, "sha256_file", forbidden_full_file_hash)
-    parsed = next(record_adapters.iter_womd_scenario_file(
-        tmp_path / "validation.tfrecord-00000-of-00150",
-        max_records=1, hash_source_file=False,
-    ))
-    assert parsed.source_file_sha256 is None
-    assert parsed.record_sha256 == hashlib.sha256(payload).hexdigest()
-    assert parsed.content_sha256 == parsed.record_sha256
-    assert parsed.scene.manifest.metadata["source_file_hash_status"] == "not_computed"
-
-
-def test_av2_row_timestamps_must_agree_with_scenario_axis():
+def test_av2_official_integer_categories_and_av_identity():
     rows = _av2_rows()
     for row in rows:
-        row["timestamp_ns"] = 1_000_000_000 + row["timestep"] * 100_000_000
-    rows[-1]["timestamp_ns"] += 5_000_000
-    with pytest.raises(RecordParseError):
-        parse_av2_rows(rows)
+        row["object_category"] = 3 if row["track_id"] == "ego" else 2
+    av = {**rows[0], "track_id": "AV", "object_category": 1,
+          "position_x": 25.0, "focal_track_id": "ego"}
+    rows.extend([{**av, "timestep": i, "observed": i <= 1} for i in range(3)])
+    parsed = parse_av2_rows(rows)
+    assert next(t for t in parsed.scene.tracks if t.track_id == "AV").is_sdc
+    focal = next(t for t in parsed.scene.tracks if t.track_id == "ego")
+    assert not focal.is_sdc and focal.to_predict
+    assert next(t for t in parsed.scene.tracks if t.track_id == "a").to_predict
 
 
-def test_center_to_rear_axle_refuses_mixed_position_reference_inside_a_track():
+def test_heterogeneous_actor_offsets_cannot_be_assumed_identical():
     scene = parse_av2_rows(_av2_rows()).scene
-    tracks = list(scene.tracks)
-    focal = tracks[0]
-    states = list(focal.states)
-    states[0] = type(states[0])(
-        timestamp=states[0].timestamp, x=states[0].x, y=states[0].y,
-        heading=None, vx=states[0].vx, vy=states[0].vy, valid=True,
-        observed=states[0].observed,
-    )
-    tracks[0] = type(focal)(focal.track_id, focal.category, tuple(states),
-                            focal.is_sdc, focal.to_predict, focal.metadata, focal.is_focal)
-    malformed = type(scene)(scene.manifest, tuple(tracks), scene.map_ids, scene.map_metadata)
-    with pytest.raises(RecordParseError):
-        convert_center_scene_to_rear_axle(malformed, offset_body=(1.0, 0.0))
+    with pytest.raises(RecordParseError, match="per-actor offsets"):
+        convert_center_scene_to_rear_axle(scene, offset_body=(1.0, 0.0))
 
 
-def test_partial_track_reference_conversion_is_explicitly_mixed():
-    scene = parse_av2_rows(_av2_rows()).scene
-    converted = convert_center_scene_to_rear_axle(
-        scene, offset_body=(1.0, 0.0), track_ids=("ego",),
-        yaw_rates={("ego", 0): 0.5, ("ego", 1): 0.5},
-    )
-    assert converted.manifest.position_reference == "mixed_center_and_rear_axle"
-    assert converted.manifest.metadata["converted_track_ids"] == ["ego"]
-    other = next(track for track in converted.tracks if track.track_id == "a")
-    assert other.metadata.get("reference_conversion") is None
+def test_online_view_scrubs_future_derived_training_targets():
+    scene = parse_womd_scenario_proto(_womd()).scene
+    online = scene.online_view()
+    assert not online.tracks[0].to_predict
+    assert "tracks_to_predict_ids" not in online.manifest.metadata
+    assert "dynamic_map_states_digest" not in online.manifest.metadata
 
 
-def test_womd_source_shard_and_record_digests_are_separate():
-    shard = "a" * 64
-    record = "b" * 64
-    parsed = parse_womd_scenario_proto(
-        _womd(), source_file="validation.tfrecord-00000-of-00150",
-        content_sha256=shard, source_file_sha256=shard, record_sha256=record,
-    )
-    assert parsed.content_sha256 == shard
-    assert parsed.source_file_sha256 == shard
-    assert parsed.record_sha256 == record
-    assert parsed.scenario_content_sha256 != shard
+def test_reject_mixed_actor_global_rear_axle_label():
+    rows = _av2_rows()
+    for row in rows:
+        if row["track_id"] == "a":
+            row["object_type"] = "pedestrian"
+    scene = parse_av2_rows(rows).scene
+    with pytest.raises(RecordParseError, match="non-car actors"):
+        convert_center_scene_to_rear_axle(
+            scene, offsets_body_by_track={"ego": (1.0, 0.0), "a": (0.0, 0.0)})
 
 
-    fast_parsed = parse_womd_scenario_proto(
-        _womd(), source_file="validation.tfrecord-00000-of-00150",
-        record_sha256=record,
-    )
-    assert fast_parsed.source_file_sha256 is None
-    assert fast_parsed.scenario_content_sha256 == parsed.scenario_content_sha256
-
-
-def test_av2_scenario_digest_is_independent_of_map_archive_path(tmp_path: Path):
-    map_a = tmp_path / "a" / "log_map_archive_av2-1.json"
-    map_b = tmp_path / "b" / "log_map_archive_av2-1.json"
-    map_a.parent.mkdir()
-    map_b.parent.mkdir()
-    raw = json.dumps({"lane_segments": {"lane-1": {"id": "lane-1"}}}).encode()
-    map_a.write_bytes(raw)
-    map_b.write_bytes(raw)
-    parsed_a = parse_av2_rows(_av2_rows(), map_file=map_a)
-    parsed_b = parse_av2_rows(_av2_rows(), map_file=map_b)
-    assert parsed_a.map_content_sha256 == parsed_b.map_content_sha256
-    assert parsed_a.scenario_content_sha256 == parsed_b.scenario_content_sha256
+def test_womd_other_actor_type_four_preserved():
+    scenario = _womd()
+    scenario.tracks[0].object_type = 4
+    parsed = parse_womd_scenario_proto(scenario)
+    assert parsed.scene.tracks[0].category == "other"

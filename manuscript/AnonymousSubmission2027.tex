@@ -1,0 +1,1195 @@
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+\usepackage[submission]{aaai2027} % DO NOT CHANGE THIS
+\usepackage[hyphens]{url} % DO NOT CHANGE THIS
+\usepackage{graphicx} % DO NOT CHANGE THIS
+\urlstyle{rm} % DO NOT CHANGE THIS
+\def\UrlFont{\rm} % DO NOT CHANGE THIS
+\usepackage{natbib} % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\usepackage{caption} % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\frenchspacing % DO NOT CHANGE THIS
+
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,mathtools,booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\pdfinfo{
+/TemplateVersion (2027.1)
+}
+
+\setcounter{secnumdepth}{0}
+
+\newcommand{\Rset}{\ensuremath{\mathcal R}}
+\newcommand{\Eset}{\ensuremath{\mathcal E}}
+\newcommand{\Xset}{\ensuremath{\mathcal X}}
+\newcommand{\Pset}{\ensuremath{\mathcal P}}
+\newcommand{\Mset}{\ensuremath{\mathcal M}}
+\newcommand{\Bset}{\ensuremath{\mathcal B}}
+\newcommand{\Sset}{\ensuremath{\mathcal S}}
+\newcommand{\Wset}{\ensuremath{\mathcal W}}
+\newcommand{\Null}{\ensuremath{\varnothing}}
+\newcommand{\RAMP}{\textsc{RAMP}}
+
+\title{\RAMP-D: Goal-Conditioned Safe-Continuation Planning under Delayed Traffic-Rule Updates}
+\author{Anonymous Submission}
+\affiliations{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Traffic-control instructions and temporary road restrictions may take effect before an autonomous vehicle can observe them. A maneuver that is currently safe and legal can then eliminate the time or road access needed to finish the assigned route after the update becomes known. We address this problem as partially observed motion planning with changing traffic rules and interacting vehicles. Our planner, \RAMP-D, maintains a joint set of possible ego, agent, rule, and communication states and represents rule-dependent road access in a time-indexed resource graph. A candidate action is retained only if its possible observation posteriors admit a common, observation-dependent safe continuation to the navigation goal. We couple this reach--avoid criterion with a commitment-time calculation that compares when a decision must be made with when the required information can be guaranteed to arrive. A causal joint predictor proposes traffic futures and maneuver options; a constrained optimizer constructs conditional policies; and an independent reachable-set verifier checks them against the declared uncertainty model. Predictions guide search but never replace the verification support. This formulation distinguishes safe stopping from preserving a feasible route and provides model-conditional certificates for task continuation under delayed rule observations.
+\end{abstract}
+
+\section{Introduction}
+Road access can change while an autonomous vehicle is already approaching a maneuver. Temporary closures, reversible lanes, signal control, and instructions from traffic officers may alter when a lane or conflict area can be entered or cleared. Physical activation, official effectivity, message publication, and actual receipt need not coincide. As a result, the latest information available to the vehicle may be insufficient to decide which resources will remain legal and physically accessible.
+
+The consequence is more subtle than an immediate collision or rule violation. An ego vehicle can execute a safe control now yet pass the last braking, lane-selection, or resource-clearance point needed for a legal continuation when a delayed update arrives. Conversely, stopping in a safe area may preserve collision avoidance without preserving a feasible route to the assigned goal. The relevant planning question is therefore whether the next action retains \emph{a policy that can still complete the task safely}, rather than whether each separately predicted future contains a feasible trajectory. If several hidden situations produce the same observations, the ego must use one common control until the observations actually distinguish them.
+
+We model this dependence explicitly. A joint information state contains the possible ego positions, surrounding-vehicle states and rule awareness, formal traffic-control states, pending messages, and task progress. A rule-conditioned resource graph represents legal entry, occupancy, and clearance constraints; its task-dependent layer records which resource paths and maneuver decisions remain useful. Candidate-conditioned joint forecasting estimates how traffic and observations may evolve, but a separate set-based model defines which futures must be covered. This separation allows predictions to improve efficiency without turning low-probability omissions into unsafe assumptions.
+
+\RAMP-D combines observation-aware reach--avoid planning with resource timing. The key constraint is that every possible next observation must lead to an information state with a certified path to task completion. A companion timing calculation compares the latest time a route-dependent decision can be deferred with the guaranteed time at which the relevant hidden situations become distinguishable. The planner uses these constraints to generate short common control prefixes, safe-continuation maneuvers, and conditional policy branches. An independent reachable-set verifier checks the resulting policy, including the terminal completion strategy, over the full declared model support.
+
+\paragraph{Contributions.}
+Our contributions are threefold. \emph{First}, we formulate delayed traffic-rule motion planning as goal-conditioned reach--avoid planning over correlated joint information states, with a finite completion certificate that prevents repeated replanning from postponing the task indefinitely. \emph{Second}, we introduce a task-conditioned road-resource graph and a policy-dependent commitment-time calculation that jointly account for changing permissions, uncertain observations, and the last opportunity to select a maneuver. \emph{Third}, we integrate causal multi-agent prediction, public feedback maneuvers, conditional trajectory optimization, and independent full-support verification in an implementable planning loop. The claimed certificates apply to the specified traffic protocol, observation model, and validated physical uncertainty bounds.
+
+\section{Related Work}
+\paragraph{Motion prediction and rule-aware interaction.}
+QCNet~\citep{zhou2023query}, QCNeXt~\citep{zhou2023qcnext}, and MTR++~\citep{shi2024mtr++} provide efficient scene encoders, joint prediction modes, and interaction-aware queries. Rule-sensitive predictors, including M2I, LawBreaker, semantic rule reasoning, and RuleNet~\citep{sun2022m2i,sun2022lawbreaker,liu2023semantic,shi2025rulenet}, further model right-of-way and rule consistency. These methods motivate our predictor, but forecasting plausible motion does not establish whether a rule-dependent resource will be available or whether a common policy can still complete the assigned task. We therefore keep formal rule resolution and resource feasibility outside the learned trajectory heads.
+
+\paragraph{Planning under partial observability.}
+Conditional planning requires branches to depend on observations, not inaccessible world states~\citep{kaelbling1998planning,rintanen2005conditional}. Sheng et al.~\citep{sheng2024safe} use belief-support winning regions for shielded reach--avoid POMDP planning. SLIDE~\citep{pandya2025robots} studies plan-conditioned interaction in joint physical--belief reach--avoid games, while Vahs et al.~\citep{vahs2026safety} use belief-space Lyapunov and barrier constructions to connect information gathering, goal reaching, and safety. We build on these principles but address a different coupling: uncertain rule effectivity and delivery, legal road-resource access, and the time by which a maneuver must be chosen. Our criterion is robust over the stated support rather than probabilistic over selected modes.
+
+\paragraph{Robust control and conditional scheduling.}
+Robust MPC, predictive safety filtering, and motion-planning recovery policies address bounded disturbances and fallback safety~\citep{mayne2000constrained,wabersich2021predictive,kalaria2023delay,molnar2022safety,chen2022interactive,li2023marc,zheng2026occlusion}. Validated set propagation provides outer reachable enclosures for collision and constraint checking~\citep{althoff2021set}. Conditional temporal networks model observation-dependent scheduling with uncertain event durations; CSTNUDs additionally permit decisions that affect conditional constraints~\citep{hunsberger2018sound,zavatteri2019conditional}. Akmal et al.~\citep{akmal2020quantifying} quantify temporal controllability over uncertain realizations. We use conditional scheduling for discrete resource and observation events, while continuous motion constraints remain in trajectory optimization and reachable-set verification. Unlike a temporal controllability degree, our information--commitment gap is a deadline difference for a particular common control prefix. Counterexample-guided refinement closes the verification loop~\citep{alur2003counter,seipp2013counterexample}.
+
+\section{Problem Formulation}
+\label{sec:formulation}
+
+\subsection{Vehicle dynamics and road resources}
+We consider decision times $t_k=kh$. The ego state is $x_k^e=(p_{x,k},p_{y,k},\psi_k,v_k,a_k,\delta_k)$ and the control is $u_k=(j_k,\omega_{\delta,k})$, where $j_k$ is longitudinal jerk and $\omega_{\delta,k}$ is steering rate. The sampled dynamics are induced by the continuous vehicle model in Appendix~\ref{app:physical}:
+\begin{equation}
+ x_{k+1}^e=f_h(x_k^e,u_k,w_k),\qquad u_k\in\mathcal U(x_k^e),\quad w_k\in\mathcal W.
+ \label{eq:disc-dyn}
+\end{equation}
+The map $\mathcal M$ induces a geometric resource graph $G^1=(\mathcal R,\mathcal E^1,\mathcal X)$, where resources include lane segments, lane connectors, entry/exit gates, conflict regions, and protected stopping or staging areas. Directed edges in $\mathcal E^1$ encode geometric transitions; $\mathcal X$ contains pairs of geometrically conflicting resources.
+
+The rule-conditioned state of resource $r$ is
+\begin{equation}
+R_r(t)=\big(\alpha_r(t),\beta_r(t),d_r(t),\kappa_r(t),p_r(t)\big),
+\label{eq:resource-state}
+\end{equation}
+where $\alpha_r$ controls new entry, $\beta_r$ controls continued occupancy and clearance, $d_r$ is the permitted direction set, $\kappa_r$ is integer capacity, and $p_r$ is controller state. The resource state is derived from the resolved formal rule and controller state. For vehicle $i$, let $F_i(x_i)$ be its oriented physical footprint and $P_r$ the polygon of resource $r$. Occupancy is derived as $c_{ir}(t)=\mathbf 1[F_i(x_i(t))\cap P_r\ne\emptyset]$; $n_{ir}$ is the resource-capacity demand of vehicle $i$ (one unit for a standard single-slot resource). Capacity and conflict constraints are
+\begin{equation}
+\begin{aligned}
+\sum_i n_{ir}c_{ir}(t)&\leq\kappa_r(t),\\
+c_{ir}(t)c_{js}(t)&=c_{is}(t)c_{jr}(t)=0,\quad \{r,s\}\in\mathcal X,\ i\ne j.
+\end{aligned}
+\label{eq:resource-feas}
+\end{equation}
+The entry, stay, and exit conditions are checked separately. In particular, a resource that is legal to enter need not remain legal to occupy or clear throughout a maneuver.
+
+\subsection{Dynamic rule events and information delays}
+We distinguish exogenous rule events $Q^{\mathrm{ext}}$ (e.g., incidents or temporary work-zone closures), traffic-actuated events $Q^{\mathrm{act}}$ (e.g., reversible-lane or queue-responsive control changes), and interaction-dependent yielding $Y^{\mathrm{int}}$. The latter affects agent behavior but does not, by itself, alter formal resource permission. A formal rule record contains its source, jurisdiction, scope, condition, version, effectivity interval, and affected resources. The protocol $\mathcal P$ defines which sources are authoritative in a given jurisdiction and how overlapping or conflicting instructions are reconciled. We use a scope- and jurisdiction-conditioned precedence relation, not a universal fixed ranking of signs, signals, officers, or work-zone devices. If the currently available evidence does not resolve a conflict, all protocol-admissible rule interpretations remain in the information support.
+
+For a report $j$, the physical change time, issue time $s_j$, effective interval $\mathcal I_j=[\tau_j^{\rm on},\tau_j^{\rm off})$, and receipt time $r_j$ are distinct. A report enters the ego observation history only at $r_j$. Absence of a report removes a hidden event only when the protocol supplies a publication and delivery guarantee. Traffic-actuated rules may depend on traffic flow, whereas external closures do not. Let $\rho_k=\operatorname{Flow}(x_k^e,\Xi_k)$ denote the current traffic-flow state and let $\eta_k$ collect admissible exogenous and protocol disturbances. We use the time-ordered joint transition
+\begin{equation}
+\begin{aligned}
+Q_{k+1}^{\rm ext}&\in T_{\mathcal P}^{\rm ext}(Q_k^{\rm ext},\eta_k^{\rm ext}),\\
+Q_{k+1}^{\rm act}&\in T_{\mathcal P}^{\rm act}(Q_k^{\rm act},\rho_k,\chi_k,\vartheta_k,\eta_k^{\rm act}),\\
+s_{k+1}&\in\mathsf F_{\mathcal P}(s_k,u_k,w_k,\eta_k),
+\end{aligned}
+\label{eq:causal-transition}
+\end{equation}
+where $\chi_k$ and $\vartheta_k$ denote controller memory and event clocks, respectively, and $s_k$ is the augmented joint state defined below. The joint transition resolves formal rules before updating resource permissions, propagates ego and agent motion using information available at the start of the interval, and updates awareness and observations after the resulting visibility and delivery events. Its explicit component equations appear in Appendix~\ref{app:protocol}; in particular, the ego prefix does not directly alter exogenous rule events.
+
+\subsection{Joint information state and navigation task}
+The actual world contains one joint state $s_k^\star$. Let $h_k=(o_{0:k},u_{0:k-1})$ be the realized observation/action history. Because the ego does not know the joint state exactly, the planner maintains a set of all joint states consistent with $h_k$ and the protocol:
+\begin{equation}
+\begin{aligned}
+Q_k&=(Q_k^{\rm ext},Q_k^{\rm act},Q_k^{\rm res}),\\
+s_k&=(t_k,x_k^e,\Xi_k,Q_k,R_k,A_k,\chi_k,\vartheta_k,\\
+&\qquad m_k,z_k^R,z_k^T,O_k^{\rm phys}),\\
+B_k&=\{s_k:\ s_k\text{ is consistent with }h_k,\mathcal P\}.
+\end{aligned}
+\label{eq:joint-belief}
+\end{equation}
+Here $R_k$ is the vector of rule-conditioned resource states, $z_k^R$ is the resource-monitor state, $z_k^T$ is task-automaton progress, $\vartheta_k$ contains protocol clocks, and $O_k^{\rm phys}$ represents dynamic physical obstacles. The true state satisfies $s_k^\star\in B_k$. The support retains correlations among hidden variables; probability estimates are used only for ranking. The update, abstraction, and Markov-state requirements are detailed in Appendix~\ref{app:protocol}.
+
+Let $o_k=(\hat x_k,y_k,D_k)$ combine ego localization, local detections, and received reports. The joint transition and observation relations are $s^+\in\mathsf F_{\mathcal P}(s,u,w,\eta)$ and $o^+\in\mathsf H_{\mathcal P}(s^+,u,v)$, where $\eta$ represents protocol/environment uncertainty. The information-support update is
+\begin{equation}
+\begin{aligned}
+B_{k+1}&=\operatorname{Post}_{\mathcal P}(B_k,u_k,o_{k+1})\\
+&=\{s^+:\exists s\in B_k,w,\eta,v,\ s^+\in\mathsf F_{\mathcal P}(s,u_k,w,\eta),\\
+&\hspace{5.1em}o_{k+1}\in\mathsf H_{\mathcal P}(s^+,u_k,v)\}.
+\end{aligned}
+\label{eq:belief-update}
+\end{equation}
+This update filters the complete joint successor support using the observation actually received. In particular, hidden rule changes and unreceived messages are not available as feedback inputs.
+
+The navigation task is represented by a deterministic task automaton $\mathcal A_T=(Z_T,\Sigma_T,\delta_T,z_0,F_T)$. Its state records route/task progress, while its transition labels encode traversed resources and relevant rule conditions. The rule-conditioned goal predicate is fixed by the task specification:
+\begin{equation}
+\begin{aligned}
+\mathcal G_T(s,z^T)={}&\mathbf 1[z^T\in F_T]\,\mathbf 1[x^e\in X_{\rm goal}(z^T)]\\
+&\cdot\mathbf 1[\operatorname{Legal}(s)=1].
+\end{aligned}
+\label{eq:goal-predicate}
+\end{equation}
+A rule change can alter which transitions of the task automaton are enabled, but it cannot let the planner replace the assigned navigation task with an arbitrary easier goal. Rerouting is allowed only when specified by the task semantics.
+
+A policy $\Pi$ maps realized observation histories to controls and high-level options. It is nonanticipative if
+\begin{equation}
+h_i^\omega=h_i^{\omega'}\ \Longrightarrow\ (u_i^\omega,\mu_i^\omega)=(u_i^{\omega'},\mu_i^{\omega'}).
+\label{eq:nonanticipativity}
+\end{equation}
+Consequently, two hidden histories can lead to different controls only after the observations available to the ego distinguish them. We distinguish the hard-safe information supports $\mathfrak B_{\rm safe}=\{B:B\subseteq\mathcal X_{\rm safe}\}$ from the goal-conditioned task-winning supports defined below.
+
+\section{\RAMP-D: Planning Method}
+\label{sec:method}
+Figure~\ref{fig:pipeline} summarizes the planning loop: a belief update and coarse resource graph provide candidate ego controls; the predictor proposes future traffic and observations; resource scheduling instantiates maneuvers; and the optimizer constructs conditional policies that an independent verifier checks.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.98\textwidth]{RAMP_D_SC_pipeline.pdf}
+\caption{Planning pipeline. Forecasts propose candidate futures and maneuvers; observation-dependent reach--avoid constraints and independent set-based verification determine admissibility.}
+\label{fig:pipeline}
+\end{figure*}
+
+\subsection{Rule-conditioned road-resource graph}
+\label{sec:graph}
+The planner represents road access at three levels. $G^1$ stores geometric connectivity and conflict regions; $G_k^2$ attaches formal, time-dependent entry, occupancy, clearance, direction, and capacity guards. Rule updates change these guards without deleting permanent map connectivity, whereas physical closures update the local geometric overlay. A lightweight protocol monitor resolves authority, jurisdiction, scope, version, and effectivity, retaining multiple interpretations whenever the received evidence is inconclusive.
+
+The third layer, the \emph{continuation graph} $G_k^{CC}$, connects resources to task progress, option templates, and time windows:
+\begin{equation}
+G_k^{CC}=G_k^1\otimes G_k^2\otimes\mathcal A_T\otimes\mathcal A_{\rm SCO}.
+\label{eq:ccg}
+\end{equation}
+A node $(r,z^T,m,\tau)$ specifies a road resource, task-automaton state, maneuver-option type, and time-window index; its guarded edges encode when an option may enter and clear a resource and which observations may justify a branch.
+
+We update the graph in two passes to avoid circular dependencies with forecasting. The \emph{coarse graph} uses only map geometry, the current information support, rule-protocol constraints, conservative reachability envelopes, and cached certificates. It supplies candidate paths and encoder features. After the predictor produces candidate-conditioned futures, a \emph{refined graph} updates nominal resource windows and option rankings, without narrowing the uncertainty set used in verification. Jointly correlated resource hypotheses are preserved rather than stitching together individually possible but mutually incompatible edges. Incremental graph updates and rule/resource sensitivity calculations are given in Appendix~\ref{app:ccg}.
+
+\subsection{Joint scene forecasting with rule awareness}
+\label{sec:forecast}
+Figure~\ref{fig:network} shows the joint prediction network used to guide the planner. The encoder uses typed tokens for ego state and localization bounds, agent histories and visibility, map geometry, resources, rule events and received messages, task progress, joint-support factors, and CCG commitment summaries. A candidate ego prefix is encoded once and injected into future queries, so candidate evaluation does not require re-encoding the static scene.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.98\textwidth]{RAMP_D_SC_network.pdf}
+\caption{Joint scene prediction with rule- and resource-aware attention. The decoder predicts future traffic and observations; resource permissions and occupancy are derived from the protocol and vehicle footprints.}
+\label{fig:network}
+\end{figure*}
+
+Sparse, relation-aware attention connects geometrically interacting agents, resources, and the rules that affect them. Within each joint mode, agent--agent attention models interactions; across modes, only pooled context features are exchanged so that incompatible predicted trajectories are not averaged. A lightweight awareness feature for each agent is inferred from visibility, occlusion, message access, and rule timing. It conditions the agent-response model on what that agent could have perceived, not on the ego's hidden ground-truth rule state. Token definitions, attention biases, and computational complexity appear in Appendix~\ref{app:network}.
+
+For a candidate ego prefix $\bar U$, the decoder predicts a small number of joint future modes $\omega$ and possible observation histories $O$. We separate learned proposals from constrained, physically derived variables:
+\begin{equation}
+\begin{aligned}
+&(\omega,O)\sim\widehat P_\phi(\cdot\mid B_k,\bar U,\mathcal P),\\
+& R_{\tau+1}\in T_{\mathcal P}^{R}(R_\tau,Q_{\tau+1}^{\rm res},\chi_\tau,\mathcal M),\\
+& C_{\tau+1}=\operatorname{Occ}(x_{\tau+1}^e,\Xi_{\tau+1},\mathcal M).
+\end{aligned}
+\label{eq:joint-factor}
+\end{equation}
+Here $\widehat P_\phi$ is used to prioritize candidates, $Q^{\rm res}$ denotes the resolved rule, and $C$ is resource occupancy. Events are generated before rule resolution; agent motion uses its previously available awareness, and the resulting state determines later observations and awareness updates. Changing the candidate ego action does not intervene on external rule events; effects on traffic-actuated events pass through flow and controller evolution. The complete time-unrolled factorization is in Appendix~\ref{app:network}.
+The decoder also estimates task-relevant margins, maneuver availability, and observation/commitment timing. These outputs guide search but are not safety certificates. Scenarios are retained for likelihood, potential loss of future task feasibility, or coverage of distinct observation and rule-resource branches. The optimizer uses this finite set; the verifier still checks every admissible branch of the declared model.
+
+\subsection{Safe-continuation feasibility and commitment timing}
+\label{sec:viability}
+A collision-free action need not preserve a legal route to the navigation goal. We distinguish the safety-invariant information states $\mathcal S_\infty$, which admit an indefinitely safe feedback policy, from the goal-conditioned winning states $\mathcal W_H^{SC}$, which admit a finite safe continuation to task acceptance. Let $\mathcal X_{\rm safe}$ be the set of hidden states satisfying collision, dynamics, rule, and resource constraints, and set $\mathfrak B_{\rm safe}=\{B:B\subseteq\mathcal X_{\rm safe}\}$. The safety-invariant construction is given in Appendix~\ref{app:verification}.
+
+At an information state $B$, $\mathcal U_{\rm pub}(B)$ is the set of feedback controls based only on available observations. Let $\operatorname{SafeTube}(B,u)$ mean that the continuous reachable tube under $u$ remains in $\mathcal X_{\rm safe}$, and let $\operatorname{Succ}_{\mathcal P}(B,u)$ be the family of posterior supports, with all hidden states producing the same observation combined into one support. The observation-aware predecessor is
+\begin{equation}
+\operatorname{Pre}_{\rm obs}(\mathcal K)=
+\left\{B:\begin{aligned}
+&\exists u\in\mathcal U_{\rm pub}(B),\ \operatorname{SafeTube}(B,u),\\
+&\operatorname{Succ}_{\mathcal P}(B,u)\subseteq\mathcal K
+\end{aligned}\right\}.
+\label{eq:pre-obs}
+\end{equation}
+The terminal family $\mathcal K_{\rm term}^{SC}$ contains only information supports covered by a verified, observation-dependent policy that reaches task acceptance within a finite completion bound. In particular, an indefinitely safe stopping area without a certified route is not terminal. The finite-horizon winning family is
+\begin{equation}
+\begin{aligned}
+\mathcal W_0^{SC}&=\mathcal K_{\rm term}^{SC},\\
+\mathcal W_{h+1}^{SC}&=\mathcal W_h^{SC}\cup
+\big(\mathfrak B_{\rm safe}\cap\operatorname{Pre}_{\rm obs}(\mathcal W_h^{SC})\big).
+\end{aligned}
+\label{eq:sc-winning}
+\end{equation}
+The recursion extends a certified completion policy by safe common controls. It does not imply infinite safety after task acceptance unless the terminal certificate explicitly provides it. Our continuous-state implementation stores only a \emph{certified inner approximation} $\underline{\mathcal W}_h^{SC}$, not an exact representation of the full winning family (Appendix~\ref{app:verification}).
+
+A fixed-horizon controller could repeatedly select safe waiting without ever completing the task. We prevent this by retaining an integer completion rank
+\begin{equation}
+d_H(B)=\min\{h\leq H:B\in\mathcal W_h^{SC}\},
+\label{eq:sc-rank}
+\end{equation}
+instantiated from the certified inner family. Each executed nonterminal control must lead, under \emph{every} possible next observation, to a support with a strictly smaller stored rank. A replanned suffix inherits the remaining rank budget instead of resetting it; a rank-$d$ prefix followed by a certified terminal policy of duration at most $\bar T_{\rm tail}$ has completion bound $dh+\bar T_{\rm tail}$. The formal action constraint and terminal certificate are specified in Appendix~\ref{app:verification}.
+
+We also score how much physical latitude an admissible action preserves. For the rank-preserving control set $\mathcal U_{\rm rank}^{SC}(B)$ and the minimum normalized reachable-tube margin $g_{\rm tube}(B,u)$, define
+\begin{align}
+q_H^{\rm obs}(B,u)&=\inf_{B^+\in\operatorname{Succ}_{\mathcal P}(B,u)}
+V_{H-1}^{SC}(B^+),\nonumber\\
+Q_H^{SC}(B,u)&=\min\{g_{\rm tube}(B,u),q_H^{\rm obs}(B,u)\},\nonumber\\
+V_H^{SC}(B)&=\sup_{u\in\mathcal U_{\rm rank}^{SC}(B)}Q_H^{SC}(B,u),\nonumber\\
+\operatorname{Cons}_H(B,u)&=V_H^{SC}(B)-Q_H^{SC}(B,u).
+\label{eq:sc-value}
+\end{align}
+The terminal value is the verified tail's physical margin; infeasible actions are excluded. $V_H^{SC}$ is a worst-case margin over task-feasible policies, not a distance to a viability boundary. The predictor supplies an estimate $\widehat V_H^{SC}$ for search, whereas verified policies supply conservative bounds $\underline V_H^{SC}$. Neither a low prediction nor an unsuccessful finite search establishes infeasibility.
+
+The optimizer instantiates a finite set of \emph{safe-continuation options} (SCOs): public feedback maneuvers such as protected clearance, conservative lane preparation, or waiting with a certified onward route. Each option includes a resource path, feasible start/occupancy windows, observation guards, and a completion tail. Candidate options are not called feasible until verified; their definitions and diversity measures are in Appendix~\ref{app:verification}.
+
+For histories requiring distinct downstream choices but not yet distinguishable by the ego, let $D_{\mathcal D}^{\rm defer}(\pi)$ be the latest safe time to defer the branch-specific decision under a fixed common prefix $\pi$. Let $T_{\mathcal D}^{\rm sep,+}(\pi)$ be the guaranteed latest time by which the relevant histories become distinguishable under the \emph{same} prefix. We compare them using the information--commitment gap:
+\begin{equation}
+\operatorname{ICG}_{\mathcal D}(\pi)=
+T_{\mathcal D}^{\rm sep,+}(\pi)-D_{\mathcal D}^{\rm defer}(\pi).
+\label{eq:icg}
+\end{equation}
+A positive gap means that waiting for guaranteed information may miss a necessary decision deadline; a common maneuver may nevertheless keep every branch feasible. A nonpositive gap supports waiting only if the shared prefix is safe and reduces the completion rank. An option's latest \emph{start} time is distinct from the decision-deferral deadline. Both are bounded with the same policy-conditioned observation and resource model, and unresolved signs remain unresolved (Appendix~\ref{app:ccg}).
+
+\subsection{Observation-dependent trajectory optimization}
+\label{sec:optimization}
+The optimizer constructs a policy tree indexed by possible observation histories. At each node, one control prefix and one public maneuver option must work for the entire posterior support; only a distinguishing observation can trigger different child policies. A discrete search selects resource paths, option types, and time windows from the refined graph. Conditional temporal scheduling checks whether observation- and decision-dependent event times can be executed dynamically. Multiple shooting with sequential quadratic programming then optimizes vehicle controls, resource crossing times, and full-footprint clearance subject to the selected schedule.
+
+Let $\mathfrak F_H^{\rm cand}(B_k)$ be the finite set of nonanticipative policy trees proposed by this search. We first maximize a predicted worst-node continuation margin $\widehat\Gamma(\Pi)=\inf_{\nu\in\mathcal N(\Pi)}\widehat V_{H_\nu}^{SC}(B_\nu)$, then minimize task cost among near-best candidates:
+\begin{equation}
+\begin{aligned}
+\widehat\Gamma^*&=\max_{\Pi\in\mathfrak F_H^{\rm cand}(B_k)}\widehat\Gamma(\Pi),\\
+\Pi^*_{\rm cand}&=\arg\min_{\Pi\in\mathfrak F_H^{\rm cand}(B_k)} J_{\rm sec}(\Pi)\\
+&\text{s.t. }\widehat\Gamma(\Pi)\geq\widehat\Gamma^*-\epsilon_\Gamma.
+\end{aligned}
+\label{eq:lex-opt}
+\end{equation}
+Here $\mathcal N(\Pi)$ is the set of policy-tree nodes, $H_\nu$ is the remaining planning horizon, $\epsilon_\Gamma$ is a ranking tolerance, and $J_{\rm sec}$ combines predicted task cost and maneuver diversity (Appendix~\ref{app:verification}). This finite candidate objective does not establish feasibility or global optimality. The independent verifier must still establish continuous safety, resource legality, inherited completion rank, and coverage of every observation branch. Temporal controllability certifies only the discrete scheduling subproblem, not the vehicle dynamics.
+
+\subsection{Reachability verification and execution}
+\label{sec:verification}
+A separate verifier checks each proposed conditional policy over all histories allowed by the \emph{declared} traffic protocol, observation relation, bounded disturbances, and agent-response envelopes. It propagates validated reachable tubes, tests swept-footprint and resource constraints, merges states consistent with the same observation, and checks the terminal-tail and rank certificates. The outcomes are \texttt{CERTIFIED}, a validated \texttt{COUNTEREXAMPLE} to the current policy, or \texttt{UNKNOWN} when an enclosure, abstraction, or time budget cannot resolve a branch. A failed candidate does not prove the initial state is intrinsically nonviable; counterexamples instead guide refinement.
+
+Only a certified task-continuation policy supplies the executed common control. Its stored tail remains valid after replanning only when the new posterior and protocol/clock/model context satisfy the inherited certificate. Worst-case perception, computation, and actuation delays are accounted for in commitment timing. If task-continuation certification is unavailable, an independently certified safety-only fallback may be used and is reported separately. Thus \emph{full support} refers to the specified uncertainty model, not arbitrary unmodeled behavior. Verifier details and assumptions are in Appendix~\ref{app:verification}.
+
+\begin{algorithm}[t]
+\footnotesize
+\caption{\RAMP-D online safe-continuation planning}
+\label{alg:planner}
+\begin{algorithmic}[1]
+\Require Observation history $h_k$, map $\mathcal M$, protocol $\mathcal P$, task automaton $\mathcal A_T$
+\State Update the augmented joint support $B_k$ from the received observation
+\State Build/update a coarse CCG from map, protocol support, task, SCO templates, and conservative envelopes
+\State Generate candidate ego prefixes using the coarse CCG and still-valid cached summaries
+\ForAll{candidate prefixes $\bar U$}
+  \State Decode time-unrolled causal joint modes and future observation classes
+  \State Refine candidate-specific resource windows without shrinking certification support
+  \State Instantiate SCO candidates and conditional event/decision temporal networks
+  \State Compute ICG interval bounds and option latest-start bounds under the same prefix
+  \State Construct nonanticipative policy-tree candidates with inherited rank budgets
+\EndFor
+\State Solve the finite discrete resource/SCO master and continuous trajectory subproblem
+\While{verification budget remains}
+  \State Verify the candidate against the complete declared protocol support and validated tubes
+  \If{result is \texttt{CERTIFIED}}
+    \State Execute the common first control; cache policy tail, child supports, clocks, and rank; \Return
+  \ElsIf{result is \texttt{COUNTEREXAMPLE}}
+    \State Add the trace with its common observation prefix; refine and re-optimize
+  \Else
+    \State Refine the unresolved reachable/observation cell or return \texttt{UNKNOWN}
+  \EndIf
+\EndWhile
+\If{a certified safety-only invariant controller covers the current posterior}
+  \State Execute it and report \texttt{SAFE\_ONLY}
+\Else
+  \State Report that no certified action is available under the current model
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+\section{Experimental Evaluation}
+\label{sec:experiments}
+Our evaluation tests whether the proposed planner preserves an executable route under delayed rule observations, whether its commitment deadlines are meaningful, and whether certification remains valid when prediction modes are incomplete. We separate small exact-oracle tests from continuous closed-loop simulations so that empirical success is not confused with a formal guarantee.
+
+\paragraph{Scenarios and comparisons.}
+We consider temporary lane closures, traffic-actuated lane/signal changes, intersection instructions with occlusion, and interactive merges with heterogeneous agent awareness. The protocol simulation varies rule activation, issue, receipt, and detection times independently, along with localization and sensing error, resource conflicts, vehicle dynamics, and alternative route availability. Comparisons use the same map, dynamics, declared uncertainty bounds, observations, and compute budget. Baselines include latest-received-rule MPC, reactive MPC, robust tube MPC with a safety terminal set, observation-conditioned branch MPC, and safety-shielded MPC. Exact belief-support planning is used only for small finite instances; adapted learning-based baselines are identified as adaptations.
+
+\paragraph{E1: Observation-dependent feasibility.}
+A finite-state conditional-planning oracle supplies reference winning supports and actions. We test the certified inner approximation against that oracle and against hidden-state-specific planning and independent-marginal approximations. Primary measures are false winning-set inclusions, oracle winning-state coverage, common-action violations, and runtime. No false inclusion is acceptable for a sound inner approximation; missing winning supports measure conservatism.
+
+\paragraph{E2: Information and maneuver deadlines.}
+We sweep observation-separation times across the latest safe decision-deferral times, including possible indefinite message delay. A small-instance conditional temporal-game oracle evaluates time-dependent branch decisions. We compare the full planner with information-first waiting, fixed early stopping, and the former option-persistence deadline. We measure certified ICG-sign agreement, unresolved classifications, deadline misses, public-maneuver coverage, and conditional schedule success. This experiment distinguishes an urgent decision from an inherently infeasible task.
+
+\paragraph{E3: Task continuation versus safety.}
+Matched scenarios have similar safe stopping opportunities but different onward legal routes. Additional cases allow indefinite repeated waiting in a fixed-horizon controller. We compare safety-only MPC, task-aware MPC without persistent progress, and the full rank-preserving planner. We report lawful task completion, robust continuation loss on oracle-decidable instances, safety violations, rank violations, safe-only fallback, and completion time. Task-infeasible episodes are analyzed separately.
+
+\paragraph{E4: Prediction and mode selection.}
+We ablate agent-specific rule awareness, temporal causal ordering, and capability-sensitive scenario retention. Joint motion accuracy, occupancy prediction, event-time coverage, observation-class recall, and recall of critical modes/resources are reported alongside downstream task completion. Alternative ego-prefix responses are evaluated only with paired simulator interventions; real trajectory logs supervise observed behavior, not unseen counterfactuals.
+
+\paragraph{E5: Certification and computation.}
+We compare selected-mode checking, complete support checking, and complete support checking with counterexample-guided refinement. We report certification coverage, unresolved rate, in-envelope empirical falsification rate, model-conformance failures, refinement count, and p50/p95 verification and total planning latency. Coverage is always reported together with conservatism and computation cost; a collision-free sampled rollout is not treated as a proof.
+
+\paragraph{Targeted ablations.}
+Seven single-component removals isolate task viability, persistent progress, commitment timing, agent awareness/causal event updates, critical-mode selection, joint-support correlations, and complete-support verification (Table~\ref{tab:ablations}, Appendix). Each is evaluated using the corresponding diagnostic above rather than forecasting accuracy alone.
+
+\paragraph{Supervision and reporting.}
+AV2-MF and WOMD support observed multi-agent motion training~\citep{wilson2023argoverse,ettinger2021large}. SUMO/CARLA generate rule-event, message, visibility, and paired-ego-intervention labels~\citep{lopez2018microscopic,dosovitskiy2017carla}. Footprint occupancy is computed geometrically; finite conditional-planning oracles and reachable-set checks supply conservative feasibility, physical margin, and deadline labels. Unknown solver outcomes are masked rather than labeled infeasible. The eight losses, label provenance, metric definitions, and statistical protocol are detailed in Appendices~\ref{app:network} and~\ref{app:eval}. Primary closed-loop outcomes are collected in Table~\ref{tab:main-results}.
+
+\begin{table*}[t]
+\centering\footnotesize
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Planner & Lawful completion $\uparrow$ & Continuation loss $\downarrow$ & Deadline misses $\downarrow$ & Cert. coverage $\uparrow$ & p95 latency (ms) $\downarrow$\\
+\midrule
+Latest-rule MPC & -- & -- & -- & -- & --\\
+Robust tube MPC & -- & -- & -- & -- & --\\
+Observation-conditioned MPC & -- & -- & -- & -- & --\\
+Safety-shielded MPC & -- & -- & -- & -- & --\\
+\textbf{\RAMP-D} & -- & -- & -- & -- & --\\
+\bottomrule
+\end{tabular}
+\caption{Primary closed-loop comparison. Continuation loss and certification metrics are defined in Appendix~\ref{app:eval}.}
+\label{tab:main-results}
+\end{table*}
+
+\section{Conclusion}
+We presented \RAMP-D, a planner for autonomous driving when traffic rules and road access can change before the corresponding information becomes available. The method combines joint information-state reach--avoid planning, rule-conditioned resource scheduling, and observation-dependent motion policies. A finite completion certificate distinguishes preserving a route to the goal from merely remaining safe, while commitment-time bounds identify when waiting for information may consume the last maneuver opportunity. A causal predictor guides candidate search; validated reachable tubes and complete-support checking provide model-conditional certification. The proposed experiments separately test conditional-planning correctness, deadline reasoning, closed-loop continuation, and verification scalability.
+
+\appendix
+\setcounter{secnumdepth}{1} % Number appendix sections A, B, ... for reliable references.
+
+\section{Notation}
+\label{app:notation}
+Table~\ref{tab:notation} collects the variables used in the main formulation. Superscript $SC$ indicates goal-conditioned safe continuation; a hat denotes a learned estimate, an underline a certified lower bound, and a superscript $+$ a sound outer enclosure or upper timing bound, as specified locally. Auxiliary optimization, attention, and time-offset variables are defined at first use.
+\begin{table}[t]
+\centering\small
+\begin{tabular}{@{}p{0.31\columnwidth}p{0.63\columnwidth}@{}}
+\toprule
+Symbol & Meaning\\
+\midrule
+$k,h,H,t_k$ & Discrete index, control period, planning depth, and physical time\\
+$x^e,u,w,v,\eta$ & Ego state/control, dynamics disturbance, observation error, and protocol/environment uncertainty\\
+$\mathcal M,G^1,G^2,G^{CC}$ & Vector map, geometry graph, rule overlay, and task-dependent resource graph\\
+$\mathcal R,\mathcal E^1,\mathcal X$ & Road resources, directed transitions, and conflicting resource pairs\\
+$Q^{ext},Q^{act},Q^{res}$ & External/traffic-actuated events and formally resolved rules\\
+$R_r=(\alpha,\beta,d,\kappa,p)$ & Resource entry/stay permission, direction, capacity, controller state\\
+$\Xi,Y^{int},A,\widetilde R$ & Other agents, yielding state, awareness, and perceived rule context\\
+$m,\chi,\vartheta,z^R,z^T$ & Pending reports, controller memory, clocks, resource and task monitors\\
+$s,B,o,h_k,\mathcal P$ & Joint hidden state, support, available observation, history, and protocol\\
+$\operatorname{Post},\operatorname{Succ},\operatorname{Pre}_{obs}$ & Posterior update, possible posterior family, and observation-aware predecessor\\
+$\mathcal X_{safe},\mathcal S_\infty,\mathcal W_H^{SC}$ & Hard-safe states, safety-invariant supports, task-winning supports\\
+$\mathcal K_{term}^{SC},d_H$ & Certified finite completion-tail supports and progress rank\\
+$V_H^{SC},Q_H^{SC},\operatorname{Cons}_H$ & Worst-case continuation margin, action value, and reserve consumption\\
+$\Pi,\pi,\mu,\mathcal A_{\rm cert}^{SC}$ & Observation-dependent policy, common prefix, maneuver option, certified options\\
+$\mathcal D,D^{defer},D^{start}$ & Unresolved decision class, deferral and maneuver-start deadlines\\
+$T^{sep,+},\operatorname{ICG}$ & Guaranteed observation-separation time and deadline gap\\
+$\widehat P_\phi,\widehat\Omega$ & Learned joint future distribution and selected planning modes\\
+$\mathcal E_{cert},\mathcal R^+$ & Declared verification bounds and validated outer reachable tube\\
+\bottomrule
+\end{tabular}
+\caption{Principal notation; individual resource and temporal-network variables are detailed in their respective sections.}
+\label{tab:notation}
+\end{table}
+
+\section{Protocol Semantics and Joint Information-State Update}
+\label{app:protocol}
+The protocol $\mathcal P$ is represented by a finite or finitely abstracted hybrid automaton. It specifies admissible external and actuated events, rule resolution, controller modes, event effectivity, report publication/delivery, local observation, and resource-monitor updates. A rule record is
+\begin{equation}
+\begin{aligned}
+q=(&\mathrm{id},\mathrm{source},\mathrm{jurisdiction},\mathrm{scope},\mathrm{condition},\\
+&\mathrm{version},\mathcal I^{eff},\mathrm{effect},\mathrm{exceptions},\mathrm{auth}).
+\end{aligned}
+\label{eq:rule-record}
+\end{equation}
+The resolver compares only rules with overlapping jurisdictional/spatial scope and conflicting effects. The protocol supplies a context-dependent precedence relation $\succ_{\mathcal P,\mathcal J}$, which need not be a total order. If source, scope, validity, or precedence cannot be established from current evidence, all protocol-admissible resolved interpretations remain in the support. The resource transition map derives $\alpha,\beta,d,\kappa,p$ from the resolved rule, controller state, clocks, and map.
+
+\paragraph{Time-ordered hybrid transition.}
+The compact transition in~\eqref{eq:causal-transition} expands as follows. For notational convenience, $\eta_k$ collects exogenous event, controller, and agent-response uncertainty, and $w_k$ denotes ego-model disturbances.
+\begin{align}
+Q_{k+1}^{\rm ext}&\in T_{\mathcal P}^{\rm ext}(Q_k^{\rm ext},\eta_k^{\rm ext}),\nonumber\\
+\rho_k&=\operatorname{Flow}(x_k^e,\Xi_k),\nonumber\\
+Q_{k+1}^{\rm act}&\in T_{\mathcal P}^{\rm act}(Q_k^{\rm act},\zeta_k^{\rm act}),\nonumber\\
+\bar Q_{k+1}&=(Q_{k+1}^{\rm ext},Q_{k+1}^{\rm act}),\nonumber\\
+Q_{k+1}^{\rm res}&\in\operatorname{Resolve}_{\mathcal P}(\bar Q_{k+1},\chi_k),\nonumber\\
+R_{k+1}&\in T_{\mathcal P}^{R}(R_k,Q_{k+1}^{\rm res},\chi_k,\mathcal M),\nonumber\\
+(m_{k+1},\vartheta_{k+1},\chi_{k+1})&
+ \in T_{\mathcal P}^{\rm ctl/msg}(\zeta_k^{\rm ctl}),\nonumber\\
+O_{k+1}^{\rm phys}&\in T^{\rm phys}(O_k^{\rm phys},Q_{k+1}^{\rm ext},\eta_k^{\rm ext}),\nonumber\\
+(\Xi_{k+1},Y_{k+1}^{\rm int})&
+ \in T^{\Xi}(\Xi_k,\zeta_k^{\rm agent}),\nonumber\\
+x_{k+1}^e&=f_h(x_k^e,u_k,w_k),\nonumber\\
+C_{k+1}&=\operatorname{Occ}(x_{k+1}^e,\Xi_{k+1},\mathcal M),\nonumber\\
+A_{k+1}&\in T^{A}(A_k,Q_{k+1}^{\rm res},\nonumber\\
+&\qquad \operatorname{Visibility}_{k+1},m_{k+1}),\nonumber\\
+z_{k+1}^{R}&\in T^{R,\rm mon}(z_k^R,R_{k:k+1},C_{k:k+1}),\nonumber\\
+z_{k+1}^{T}&=\delta_T(z_k^T,\sigma_{k+1}),\nonumber\\
+t_{k+1}&=t_k+h,
+\label{eq:causal-transition-expanded}
+\end{align}
+where $\zeta_k^{\rm act}=(\rho_k,\chi_k,\vartheta_k,\eta_k^{\rm act})$, $\zeta_k^{\rm ctl}=(m_k,\vartheta_k,\chi_k,Q_{[k,k+1]},\eta_k)$, and $\zeta_k^{\rm agent}=(\widetilde R_k,A_k,Y_k^{\rm int},x_k^e,u_k,\eta_k)$. The pair $\bar Q_{k+1}$ collects external and actuated events; $\rho_k$ is computed from the current joint state; $\widetilde R_k$ is the agent-specific perceived rule/resource context encoded in $A_k$; and $\vartheta_k$ stores the clocks needed for rule effectivity, controller phase/dwell time, and pending-message deadlines. The pending-report state $m_k$ stores issued but unreceived reports and their source/version metadata. The resource state $R_k$ is explicitly maintained unless derivable from the remaining augmented state. The occupancy $C$ is derived from full footprints; $z^R$ updates the resource monitor, and $\sigma_{k+1}$ is the task label generated by traversed resources and resolved rule conditions. Here $\operatorname{Visibility}_{k+1}=\operatorname{Vis}(x_{k+1}^e,\Xi_{k+1},O_{k+1}^{\rm phys},Q_{k+1}^{\rm res},\mathcal M)$. The time-unrolled dependency is acyclic: traffic-actuated events at $k+1$ depend on current flow $\rho_k$; agent motion over $[t_k,t_{k+1}]$ uses the awareness state $A_k$ available at the interval start; endpoint visibility then updates $A_{k+1}$ for the next response interval. Thus a newly detected rule does not retroactively alter motion that occurred before detection. The continuous-time implementation splits a control interval at a modeled event/visibility change when the response must update within that interval. Ego actions affect traffic-actuated events only through the flow/controller evolution and do not cause exogenous closures. The controller memory and event clocks provide the required Markov state.
+
+For each report, physical activation, issue, publication, receipt, and first local detection timestamps are distinct. The augmented clock state $\vartheta_k$ stores the active effectivity boundaries, controller phase/dwell clocks, and pending delivery deadlines needed to make the protocol transition Markov. A missing report eliminates a latent event only if both publication and delivery guarantees apply to that event. Otherwise silence is not evidence of non-occurrence. Reports may arrive out of order; reconciliation uses source, version, issue time, and effectivity interval. A report received after its effective time updates the information state but does not retroactively make the earlier hidden rule available to the controller.
+
+The support update is relational. A Cartesian product of marginal supersets can be used as a conservative outer enclosure only if it is proved to contain the true joint support; it may be very conservative. What is not sound is to combine marginally feasible actions or may-edges as though their underlying states were jointly realizable, or to discard correlations in a way that removes possible joint states. For a common public control $u_k$ and realized observation $o_{k+1}$, propagate each joint support cell through the time-unrolled protocol/dynamics relation, intersect with the observation-consistency relation, and aggregate all successor states that produce the same realized observation history:
+\begin{equation}
+\begin{aligned}
+B_{k+1}&=\operatorname{Post}_{\mathcal P}(B_k,u_k,o_{k+1})\\
+&=\{s^+:\exists s\in B_k,\ w,\eta,v,\ 
+s^+\in\mathsf F_{\mathcal P}(s,u_k,w,\eta),\\
+&\hspace{4.0em}o_{k+1}\in\mathsf H_{\mathcal P}(s^+,u_k,v)\}.
+\end{aligned}
+\label{eq:belief-update-app}
+\end{equation}
+The aggregation is a union over all hidden predecessors and disturbances consistent with the same observation; it is not a separate posterior for each hidden state. This is the continuous/hybrid analogue of partitioning belief states by observational equivalence in conditional planning~\citep{rintanen2005conditional}. Rintanen's finite propositional representation and backward regression results do not imply that the present continuous support space can be enumerated exactly; the paper also identifies an NP-complete regression subproblem and worst-case exponential search. Our implementation therefore uses a conservative finite abstraction and stores one common child policy for each observation cell rather than claiming an exact online solution.
+
+If a localization measurement $\hat x$ is consistent with a set $X(\hat x)$, every successor with ego component in $X(\hat x)$ remains in the posterior. Two possible observation sets that overlap cannot be used to create distinct policy branches for the same realized measurement. Refining a numerical cell in the verifier only improves a set enclosure; it does not create a new observation or reveal a hidden variable. The observation abstraction must cover every possible sensor/message output in the declared model. If an observation cell is split for computational reasons, all subcells retain the same policy child unless the measurement relation itself distinguishes them.
+
+The complete model support is a coupled relation
+\begin{equation}
+\begin{aligned}
+\xi&=(s_{0:H},w_{0:H-1},\eta_{0:H-1},v_{1:H}),\\
+\Omega_{\rm cert}(B,\Pi)&=
+\{\xi:s_0\in B,\ 
+(s,w,v)\in\mathfrak T_{\rm adm}(B,\Pi)\}.
+\end{aligned}
+\label{eq:cert-support}
+\end{equation}
+Here $\mathfrak T_{\rm adm}(B,\Pi)$ is the set of traces satisfying the protocol, transition, observation, and policy relations. It is generally not a Cartesian product: protocol, visibility, awareness, motion, and observation variables are coupled. The deployment claim is conditional on actual events, sensing errors, ego dynamics, and other-agent responses being contained in this declared relation. When such conformance is not established, the result is a model-conditional certificate, not an unconditional real-world guarantee.
+\section{Continuation--Commitment Graph and ICG Computation}
+\label{app:ccg}
+The first graph layer stores static road geometry and topology. The second attaches time-dependent formal permissions and resource-monitor guards. The third is a task-conditioned product over resource, task progress, option template, and time-window index. For a transition $e=(r,r')$, the CCG stores entry, stay, and exit constraints, capacity/conflict guards, the task-automaton transition, and observation labels under which the transition may be selected. The option automaton $\mathcal A_{SCO}$ is a finite template library; feedback parameters and continuous trajectories are instantiated only after a template is selected.
+
+\paragraph{Two-stage construction and incremental update.}
+At the beginning of a planning cycle, the coarse CCG is built without candidate-conditioned neural predictions:
+\begin{equation}
+G_{k}^{CC,0}=
+G_k^1\otimes G_k^{2,{\rm protocol}}
+\otimes\mathcal A_T\otimes\mathcal A_{SCO}.
+\label{eq:ccg-coarse}
+\end{equation}
+Its time-window guards use protocol intervals and conservative reachable/occupancy envelopes derived from the current support and declared agent-response sets. This graph supplies candidate prefixes and encoder commitment features. After a candidate prefix $\bar U$ is available, the predictor produces likely joint modes and observation hypotheses. These refine nominal ranking and candidate-specific scheduling windows:
+\begin{equation}
+G_k^{CC,\bar U}=
+\operatorname{Refine}(G_k^{CC,0},\bar U,\widehat\Omega_{\bar U}),
+\label{eq:ccg-refine}
+\end{equation}
+but $\operatorname{Refine}$ cannot remove any protocol-admissible branch or shrink the outer envelopes used by the verifier. The old graph is not retained as definitely available when a guard becomes unresolved; the corresponding edge is marked unresolved and the joint hypotheses remain active. Static geometry, resource polygons, lane connectivity, and conflict pairs are cached. An event-to-resource index updates only affected rule guards, and occupancy windows are recomputed only for resources intersecting relevant reachable tubes. Reverse reachability from accepting task-automaton states screens task-relevant resources.
+
+For a joint support $B$, let $\mathbb G(B)=\{G^s:s\in B\}$ be the correlated family of guarded graphs. The may graph contains edges available in at least one joint state; the must graph contains edges available in every joint state. These are screening summaries only. In particular, a path assembled from may-edges is not a feasible public path unless one observation-aware policy can realize it for every hidden state and every observation branch. Conversely, requiring one identical full path for all hidden states is unnecessarily restrictive when observations can later distinguish them. The correct test is existence of a nonanticipative policy tree over the observation partition.
+
+\paragraph{Intervention sensitivity.}
+A rule intervention disables one exogenous/actuated event in the protocol while holding common initial conditions and exogenous seeds fixed; all downstream controller, resource, visibility, and agent variables are recomputed under the intervened dynamics. A resource intervention disables the corresponding graph transitions while leaving the initial information support unchanged. Since feasibility can change from true to false, subtracting values that may equal $-\infty$ is not well-defined. We therefore record the lexicographic sensitivity tuple. Define $\operatorname{Win}_H(B;\mathcal P,\mathcal G)=1$ exactly when $B$ is covered by the computed certified inner winning family under protocol $\mathcal P$ and guarded resource graph $\mathcal G$:
+\begin{equation}
+\mathsf{Sens}_e=
+\left(
+\Delta_e^{W},\Delta_e^{V},\Delta_e^{A}
+\right),
+\label{eq:event-sensitivity}
+\end{equation}
+where
+\begin{align}
+\Delta_e^{W}&=
+\mathbf 1[\operatorname{Win}_H(B;\mathcal P,\mathcal G)]
+-\mathbf 1[\operatorname{Win}_H(B;\mathcal P^{-e},\mathcal G)],\nonumber\\
+\Delta_e^{V}&=
+\underline V_H^{SC}(B;\mathcal P,\mathcal G)
+-\underline V_H^{SC}(B;\mathcal P^{-e},\mathcal G),\nonumber\\
+\Delta_e^{A}&=
+\operatorname{Flex}_H(B;\mathcal P,\mathcal G)
+-\operatorname{Flex}_H(B;\mathcal P^{-e},\mathcal G),
+\label{eq:event-sensitivity-components}
+\end{align}
+with $\Delta_e^V$ evaluated only when both configurations have certified feasible policies. For a resource intervention, define
+\begin{equation}
+\mathsf{Sens}_r=
+(\Delta_r^W,\Delta_r^V,\Delta_r^A),
+\label{eq:resource-sensitivity}
+\end{equation}
+where
+\begin{align}
+\Delta_r^W&=
+\mathbf 1[\operatorname{Win}_H(B;\mathcal P,\mathcal G)]
+-\mathbf 1[\operatorname{Win}_H(B;\mathcal P,\mathcal G^{-r})],\nonumber\\
+\Delta_r^V&=
+\underline V_H^{SC}(B;\mathcal P,\mathcal G)
+-\underline V_H^{SC}(B;\mathcal P,\mathcal G^{-r}),\nonumber\\
+\Delta_r^A&=
+\operatorname{Flex}_H(B;\mathcal P,\mathcal G)
+-\operatorname{Flex}_H(B;\mathcal P,\mathcal G^{-r}),
+\end{align}
+with $\Delta_r^V$ evaluated only when both configurations have certified feasible policies. Feasibility change is examined first, then finite reserve change, then option-family change. These are model interventions, not observational real-world counterfactual labels. A common exogenous seed is held fixed, but causal descendants of the intervention are not artificially held fixed.
+
+\paragraph{Option start windows.}
+The option start time is not generally the resource entry time. For SCO $\mu$ and resource $r$, let $\Delta_{r,\mu}^{entry}$ be the set of offsets from option start to resource entry, $\Delta_{r,\mu}^{occ}$ the set of offsets during which the resource may be occupied, and $\Delta_{r,\mu}^{clear}$ the set of possible clearance offsets. These sets are obtained from the candidate trajectory enclosure and may be correlated. Let $I_{r}^{reach}$, $I_r^{in}$, $I_r^{occ}$, $I_r^{gap}$, and $I_r^{out}$ denote, respectively, reachable-entry, entry-permission, stay-permission, traffic-gap/capacity, and exit-permission time sets. For $A\ominus D=\{t:t+D\subseteq A\}$, a conservative start-time screen is
+\begin{equation}
+\begin{aligned}
+I_{r,\mu}^{start}={}&
+(I_r^{reach}\ominus\Delta_{r,\mu}^{entry})
+\cap(I_r^{in}\ominus\Delta_{r,\mu}^{entry})\\
+&\cap(I_r^{occ}\ominus\Delta_{r,\mu}^{occ})
+\cap(I_r^{gap}\ominus\Delta_{r,\mu}^{occ})\\
+&\cap(I_r^{out}\ominus\Delta_{r,\mu}^{clear}).
+\end{aligned}
+\label{eq:window}
+\end{equation}
+This formula requires permission at every possible entry offset, stay and capacity over every possible occupancy offset, and exit permission at every possible clearance offset. If entry, occupancy, and clearance offsets are correlated, the implementation may retain their joint timing polytope rather than replacing it by independent interval hulls; this reduces conservatism but must preserve the full joint set. The screen is not a trajectory certificate and an empty screened window proves only that this particular option instance fails the screen, not that the whole task is infeasible.
+
+\paragraph{Policy-relevant observation classes.}
+Fix a current information node and a candidate common public prefix policy $\pi$ (the same $\pi$ is used in every timing calculation below). Let $\mathcal H_{\mathcal D}$ be a finite or finitely abstracted set of pairs $(\omega,\omega')$ of hidden histories that are indistinguishable at the current node and whose feasible continuation-option sets after the prefix are disjoint:
+\begin{equation}
+\mathcal D(B,\pi)=
+\left\{(\omega,\omega'):
+\begin{aligned}
+&\omega\sim_B\omega',\\
+&\mathcal M^{tail}(\omega,\pi)
+\cap\mathcal M^{tail}(\omega',\pi)=\emptyset
+\end{aligned}\right\}.
+\label{eq:policy-relevant-pairs}
+\end{equation}
+Here $\omega\sim_B\omega'$ means that the histories belong to the same current observation node, and $\mathcal M^{tail}$ denotes the option/continuation choices that can still reach the task terminal contract. This class identifies decisions for which hidden-world-specific planning would require different continuation choices but the current controller cannot yet distinguish the worlds. Disjoint branch-specific tail-option sets do not rule out a public SCO whose root prefix is common and whose contingent child options are selected only after a valid future observation.
+
+\paragraph{Latest safe deferral deadline.}
+A decision point $D_{\mathcal D}$ represents the time at which the controller must resolve the branch-specific irreversible choice. For a fixed public prefix $\pi$, construct a conditional temporal network $\mathcal N_{\mathcal D}(\pi,d)$ by requiring that this decision not occur before candidate time $d$, while retaining the option/resource time constraints, contingent durations, observation labels, and decision-dependent conditional constraints. For each fixed discrete resource assignment and option template, controllable timepoints include option commitment, resource entry/clearance, and branch decisions; uncontrollable contingent links represent bounded event, message, and maneuver durations; observation propositions are assigned only when their observation timepoints occur. The latest safe deferral time is
+\begin{equation}
+\begin{aligned}
+\mathcal D_{\rm feas}(B,\pi)
+&=\{d\geq0:
+\operatorname{DC}(\mathcal N_{\mathcal D}(\pi,d))\},\\
+D_{\mathcal D}^{defer}(B,\pi)
+&=\sup\mathcal D_{\rm feas}(B,\pi).
+\end{aligned}
+\label{eq:deferral}
+\end{equation}
+Here $\operatorname{DC}(\cdot)$ denotes existence of a dynamic nonanticipative dispatch strategy. Such a strategy may react only to past observed contingent events and propositions; it cannot depend on future realizations. The check can be implemented by a CSTNUD-style timed-game encoding for the finite conditional temporal subproblem~\citep{zavatteri2019conditional}. Because the feasible set of exact decision times need not be assumed monotone, the implementation searches the finite partition induced by temporal constraint boundaries or solves the corresponding timed-game optimization; binary search is used only after monotonicity has been established for that restricted instance. If no common safe prefix is feasible at time zero, the candidate prefix is infeasible rather than assigned a meaningful positive ICG. If deferral remains feasible without a finite upper bound, $D_{\mathcal D}^{defer}=+\infty$.
+
+CSTNUDs provide a formal model for conditional constraints, uncertain durations, and controllable decision points; their dynamic-controllability semantics is a two-player game between controller and environment. They do not, by themselves, model cumulative road-resource capacity, swept vehicle footprints, or continuous nonlinear dynamics. Accordingly, the CCG/resource master fixes the discrete resource assignment and capacity conflicts, the CSTNUD-style scheduler checks conditional temporal dispatch, and the continuous optimizer/verifier checks geometry and vehicle dynamics. We do not claim that the complete RAMP-D problem is a CSTNUD.
+
+\paragraph{Guaranteed observation-separation time.}
+For a hidden history $\omega$ under the same prefix $\pi$, let $\mathcal Y_{0:t}^{\omega,\pi}$ be the set of all possible observation histories up to time $t$, including local sensor detections, occlusion, measurement error, and received messages. For a pair, define
+\begin{equation}
+\tau_{\rm sep}(\omega,\omega';\pi)=
+\inf\{t:
+\mathcal Y_{0:t}^{\omega,\pi}
+\cap\mathcal Y_{0:t}^{\omega',\pi}=\emptyset\},
+\label{eq:pair-separation}
+\end{equation}
+with $\tau_{\rm sep}=+\infty$ if no finite guaranteed separation exists. Then
+\begin{equation}
+T_{\mathcal D}^{obs,+}(B,\pi)=
+\sup_{(\omega,\omega')\in\mathcal D(B,\pi)}
+\tau_{\rm sep}(\omega,\omega';\pi).
+\label{eq:obs-separation}
+\end{equation}
+If $\mathcal D(B,\pi)$ is empty, no information-dependent branch is required and the information deadline is inactive. Guaranteed separation is computed from the set-valued sensor relation, validated visibility/occlusion geometry, measurement-error support, and protocol publication/delivery intervals. A mean detection time or a high-probability neural prediction is not a guaranteed separation time. If two histories retain a common possible observation trace indefinitely, their pairwise separation time is infinite.
+
+\paragraph{ICG bounds and interpretation.}
+For a fixed prefix $\pi$, compute certified intervals
+$T_{\mathcal D}^{obs,+}\in[\underline T,\overline T]$ and
+$D_{\mathcal D}^{defer}\in[\underline D,\overline D]$. The resulting ICG interval is
+\begin{equation}
+\operatorname{ICG}_{\mathcal D}(\pi)\in
+[\underline T-\overline D,\ \overline T-\underline D].
+\label{eq:icg-bounds}
+\end{equation}
+The sign is certified positive only if $\underline T>\overline D$, certified nonpositive only if $\overline T\leq\underline D$, and otherwise unresolved. The bounds are obtained with asymmetric, sound witnesses. For observation separation, disjoint outer enclosures of the two possible observation-history sets prove separation by the enclosure time and provide an upper bound on $\tau_{\rm sep}$; a common concrete observation trace (or an exact finite observation model) is required to prove that separation cannot occur earlier and hence to provide a lower bound. Intersection of two outer enclosures alone is not such a witness. For deferral, a validated dynamically controllable strategy at time $d$ gives a lower bound on $D^{defer}$; an upper bound requires proving that every later candidate-time cell is dynamically uncontrollable in the finite temporal abstraction. If the search leaves a later cell unresolved, the upper bound remains open and the ICG sign may remain unresolved. This uses the outer/inner reachability distinction of set-based verification~\citep{althoff2021set}. These bounds avoid using an optimistic observation time with a deadline computed under a different ego prefix. A positive certified ICG means the required observation is guaranteed to arrive only after the latest safe deferral point; the planner must either select a public option that covers the unresolved histories or reject this candidate prefix. It does not mean that no common option exists. An unresolved sign is not silently rounded to positive or negative.
+
+For the full resource path $\mathcal R(\mu)$ of an option, define $I_\mu^{start}=\bigcap_{r\in\mathcal R(\mu)}I_{r,\mu}^{start}$ and, when this set is nonempty, $D_{\mu}^{start}=\sup I_\mu^{start}$. The option-specific latest start time is computed separately after checking the candidate's full occupancy/clearance tubes. It is not the same as $D_{\mathcal D}^{defer}$: an option can be started before information arrives and branch later, or a branch decision can be deferred even though a particular option's start window is closing. Both constraints are retained in the master.
+
+\begin{algorithm}[t]
+\footnotesize
+\caption{Candidate-conditioned ICG and option-deadline computation}
+\label{alg:icg}
+\begin{algorithmic}[1]
+\Require Current support $B$, candidate public prefix $\pi$, protocol/observation model, CCG, SCO templates
+\State Propagate set-valued ego/agent tubes and observation supports under the fixed prefix $\pi$
+\State Form policy-relevant history pairs $\mathcal D(B,\pi)$ by comparing feasible tail-option sets
+\State Build a conditional event/decision temporal network for each discrete resource/SCO assignment
+\State Search decision-time cells and run dynamic-controllability checks to bound $D_{\mathcal D}^{defer}$
+\State For every pair in $\mathcal D$, find the first time cumulative observation-history sets are disjoint
+\State Take the worst pairwise separation time to bound $T_{\mathcal D}^{obs,+}$
+\State Compute the ICG interval using~\eqref{eq:icg-bounds}; preserve unresolved signs
+\State Intersect each SCO's start-time windows over all resources using~\eqref{eq:window}
+\State \Return ICG interval, option latest-start bounds, and the temporal dispatch strategy/certificate
+\end{algorithmic}
+\end{algorithm}
+
+All steps use the same candidate prefix $\pi$. The learned predictor may prioritize which pairs and SCO templates are checked first, but it cannot remove a pair from the certification support.
+
+\paragraph{Temporal controllability diagnostics.}
+Akmal et al.~\citep{akmal2020quantifying} define the degree of dynamic controllability for an STNU realization space $\Omega$ as
+\begin{equation}
+\operatorname{DDC}(\mathcal N)=
+\sup_{\substack{\Omega'\subseteq\Omega:\\
+\mathcal N|_{\Omega'}\ {\rm dynamically\ controllable}}}
+\frac{\operatorname{Vol}(\Omega')}{\operatorname{Vol}(\Omega)}.
+\label{eq:ddc}
+\end{equation}
+Their degree of strong controllability restricts $\Omega'$ to axis-parallel hyperrectangles, whereas DDC permits general measurable subsets; their practical relaxation method gives a lower bound using an inscribed controllable hyperrectangle. These are measures over the realization space of a temporal network; they are not physical-distance margins and are not identical to ICG. If a fixed-branch STNU subproblem has a declared bounded realization box $\Omega$, a DDC lower bound may be reported as an optional temporal-dispatch diagnostic. It is not used to certify the complete conditional traffic policy, and no probability interpretation is made unless a duration distribution is specified. The RAMP-D safety/continuation certificate remains worst-case over the full declared support.
+\section{Network Architecture and Training Supervision}
+\label{app:network}
+\paragraph{Typed tokens.}
+The encoder uses (i) ego tokens containing state estimates, localization bounds, and executed controls; (ii) agent-history tokens containing kinematics, dimensions, visibility, perceived rule context, and missingness; (iii) map tokens containing vectorized geometry and lane/connector topology; (iv) resource tokens containing capacity, conflicts, and permission summaries; (v) rule/event tokens containing source, jurisdiction, scope, effectivity, issue/receipt status, and affected-resource masks; (vi) information/task tokens containing joint-support factors, observation-equivalence classes, and task-automaton state; and (vii) commitment tokens containing coarse protocol/reachability bounds from the current cycle or still-valid cached certificates. Same-cycle refined ICG values are not fed back into the encoder that is used to generate the candidate prefixes. Tokens are constructed only from the current information support and received observations; hidden ground-truth rule states or unreceived messages are never exposed.
+
+\paragraph{Sparse typed attention.}
+For query $i$ and key $j$, the attention logit is
+\begin{equation}
+\begin{aligned}
+e_{ij}={}&\frac{q_i^\top k_j}{\sqrt d}+b_{ij}^{geom}+b_{ij}^{time}+b_{ij}^{topo}\\
+&+b_{ij}^{auth}+b_{ij}^{eff}+b_{ij}^{commit}+M_{ij}.
+\end{aligned}
+\label{eq:typed-attn}
+\end{equation}
+where $M_{ij}$ masks only structurally impossible relations. A currently unavailable-but-possible resource is not masked, since it may become available under a future rule branch. Row-wise attention couples agents within a single joint mode. Sparse agent--resource attention is evaluated only for reachable or conflicting pairs. Column-wise attention operates on pooled mode summaries, not on individual trajectories, to avoid blending mutually exclusive worlds. Static map features and unaffected resource tokens are cached; only event-affected subgraphs are updated.
+
+\paragraph{Agent-specific rule awareness.}
+For agent $i$ and rule event $e$, an awareness feature is inferred from its history, event visibility, occlusion, and message access:
+\begin{equation}
+\begin{aligned}
+\hat a_{i,e}&=\sigma\!\left(f_\phi[h_i,h_e,v_{i,e},m_{i,e},\Delta t_e]\right),\\
+h_i^{aware}&=h_i+\sum_{e\in\mathcal E_i^{top-k}}\alpha_{i,e}W_eh_e.
+\end{aligned}
+\label{eq:awareness}
+\end{equation}
+Here $v_{i,e}$ summarizes line-of-sight and occlusion, and $m_{i,e}$ summarizes message access. The awareness state may be categorical (aware, ambiguous, unaware) or continuous and carries the perceived rule version $\widetilde R_{i,k}$. It is a latent behavioral variable, not a substitute for the formal rule state. An agent's response is conditioned on this perceived context, not directly on the ego's hidden formal rule state. When no direct awareness label exists, it is weakly supervised by simulator visibility/message access and by the observed timing of behavior changes.
+
+\paragraph{Time-unrolled joint-mode factorization.}
+For each latent joint mode $\ell$, the decoder follows a causal time order rather than sampling independent future rule, occupancy, and observation states:
+\begin{align}
+&p_\phi(\omega_{k:k+H}\mid B_k,\bar U,\mathcal P)\nonumber\\
+&=\sum_\ell p_\phi(\ell\mid B_k,\mathcal P)
+\prod_{\tau=k}^{k+H-1}
+\Big[
+p_\phi(Q_{\tau+1}^{\rm ext}\mid Q_{\leq\tau}^{\rm ext},\ell,\mathcal P)\nonumber\\
+&\quad\cdot p_\phi(Q_{\tau+1}^{\rm act}\mid Q_{\leq\tau}^{\rm act},
+ \rho_\tau,\chi_\tau,\vartheta_\tau,\mathcal P)\nonumber\\
+&\quad\cdot K_R(Q_{\tau+1}^{\rm res},R_{\tau+1}\mid
+ Q_{\tau+1}^{\rm ext},Q_{\tau+1}^{\rm act},R_\tau,\chi_\tau,\mathcal P)\nonumber\\
+&\quad\cdot p_\phi(Y_{\tau+1}^{\rm int},\Xi_{\tau+1}\mid
+ \Xi_\tau,\widetilde R_\tau,A_\tau,x_\tau^e,u_\tau,\mathcal P)\nonumber\\
+&\quad\cdot \delta_{\operatorname{Occ}}(C_{\tau+1}\mid
+ x_{\tau+1}^e,\Xi_{\tau+1},\mathcal M)\nonumber\\
+&\quad\cdot p_\phi(A_{\tau+1}\mid A_\tau,Q_{\tau+1}^{\rm res},
+ \operatorname{Visibility}_{\tau+1},m_{\tau+1})\nonumber\\
+&\quad\cdot p_\phi(O_{\tau+1}\mid s_{\tau+1},u_\tau,\mathcal P)
+\Big],
+\label{eq:joint-factor-expanded}
+\end{align}
+where $\rho_\tau=\operatorname{Flow}(x_\tau^e,\Xi_\tau)$ is computed from the current state, the agent response over $[\tau,\tau+1]$ uses the awareness/perceived-rule context $A_\tau$ available at the start of that interval, and endpoint visibility updates $A_{\tau+1}$ for the next interval. In particular, the response kernel is not conditioned directly on an unobserved formal rule transition. $Q^{\rm ext}$ is invariant to interventions on $\bar U$, and ego effects on $Q^{\rm act}$ pass only through the time-ordered flow/controller state. $K_R$ is the protocol-constrained rule/resource transition. The observation/message process is generated after the corresponding state, visibility, and delivery events. Occupancy is derived from full footprints and resource polygons. This time ordering avoids a same-step algebraic cycle: actuated events depend on the current flow, while the resulting motions determine the next flow. Deterministic ego dynamics, controller clocks, and pending-message transitions follow Appendix~\ref{app:protocol} and are omitted from the displayed proposal distribution.
+
+
+\paragraph{Planning-oriented mode selection.}
+The finite set used by the trajectory optimizer combines high-likelihood modes, modes with large task-continuation or resource-deadline impact, and modes spanning distinct rule/observation hypotheses:
+\begin{equation}
+\widehat\Omega=\Omega_{\rm likelihood}\cup\Omega_{\rm SC-critical}\cup\Omega_{\rm coverage}.
+\label{eq:mode-selection}
+\end{equation}
+Mode scores use predicted value or option loss only to prioritize finite candidates. This selection does not define or reduce the model support for independent verification.
+
+\paragraph{Decoder factorization and physical derivation.}
+The scene encoder is run once per planning cycle. Candidate ego prefixes are embedded and injected into future queries. External-event queries are not conditioned on the ego prefix. Actuated-event queries receive ego information only through the induced aggregate-flow and controller trajectory. The decoder then resolves formal rules, estimates agent awareness, predicts interaction-dependent yielding and joint agent trajectories, and predicts the future observation/message process. Resource permissions are computed by the protocol transition; occupancy is computed by footprint--polygon intersection. An auxiliary occupancy head may be used for differentiable training, but is not used as the hard occupancy value. If there are $K$ joint modes, $A$ agents, $R_c$ critical resources, and $M_c$ option queries, sparse interaction with bounded neighbor counts $k_{AA},k_{AR},k_{RA},k_{MR}$ has approximate complexity
+\begin{equation}
+\begin{aligned}
+O\!\big(&KT_f d[A(k_{AA}+k_{AR})+R_c k_{RA}+M_c k_{MR}]\\
+&+K^2d\big),
+\end{aligned}
+\label{eq:complexity}
+\end{equation}
+where each sparse attention edge incurs a feature-dimension factor $d$, and the $K^2d$ term is applied only to pooled mode summaries. Projection/MLP costs are omitted from this interaction-count estimate. This avoids full all-token attention over all agents, map elements, events, and resources.
+
+\paragraph{Eight training signals and their sources.}
+The network is trained with a masked multi-task objective:
+\begin{equation}
+\begin{aligned}
+\mathcal L={}&\lambda_Q\mathcal L_{event}+\lambda_\Xi\mathcal L_{joint}\\
+&+\lambda_C\mathcal L_{occupancy}+\lambda_O\mathcal L_{observation}\\
+&+\lambda_V\mathcal L_{viability}+\lambda_M\mathcal L_{margin}\\
+&+\lambda_D\mathcal L_{deadline}+\lambda_{causal}\mathcal L_{causal}.
+\end{aligned}
+\label{eq:training}
+\end{equation}
+Each term has a distinct label source; no unavailable real-world label is assumed to exist:
+\begin{table*}[t]
+\centering\small
+\begin{tabular}{@{}p{0.14\textwidth}p{0.27\textwidth}p{0.49\textwidth}@{}}
+\toprule
+Signal & Supervision source & Construction and use\\
+\midrule
+$\mathcal L_{event}$ & SUMO/CARLA protocol logs; real controller labels where available & Event class, source/scope, rule-resolution state, and activation/effectivity interval. Use interval-censored likelihood when only an interval is known.\\
+$\mathcal L_{joint}$ & AV2-MF and WOMD for logged actions; paired SUMO/CARLA interventions for alternative ego prefixes & Joint multi-agent trajectory likelihood conditioned on the ego prefix. Real logs supervise only the action actually executed; alternative-action responses require paired interventions or are replaced by reachable tubes.\\
+$\mathcal L_{occupancy}$ & Derived from actor boxes/tracks and map/resource polygons; exact simulator footprints & Entry/stay/exit labels and conflict/capacity consistency are generated by polygon intersection. Auxiliary probabilities are not hard constraints.\\
+$\mathcal L_{observation}$ & CARLA ray casting/visibility and sensor logs; SUMO message issue/receipt logs & Local detection, occlusion, awareness proxies, message publication/receipt, and right-censored silence are supervised separately.\\
+$\mathcal L_{viability}$ & Exact finite contingent oracle / complete finite-model game solver; verifier certificates for candidate positives & Tri-state labels: positive only for a found and certified policy; negative only when the complete finite policy class is proved infeasible; otherwise unknown and masked. A counterexample to one candidate is not a negative viability label.\\
+$\mathcal L_{margin}$ & Validated reachable tubes and constrained trajectory optimization & Regress conservative lower bounds on continuous margins and use pairwise ranking for candidates from the same initial support.\\
+$\mathcal L_{deadline}$ & Protocol automata, resource windows, reachable tubes, and exact small-instance scheduler & Interval/ranking supervision for $D^{defer}$, option latest-start, and $T_{obs}^{+}$ using the same candidate prefix; do not use mean communication latency as a guaranteed deadline.\\
+$\mathcal L_{causal}$ & Paired simulator interventions with common initial state, exogenous seed, and protocol realization & Enforce invariance of external-event predictions to ego-prefix changes and route ego effects on actuated events through traffic flow/controller state.\\
+\bottomrule
+\end{tabular}
+\caption{Training signals and their label sources. Viability, margin, and deadline labels are generated offline, not assumed to be present in AV2-MF or WOMD.}
+\label{tab:supervision}
+\end{table*}
+
+For viability supervision, a candidate prefix is labeled positive only when a feasible public policy has been found and certified; it is labeled negative only when the exact finite oracle or a sound complete procedure proves that no policy in the explicitly stated finite policy class can satisfy the constraints. The verifier's failure of one candidate policy, a timeout, or a failed local optimization is not such a proof. Unresolved searches are labeled unknown and omitted from binary classification. A positive label is relative to the declared finite abstraction and terminal-tail contract, not a claim that the unrestricted continuous problem has been solved. For causal supervision, paired simulator runs hold the initial state, external event seed, and protocol realization fixed while changing the ego prefix. Observational data are not used to infer unobserved counterfactual agent responses. Rule-event and resource sensitivities in~\eqref{eq:event-sensitivity}--\eqref{eq:resource-sensitivity} are generated by interventions in the symbolic protocol/graph model, so they do not require real-world counterfactual annotations.
+
+\section{Physical Recoverability and Continuous Constraints}
+\label{app:physical}
+The ego model is the kinematic bicycle system
+\begin{gather}
+\dot p_x=v\cos\psi,\quad \dot p_y=v\sin\psi,\quad
+\dot\psi=\frac{v\tan\delta}{L_w},\nonumber\\
+\dot v=a,\quad\dot a=j,\quad\dot\delta=\omega_\delta,
+\label{eq:bicycle}
+\end{gather}
+The model is subject to bounded state and input variables.
+
+\paragraph{Vehicle reference point and footprint calibration.}
+In~\eqref{eq:bicycle}, $(p_x,p_y)$ denotes the centre of the rear axle,
+$\psi$ is the body longitudinal heading, $v$ is the signed longitudinal
+speed at the rear axle, and $\delta$ is the equivalent front-wheel steering
+angle. This convention is consistent with the kinematic bicycle equations
+$\dot p_x=v\cos\psi$, $\dot p_y=v\sin\psi$, and
+$\dot\psi=v\tan\delta/L_w$; choosing the body geometric centre instead
+would require a different translational velocity equation. For vehicle $i$,
+let $L_i$ and $W_i$ be the measured overall body length and width, and let
+$o_i=(o_{x,i},o_{y,i})$ be the body-frame displacement from the rear-axle
+centre to the geometric centre of the rectangular footprint. Its footprint is
+therefore
+\begin{equation}
+\begin{aligned}
+F_i(x_i)&=p_i+R(\psi_i)o_i+R(\psi_i)\mathcal B_i^{body},\\
+\mathcal B_i^{body}&=[-L_i/2,L_i/2]\times[-W_i/2,W_i/2].
+\end{aligned}
+\label{eq:rear-axle-footprint}
+\end{equation}
+where $R(\psi)$ is the planar rotation matrix. If front and rear overhangs
+$o_{f,i}$ and $o_{r,i}$ are measured from the respective axles to the body
+ends, then $o_{x,i}=(L_{w,i}+o_{f,i}-o_{r,i})/2$ and, for a symmetric
+body, $o_{y,i}=0$. The offset is a geometric calibration parameter; it must
+not be silently set to zero merely because the bicycle state is defined at
+the rear axle.
+
+For a reproducible nominal passenger-car benchmark, we use the CommonRoad
+BMW 320i parameter profile: overall length $4.508$ m, width $1.610$ m,
+front-axle-to-CG distance $a=1.1561957064$ m, and rear-axle-to-CG distance
+$b=1.4227170936$ m, giving $L_w=a+b=2.5789128$ m
+\citep{kochdumper2021verification,commonroad2025vehicleparams}. In this
+benchmark profile only, the CG is used as a nominal proxy for the rectangle
+centre, so $o_x=b$ and $o_y=0$. This is a documented approximation, not a
+claim that the CG equals the exact body-box centre. Before any physical
+vehicle safety claim, $o_i,L_i,W_i$ must be replaced by measured geometry.
+For CARLA actors, the bounding-box half-extents and actor-relative box-centre
+location provide the dimensions and offset; the offset must be transformed
+into the rear-axle body frame using the actor/axle calibration
+\citep{carla2026pythonapi}. For AV2/WOMD surrounding actors, use per-actor
+length/width when available and otherwise a conservative class-specific
+geometry envelope. The friction coefficient $\mu_f$ is a tire--road
+operating-condition parameter, not an immutable chassis dimension; it is
+therefore supplied per scenario as a conservative calibrated lower bound. The friction constraint is
+\begin{equation}
+\left(\frac{a}{\mu_f g_0}\right)^2+
+\left(\frac{v^2\tan\delta}{L_w\mu_f g_0}\right)^2\leq1.
+\label{eq:friction}
+\end{equation}
+The longitudinal term is acceleration $a$, not jerk $j$. This model is used
+only within its calibrated speed, curvature, and disturbance envelope.
+
+For a recovery maneuver $\mu$, the candidate start-time set is screened by~\eqref{eq:window} using the full offset sets from option start to resource entry, occupancy, and clearance. Entry permission is checked at every possible entry offset; stay permission, capacity, and distinct-agent conflict are checked over every possible occupancy offset; and protected exit is checked at every possible clearance offset. These offset sets are derived from the candidate trajectory tubes and retain correlations when available. Multiple shooting then propagates the ego state tube under~\eqref{eq:bicycle}, while swept ego and agent footprints are checked continuously over each integration interval. The time-window test is a conservative scheduling screen; it neither certifies the full maneuver nor establishes global infeasibility when no start survives.
+
+For stopping, define $\overline D_{\rm pref}(\Delta)$ as the maximum
+forward displacement during the common prefix and
+$\overline D_{\rm brake}(\mathcal X_\Delta)$ as the maximum
+additional displacement under an admissible jerk-limited braking policy
+from the reachable state tube $\mathcal X_\Delta$. The certified stop
+reserve is
+\begin{equation}
+r_{\rm stop}=d-\overline D_{\rm pref}(\Delta)
+-\overline D_{\rm brake}(\mathcal X_\Delta)-m_s.
+\label{eq:stop}
+\end{equation}
+The bicycle ODE has signed velocity and no implicit standstill clamp.
+Reaching $v=0$ with $a<0$ therefore initiates reverse motion; replacing
+negative velocity by zero would change the model. A finite braking rollout
+or reaching a declared small-speed/acceleration target box is not a proof of
+indefinite parking. Robust holding requires a separately verified invariant
+support and common backup law for the stated disturbances and measurement
+errors. The familiar constant-acceleration expression
+\begin{equation}
+d\geq v\Delta+\tfrac12a\Delta^2+
+\frac{(v+a\Delta)^2}{2b}+m_s
+\label{eq:stop-special}
+\end{equation}
+is only a sufficient screening bound under constant prefix acceleration,
+instantaneous availability of constant braking magnitude $b$, and
+nonnegative unsaturated speed. It is not the certificate for the jerk-limited
+model. If the protocol provides no finite latest-information time, $\Delta$
+cannot be inferred from message-delivery latency alone; the planner must
+remain upstream of the unresolved entry boundary or return uncertified.
+
+Hard feasibility and robustness margins are kept separate. Dynamics,
+input/state bounds, resource permissions, integer capacity, conflict,
+swept-body collision, monitor safety, and terminal membership are hard
+predicates. Let $\mathcal J_{\rm margin}$ contain only continuous physical
+buffers with fixed positive scales $s_j$, such as minimum swept-body
+clearance, stopping-distance reserve, clearance-time reserve, and friction
+reserve. For a feasible recovery continuation, define
+\begin{equation}
+r_{\rm rec}^{\omega,\mu}(\Pi)=
+\min\!\left\{1,\min_{j\in\mathcal J_{\rm margin}}
+\frac{\underline g_j^{\omega,\mu}(\Pi)}{s_j}\right\}.
+\label{eq:margin}
+\end{equation}
+The lower bound $\underline g_j$ is computed over the full reachable tube
+and continuous time, not at discrete knots alone. Hard constraints are
+checked independently; an active equality or a saturated integer capacity
+therefore does not force the reserve to zero. The reserve is defined only
+when the selected recovery continuation is hard-feasible.
+
+
+\section{Set-Valued Viability, Optimization, and Verification Details}
+\label{app:verification}
+
+\paragraph{Observation nodes and public controls.}
+A policy node $\nu$ contains all hidden histories with the same realized observation history. Its control and high-level SCO are common to every state in its joint posterior support $B_\nu$. For a continuous sensor, the observation relation is set-valued. Two hidden states cannot be assigned different policy children when their possible observation histories overlap for the realized measurement. For an observation cell $\mathcal C_o$, its posterior support includes all successors consistent with any observation in that cell:
+\begin{equation}
+B_{\mathcal C_o}=
+\bigcup_{o\in\mathcal C_o\cap\mathcal O_{\mathcal P}(B,u)}
+\operatorname{Post}_{\mathcal P}(B,u,o),
+\label{eq:posterior-union}
+\end{equation}
+A numerical partition split does not create a new policy branch. If the observation abstraction cannot establish that two measurement sets are disjoint, they share a child policy.
+
+\paragraph{Certified terminal contracts.}
+A terminal certificate is a tuple
+\begin{equation}
+\mathfrak C_{\rm term}=
+(C_{\rm supp},\Pi_{\rm tail},\bar T_{\rm tail},
+\mathcal P_{\rm id},\Theta_{\rm clock},\mathcal E_{\rm model},F_T),
+\label{eq:terminal-contract}
+\end{equation}
+where $C_{\rm supp}$ is the abstract joint-support cell, $\Pi_{\rm tail}$ is a public observation-conditioned policy tree, $\bar T_{\rm tail}<\infty$ is a verified completion-time bound, $\mathcal P_{\rm id}$ identifies the applicable protocol version, $\Theta_{\rm clock}$ gives the compatible time/controller phase, $\mathcal E_{\rm model}$ records the physical and agent-response enclosures, and $F_T$ is the accepting task-automaton set. The certificate is valid only for concrete supports $B\subseteq\gamma(C_{\rm supp})$ and matching protocol/clock/model context. It is discharged only after every posterior branch of $\Pi_{\rm tail}$ reaches $F_T$ while remaining hard-safe. The mission ends at task acceptance; safety after acceptance is not claimed unless the terminal contract additionally includes an invariant backup law. A refuge that only supports indefinite safe waiting may be in the safety invariant set but is not in the task-completion terminal family.
+
+\paragraph{Finite inner approximation of task-winning supports.}
+Let $\mathcal B_{\rm abs}$ be a finite family of abstract joint-support cells, each combining continuous state enclosures with discrete protocol, resource-monitor, task, and agent-response modes. Let $\gamma(C)$ be the concrete support represented by cell $C$. Starting from terminal cells whose stored tails satisfy~\eqref{eq:terminal-contract}, compute:
+\begin{equation}
+\begin{aligned}
+\underline{\mathcal W}_0^{SC}
+&=\underline{\mathcal K}_{\rm term}^{SC},\\
+\underline{\mathcal W}_{h+1}^{SC}
+&=\underline{\mathcal W}_h^{SC}\cup
+\{C:\exists u\text{ common to }\gamma(C),\\
+&\quad \operatorname{Tube}^{+}(C,u)\subseteq\mathcal X_{\rm safe},\\
+&\quad \forall o\in\mathcal O_{\mathcal P}(C,u),\
+ B_o\subseteq\gamma(C_o),\\
+&\quad C_o\in\underline{\mathcal W}_h^{SC}
+ \text{ with one stored child policy per }o\}.
+\end{aligned}
+\label{eq:sc-inner-iteration}
+\end{equation}
+Here $\operatorname{Tube}^{+}$ is an outward enclosure of the continuous reachable tube, and each $B_o$ is the full posterior union for one observation cell. The same action is used for every hidden state at the parent node. If a posterior is not contained in a certified child cell, the parent cell is not added. A sound union of child cells is allowed only when the union retains a common policy and the same observation history. This construction is an inner approximation: every retained cell has a stored policy, but omitted cells may still be winning. It is not a complete computation of the continuous winning set.
+
+For a concrete support $B$, membership in the computed family means that there exists a retained cell $C$ with $B\subseteq\gamma(C)$. The certificate stores the rank
+\begin{equation}
+d(C)=\min\{h:C\in\underline{\mathcal W}_h^{SC}\}.
+\label{eq:abstract-rank}
+\end{equation}
+Every nonterminal child in the stored policy graph has rank at most $d(C)-1$. A receding-horizon replacement is accepted only if it preserves this inherited rank bound. The rank is not recomputed upward from a fresh fixed horizon after each control step. If an external protocol change invalidates the stored child mapping or removes all certified task tails, no liveness guarantee is made; the controller may use a separately certified safety invariant or return \texttt{UNKNOWN}/\texttt{SAFE\_ONLY}.
+
+
+\paragraph{One-step safe-continuation controls and rank constraint.}
+For $h\geq 1$, the predecessor controls are
+\begin{equation}
+\mathcal U_h^{SC}(B)=
+\left\{u\in\mathcal U_{\rm pub}(B):
+\begin{aligned}
+&\operatorname{SafeTube}(B,u),\\
+&\operatorname{Succ}_{\mathcal P}(B,u)\subseteq
+\mathcal W_{h-1}^{SC}
+\end{aligned}\right\}.
+\label{eq:sc-action-set}
+\end{equation}
+The controller executes only controls that decrease the inherited finite completion rank:
+\begin{equation}
+\mathcal U_{\rm rank}^{SC}(B)=
+\left\{u\in\mathcal U_{\rm pub}(B):
+\begin{aligned}
+&\operatorname{SafeTube}(B,u),\\
+&\forall B^+\in\operatorname{Succ}_{\mathcal P}(B,u),\\
+&B^+\in\mathcal W_H^{SC},\\
+&d_H(B^+)<d_H(B)
+\end{aligned}\right\}.
+\label{eq:rank-action}
+\end{equation}
+At each certified abstract information cell the controller stores one common action, a posterior-to-child map, and its nonincreasing task-clock context. An unexpected protocol mode or uncovered observation invalidates the task-continuation certificate; it does not justify constructing a branch from hidden truth. The goal task then falls back to the separate safety-invariant controller when available.
+
+\paragraph{Verified maneuver options and type coverage.}
+Let $\mathfrak M_{\rm pub}$ be a fixed library of public maneuver templates. Instantiation at $B$ yields $\mathcal A_{\rm cand}^{SC}(B)$. The lightweight candidate type-coverage score is
+\begin{equation}
+\begin{aligned}
+\mathcal M_{\rm cand}(B)&=
+\{\operatorname{type}(\mu):
+\mu\in\mathcal A_{\rm cand}^{SC}(B)\},\\
+\operatorname{Flex}_{\rm cand}(B)&=
+\sum_{m\in\mathcal M_{\rm cand}(B)}w_m.
+\end{aligned}
+\label{eq:flex-candidate}
+\end{equation}
+Let $\mathcal E_{\rm cert}$ be the declared traffic-protocol, sensing, vehicle, disturbance, and agent-response model bounds. A candidate enters the certified option family only after independent policy verification:
+\begin{equation}
+\mathcal A_{\rm cert}^{SC}(B)=
+\left\{\mu\in\mathcal A_{\rm cand}^{SC}(B):
+\begin{aligned}
+&\operatorname{Verify}(B,\Pi_\mu,\mathcal P,\mathcal E_{\rm cert})\\
+&\qquad=\texttt{CERTIFIED}
+\end{aligned}\right\}.
+\label{eq:sco-set}
+\end{equation}
+A certified option retains its complete observation-labelled policy rather than only its nominal trajectory. Distinct certified types are counted by
+\begin{equation}
+\begin{aligned}
+\mathcal M_H(B)&=\{\operatorname{type}(\mu):\mu\in\mathcal A_{\rm cert}^{SC}(B)\},\\
+\operatorname{Flex}_H(B)&=\sum_{m\in\mathcal M_H(B)}w_m.
+\end{aligned}
+\label{eq:flex}
+\end{equation}
+The type weights $w_m$ are fixed in advance; two options sharing a type can still differ in feasible windows, guards, and terminal policies. The policy-tree flexibility score takes the minimum type coverage over reachable observation nodes. These scores guide search and reporting but never replace the hard task-winning condition.
+
+\paragraph{Safety-only invariant set.}
+The exact information-state safety-invariant set is the greatest fixed point
+\begin{equation}
+\mathcal S_\infty=\nu\mathcal K.\left(\mathfrak B_{\rm safe}\cap\operatorname{Pre}_{\rm obs}(\mathcal K)\right),
+\label{eq:safe-invariant}
+\end{equation}
+
+Safety is computed independently from task completion. Let $\mathcal B_{\rm abs}$ be a finite support-cell partition. Starting from cells wholly inside the hard-safe domain, remove any cell for which no common observation-measurable backup law returns every possible posterior to the remaining family:
+\begin{equation}
+\begin{aligned}
+\mathcal S^{(0)}&=\{C\in\mathcal B_{\rm abs}:
+\gamma(C)\subseteq\mathcal X_{\rm safe}\},\\
+\mathcal S^{(n+1)}&=\{C\in\mathcal S^{(n)}:
+C\in\operatorname{Pre}_{\rm info}(\mathcal S^{(n)})\}.
+\end{aligned}
+\label{eq:info-invariant-iteration}
+\end{equation}
+The fixed point $\mathcal S_{\rm in}$ is an inner approximation. The represented concrete information supports are
+\begin{equation}
+\mathcal S_\infty^{\rm in}=
+\{B\ne\emptyset:\exists C\in\mathcal S_{\rm in},\
+B\subseteq\gamma(C)\},
+\label{eq:invariant-downward-closure}
+\end{equation}
+provided protocol phase, public time, clocks, measurement context, and model assumptions match the stored backup certificate. A narrower support may use the containing cell's same common backup law. This is a family of information supports, not a union of hidden states from different cells. The set is an inner approximation to the safety invariant; no task-completion property follows from membership.
+
+\paragraph{Public backup-law representation.}
+For a retained cell $C$, a backup node stores a common offset $u_C$, gain $K_C$, reference $\bar x_C$, input-limit box $\mathcal U_C$, and one child for each possible observation cell. The sampled-data execution law is
+\begin{equation}
+\begin{aligned}
+\hat x_k&=x_k+e_k,\qquad e_k\in E_x,\\
+u_k&=\operatorname{sat}_{\mathcal U_C}
+ \big(u_C+K_C(\hat x_k-\bar x_C)\big),\\
+u(t)&=u_k,\qquad t\in[t_k,t_k+h).
+\end{aligned}
+\label{eq:sampled-public-backup}
+\end{equation}
+Only available ego measurements are used. Hidden rule states, unreceived messages, and future observations are not feedback inputs. For source ego box $X_C$, the validated control image must enclose
+\begin{equation}
+\begin{aligned}
+U_C\supseteq\{&
+\operatorname{sat}_{\mathcal U_C}
+(u_C+K_C(x+e-\bar x_C)):\\
+&x\in X_C,\ e\in E_x\}.
+\end{aligned}
+\label{eq:public-control-image}
+\end{equation}
+State-dependent input limits and inter-sample constraints are checked over the full tube. A gain obtained from nominal simulation or a local optimizer is not a certificate.
+
+\paragraph{Validated continuous-time reachable tubes.}
+For a substep of duration $\Delta$, let $Z_0$ enclose the initial state, $U$ the common control image, and $W$ the disturbance set. For the continuous vector field $F$, an outward-rounded Picard enclosure $Z$ is accepted only when its self-mapping inclusion is validated:
+\begin{equation}
+\begin{aligned}
+Z_0+[0,\Delta]F(Z,U,W)&\subseteq Z,\\
+Z_+&\supseteq Z_0+\Delta F(Z,U,W).
+\end{aligned}
+\label{eq:picard-tube}
+\end{equation}
+Then the exact reachable tube over the substep is contained in $Z$ and its endpoint is contained in $Z_+$. If inclusion fails, the interval is bisected, the set representation is refined, or the enclosure is inflated and checked again. Validated Taylor models or verified zonotope/constrained-zonotope propagation may be used if all remainder terms are enclosed. This is the set-propagation principle reviewed by Althoff et al.~\citep{althoff2021set}: the computed outer set must contain every admissible trajectory.
+
+For each surrounding agent $i$, define a physical action envelope $\mathcal U_i^{phys}$ from validated bounds on acceleration, steering/curvature, speed, and model error. A smaller protocol/behavior envelope $\mathcal U_i^{beh}$ may be intersected only when the operational assumptions or conformance data justify that the actual response remains inside it. The certification envelope is
+\begin{equation}
+\mathcal U_i^{cert}=
+\begin{cases}
+\mathcal U_i^{phys}\cap\mathcal U_i^{beh},
+&\begin{gathered}
+\text{if behavior-envelope}\\[-2pt]
+\text{inclusion is justified},
+\end{gathered}\\
+\mathcal U_i^{phys},&\text{otherwise}.
+\end{cases}
+\label{eq:agent-envelope}
+\end{equation}
+The verifier assumes and records that the actual agent response is contained in $\mathcal U_i^{cert}$. Agent-awareness and learned trajectory distributions may rank likely responses, but they do not shrink this outer envelope. If the physical envelope is too broad to certify a maneuver, the correct result is \texttt{UNKNOWN} or no certificate, not silent removal of low-probability behavior.
+
+Each state tube is mapped to an outer enclosure of the oriented vehicle footprint over the full substep. Resource occupancy and capacity use the same footprint enclosures and resource polygons as~\eqref{eq:resource-feas}. A separating-axis or support-function test certifies nonintersection only when a strictly positive lower separation bound is obtained. Event-time intervals are split at their earliest/latest endpoints and both sides of each possible discrete jump are checked. Let $\mathcal R^+(B,\Pi)$ be the validated outer reachable tube and $\mathcal X_{\rm bad}$ the union of collision, rule, resource, and monitor failure sets. The safety test is
+\begin{equation}
+\mathcal R^+(B,\Pi)\cap\mathcal X_{\rm bad}=\emptyset.
+\label{eq:outer-safety-test}
+\end{equation}
+Because $\operatorname{Reach}(B,\Pi)\subseteq\mathcal R^+(B,\Pi)$, disjointness proves safety for all represented trajectories. Intersection of the outer enclosure with $\mathcal X_{\rm bad}$ is inconclusive: a constrained concretization query or an underapproximating witness search must validate an actual violating trace before returning \texttt{COUNTEREXAMPLE}. If neither safety nor a concrete violation is established, return \texttt{UNKNOWN}. An outer reachable set is not used as an inner winning-set approximation.
+
+\paragraph{Finite branching and execution-time assumptions.}
+The verifier explores every finite discrete branch allowed by $\mathcal P$ over the certified horizon. The protocol abstraction must exclude Zeno behavior on that horizon, for example by a minimum dwell time or an explicit finite event-count bound. Continuous-valued observations are represented by a finite covering partition whose cells cover the full observation support; overlap between possible observation sets is preserved as a shared policy branch. The computation, sensing, communication, and actuation worst-case delays are included in the commitment schedule. A policy that becomes available only after its latest executable commitment time is rejected even if its nominal trajectory is otherwise feasible.
+
+\paragraph{Full-support verification and CEGAR.}
+The verifier explores the product of protocol modes, information-support cells, task/resource monitor modes, and continuous reachable tubes. At each observation node it aggregates all successors consistent with the same observation before creating a child policy node. A task-preserving terminal node is discharged only when its complete posterior is covered by a terminal certificate in $\underline{\mathcal K}_{\rm term}^{SC}$ and its inherited rank contract is satisfied. A safety-only fallback is checked against $\mathcal S_{\rm in}$ and labeled separately. A concrete violating trace returns \texttt{COUNTEREXAMPLE}; it invalidates the current policy tree but does not prove that every alternative continuation fails. An abstract trace that cannot be concretized is spurious; the responsible continuous or observation cell is split along the predicate or interval dimension that separates the abstract transition from the concrete reachable set. Refinement of a numerical cell never creates a new observation branch. The verifier returns \texttt{CERTIFIED} only when every queue node is discharged; it returns \texttt{UNKNOWN} if any tube, observation relation, containment, or concretization query remains unresolved or the budget expires.
+
+The certificate records protocol branch coverage, reachable-tube enclosures, continuous separation margins, resource-monitor transitions, observation-to-child mappings, terminal support-cell identifiers, rank/deadline state, backup/option identifiers, and the model-envelope versions. Under the explicit assumptions that actual event/observation evolution is contained in $\mathcal P$, actual ego and agent motion is enclosed by the validated tubes, observation partitions are sound, and the stored certificate context matches, \texttt{CERTIFIED} establishes safety over the verified prefix and task completion through the stored finite terminal policy. It does not guarantee against unmodeled events or agent behavior outside the declared support.
+
+\begin{algorithm}[t]
+\footnotesize
+\caption{Offline task-continuation terminal-set synthesis}
+\label{alg:terminal-sc}
+\begin{algorithmic}[1]
+\Require Joint information cells, task automaton, protocol, SCO library, reachable-tube verifier
+\State Initialize $\underline{\mathcal K}_{\rm term}^{SC}\gets\emptyset$
+\ForAll{candidate information cells $C$}
+  \ForAll{public SCO templates $\mu$ compatible with the task state in $C$}
+    \State Synthesize one common feedback prefix and observation-conditioned tail
+    \State Verify all protocol branches, resource windows, reachable tubes, and finite completion bound
+    \If{all posterior supports reach an accepting task state while remaining safe}
+      \State Store the policy tree, context, rank base, and tail-time bound; add $C$ to $\underline{\mathcal K}_{\rm term}^{SC}$
+      \State \textbf{break}
+    \EndIf
+  \EndFor
+\EndFor
+\State \Return $\underline{\mathcal K}_{\rm term}^{SC}$ and stored public option tails
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\footnotesize
+\caption{Finite inner approximation of goal-conditioned information-state viability}
+\label{alg:sc-winning}
+\begin{algorithmic}[1]
+\Require $\underline{\mathcal K}_{\rm term}^{SC}$, support partition, protocol, finite horizon $H$
+\State $\underline{\mathcal W}_0^{SC}\gets\underline{\mathcal K}_{\rm term}^{SC}$
+\For{$h=0$ to $H-1$}
+  \State $\underline{\mathcal W}_{h+1}^{SC}\gets\underline{\mathcal W}_h^{SC}$
+  \ForAll{candidate support cells $C$ not yet in $\underline{\mathcal W}_h^{SC}$}
+    \State Search for one common public control and a validated safe tube
+    \State Propagate all protocol successors and aggregate by realized observation
+    \If{every full posterior is covered by one certified child cell in $\underline{\mathcal W}_h^{SC}$}
+      \State Store the common control, observation-to-child map, and rank $h+1$
+      \State Add $C$ to $\underline{\mathcal W}_{h+1}^{SC}$
+    \EndIf
+  \EndFor
+\EndFor
+\State \Return $\underline{\mathcal W}_H^{SC}$ and the stored rank-decreasing policy graph
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\footnotesize
+\caption{Full-support tube verification with counterexample-guided refinement}
+\label{alg:full-verifier}
+\begin{algorithmic}[1]
+\Require Candidate policy $\Pi$, complete declared protocol support, dynamics/envelopes, terminal certificates, time budget
+\State Initialize queue with the complete initial information support and inherited rank
+\While{queue nonempty and time remains}
+  \State Pop the earliest unresolved node; enumerate all enabled protocol branches
+  \State Propagate validated ego/agent tubes to the next event or observation
+  \If{all outer tubes are disjoint from hard failure sets}
+    \State Aggregate all successors sharing each possible observation
+    \If{terminal node}
+      \If{posterior is covered by a matching terminal certificate and rank contract}
+        \State Discharge node
+      \Else
+        \State Check suspected miss by complete containment/concretization; otherwise refine
+      \EndIf
+    \Else
+      \State Enqueue every possible observation child with its inherited rank bound
+    \EndIf
+  \Else
+    \State Concretize the suspected violation in the original hybrid model
+    \If{a concrete violation is validated} \State \Return \texttt{COUNTEREXAMPLE}
+    \ElsIf{the abstract trace is spurious} \State Split the responsible tube/observation cell and enqueue children
+    \Else \State Mark unresolved and refine if budget permits
+    \EndIf
+  \EndIf
+\EndWhile
+\If{queue empty and no unresolved node} \State \Return \texttt{CERTIFIED}
+\Else \State \Return \texttt{UNKNOWN} \EndIf
+\end{algorithmic}
+\end{algorithm}
+
+\section{Evaluation Metrics and Ablation Protocol}
+\label{app:eval}
+The primary closed-loop results report lawful task acceptance, conservative continuation loss, missed commitment deadlines, certificate coverage, and wall-clock latency under matched uncertainty assumptions. The definitions below distinguish exact-oracle metrics from empirical closed-loop observations.
+
+\paragraph{Nonstandard metric definitions.}
+Let $\mathcal N_{\rm elig}$ be the set of evaluated decision nodes whose current supports have a certified task-continuation rank $d(B)>0$, and let $u_B$ be the common control selected at node $B$. The robust one-step continuation-loss rate is
+\begin{equation}
+\mathrm{RCLR}=
+\frac{1}{|\mathcal N_{\rm elig}|}
+\sum_{B\in\mathcal N_{\rm elig}}
+\mathbf 1\!\left[
+\begin{gathered}
+\exists o\in\mathcal O_{\mathcal P}(B,u_B):\\
+B_o\notin\underline{\mathcal W}_{d(B)-1}^{SC}
+\end{gathered}
+\right].
+\label{eq:rclr}
+\end{equation}
+It is computed with the exact oracle on small instances and with verifier-decidable branches on larger instances; unresolved branches are reported separately. For the actually realized observation $o_B^\star$, the realized continuation-loss rate is
+\begin{equation}
+\mathrm{ECLR}=
+\frac{1}{|\mathcal N_{\rm obs}|}
+\sum_{B\in\mathcal N_{\rm obs}}
+\mathbf 1[B_{o_B^\star}\notin
+\underline{\mathcal W}_{d(B)-1}^{SC}],
+\label{eq:eclr}
+\end{equation}
+where $\mathcal N_{\rm obs}$ contains eligible executed nodes with a valid observed child. ECLR is empirical and does not replace the worst-case RCLR.
+
+Public-option retention is computed over option types present both before and after a prefix:
+\begin{equation}
+\mathrm{POR}=
+\frac{\sum_{m\in\mathcal M_{\rm init}\cap\mathcal M_{\rm post}}w_m}
+{\sum_{m\in\mathcal M_{\rm init}}w_m}.
+\label{eq:por}
+\end{equation}
+Here the sets contain certified option types; new option types are reported separately as option expansion. A zero initial-option denominator is reported as N/A. For transitions whose certificate context remains valid, rank-monotonicity violation is $\mathrm{RMV}=N_{\rm rank\ nondecrease}/N_{\rm valid\ rank\ transitions}$, where a nondecrease means the child rank is not strictly smaller than the parent rank. The safe-only fallback rate is the fraction of episodes ending in a certified safety controller without a certified task-completion tail. Let $N_{\rm ICG+}$ be the number of decision classes whose ICG is positive under the exact oracle or certified positive interval, and $N_{\rm late}$ the number for which no compatible public continuation is committed by the certified deferral deadline. The ICG deadline-miss rate is $\mathrm{IDM}=N_{\rm late}/N_{\rm ICG+}$. Let $N_{\rm sign}$ count oracle-decidable classes and $N_{\rm match}$ those for which the interval classifier returns the correct sign; $\mathrm{ICGAcc}=N_{\rm match}/N_{\rm sign}$. Unresolved interval cases are excluded from sign accuracy and reported separately. Let $N_{\rm pub}$ count positive-ICG classes for which a common public SCO is independently certified; public-option coverage is $\mathrm{POC}=N_{\rm pub}/N_{\rm ICG+}$. Conditional temporal-schedule success is $\mathrm{TSS}=N_{\rm DC}/N_{\rm sched}$, where $N_{\rm DC}$ counts fixed-branch temporal instances for which the dynamic-controllability checker returns a strategy. These metrics are N/A when their denominators are zero.
+
+Let $N_{\rm critical}$ be the number of capability-critical observation/mode classes identified by the exact finite oracle or exhaustive intervention analysis on the declared finite support, and $N_{\rm retained}$ the number retained by the finite selector. On large instances, where only a subset of critical classes may be discovered, report this recall as a lower bound. Critical-mode recall is $\mathrm{CMR}=N_{\rm retained}/N_{\rm critical}$. Scenario reduction ratio is $\mathrm{SRR}=1-|\widehat\Omega|/|\Omega_{\rm candidate}|$, with both sets defined over the same joint-mode universe. Certification coverage is $\mathrm{CCov}=N_{\rm cert}/N_{\rm test}$, where $N_{\rm cert}$ counts initial supports for which the verifier returns \texttt{CERTIFIED} within budget; \texttt{UNKNOWN} is not counted as certified. Empirical false-safe rate is
+\begin{equation}
+\mathrm{FSR}=\frac{N_{\rm false}^{\rm exec}}{N_{\rm cert}^{\rm exec}},
+\label{eq:fsr}
+\end{equation}
+where numerator and denominator count simulator executions, not initial supports; only executions whose ground-truth trace remains inside the declared model envelope enter this falsification rate. Out-of-envelope traces are counted separately as conformance failures. For interval-box tubes $Z_t=\prod_j[\underline z_{tj},\overline z_{tj}]$, normalized tube width is $\mathrm{NTW}=\frac{1}{Tn}\sum_{t=1}^{T}\sum_{j=1}^{n}(\overline z_{tj}-\underline z_{tj})/s_j$, where $s_j$ are fixed state scales. This measures enclosure conservatism, not soundness by itself. Lawful task-completion rate is $N_{\rm legal\ accept}/N_{\rm feasible\ oracle\ episodes}$ and is reported only where the denominator is known from the finite oracle; on larger instances report the raw lawful completion fraction without claiming a ground-truth feasible-episode denominator. Safe-only fallback rate is $\mathrm{SOFR}=N_{\rm safe-only}/N_{\rm episodes}$, and wait fraction is $\mathrm{WF}=N_{\rm wait\ steps}/N_{\rm decision\ steps}$. Critical-resource recall@K is $|\mathcal R_{\rm critical}\cap\mathcal R_{\rm topK}|/|\mathcal R_{\rm critical}|$. A zero denominator is reported as not applicable. FSR is N/A if no certified simulator execution is available. All episode-level rates are accompanied by confidence intervals and task-feasible/task-infeasible subsets are reported separately.
+
+\paragraph{Ablation configurations.}
+Each variant uses the same evaluation instances and compute limits as the full method. Forecast-only ablations do not alter the verifier's declared uncertainty support unless the ablation explicitly removes the independent verifier.
+\begin{table*}[t]
+\centering\small
+\begin{tabular}{@{}p{0.07\textwidth}p{0.40\textwidth}p{0.43\textwidth}@{}}
+\toprule
+ID & Variant & Primary diagnostic\\
+\midrule
+A1 & Replace $\mathcal W_H^{SC}$ with $\mathcal S_\infty$ & Safe-but-noncompleting behavior; lawful completion and safe-only fallback\\
+A2 & Remove persistent rank/deadline contract & Horizon procrastination; rank violations and completion-time bound\\
+A3 & Remove CCG/ICG and use fixed resource deadlines & Late commitment, option loss, and conditional-schedule failure\\
+A4 & Remove agent awareness and causal flow-mediated event coupling & Awareness calibration, event-time coverage, and occupancy error\\
+A5 & Likelihood-only Top-$K$ mode selection & Critical-mode recall and continuation loss\\
+A6 & Independent ego/rule/agent marginals & False-inclusion count and excess conservatism on exact oracle cases\\
+A7 & Remove full-support verification/CEGAR & False-safe rate, certification coverage, and unresolved cases\\
+\bottomrule
+\end{tabular}
+\caption{Targeted ablations and the specific theoretical coupling each tests.}
+\label{tab:ablations}
+\end{table*}
+\paragraph{Evaluation statistics.}
+We use at least five independent simulation seeds for each controlled scenario family, summarize episode-level rates with 95\% bootstrap intervals, and use paired comparisons where the same event and initial conditions are replayed. Scenario and map identities, simulator seeds, and protocol realizations are split to prevent leakage.
+
+\section{Reproducibility Protocol}
+\label{app:reproducibility}
+The experiments are run in four stages. (1) Download the official AV2-MF train/validation split and WOMD Motion train/validation split; convert tracks and maps to a common local-frame representation, derive actor footprints, and compute resource-occupancy labels by polygon intersection. Keep maps, road segments, and scenario identifiers disjoint between train and test. (2) Pretrain the joint-motion component on AV2-MF and WOMD; train rule, awareness, observation, and commitment components only on labels available from the corresponding source or generated protocol simulation. Report AV2-MF, WOMD, and AV2 Map Change results separately rather than pooling incompatible label spaces. (3) Generate protocol labels in SUMO/CARLA from a versioned scenario manifest. For each event, record physical activation, message issue, message receipt, and local first observation as separate timestamps. Sweep event type, delay, traffic flow, resource capacity, conflict topology, ego initial state, localization error, friction, sensor occlusion, and other-agent response. Use simulator ground truth only for training signals explicitly identified as simulator-derived and for held-out evaluation; do not leak future simulator state into online observations. (4) Construct the safety invariant and task-continuation terminal sets offline for each vehicle/dynamics/protocol envelope, freeze the stored backup/option graphs, then evaluate the online planner and verifier on held-out scenario seeds and event schedules.
+
+Publish simulator versions, map/scenario manifests, vehicle parameters, protocol automata, observation partitions, tube integration and outward-rounding settings, cell-splitting predicates, optimizer tolerances, verification budget, random seeds, and hardware. Empirical tube coverage is the fraction of sampled simulator states contained in the outer tubes; in-envelope false-safe count is the number of simulator-confirmed violations among \texttt{CERTIFIED} runs whose traces satisfy the declared model envelope, while out-of-envelope traces are recorded as conformance failures; certification coverage counts only initial supports for which the verifier returns \texttt{CERTIFIED} within budget.
+
+% The aaai2027 style selects the bibliography style automatically.
+\bibliography{aaai2027}
+
+\end{document}

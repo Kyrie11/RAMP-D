@@ -14,9 +14,7 @@
 
 WOMD parser 把 `Track.id` 转成稳定字符串身份，把来源数组下标存入 track metadata；无效状态保留时间槽但 `valid=False`，不做零填充。AV2 parser 按场景全局 `timestep` 补齐每条 track，缺失状态使用 `valid=False, observed=None`。AV2 的 `current_time_index` 优先由 focal track 的 observed prefix 决定；没有 focal track 时才回退到全局 observed 最大 timestep。
 
-中心到后轴转换要求调用者显式提供 body-frame `offset_body`（定义为“后轴到框中心”的向量）。位置按照论文中的旋转公式转换；速度只有在每个需要转换的状态都提供角速度时才标记为 rear-axle velocity，否则保留 center-frame provenance。现在还支持按 `track_ids` 只转换几何适用的车辆，并显式报告 mixed reference。
-
-Phase 6B 后续审计修正见 `PHASE6B_AUDIT_AND_FIXES.md`：AV2 focal/SDC 分离、严格 bool 解码、官方场景时间轴校验、WOMD shard/record/scenario digest 分离，以及 SKIP 状态退出码修正。
+中心到后轴转换要求调用者显式提供 body-frame `offset_body`（定义为“后轴到框中心”的向量）。位置按照论文中的旋转公式转换；速度只有在每个需要转换的状态都提供角速度时才标记为 rear-axle velocity，否则保留 center-frame provenance，避免把不完整的转换当成严格动力学状态。
 
 `parse_av2_parquet` 默认要求在 scenario 同目录找到精确匹配的 `log_map_archive_<scenario_id>.json`；无法无歧义配对时显式报错，调用者可传入已经核对过的 `map_file`。`localize_scene` 只对轨迹状态应用刚体 world→local 变换，并在 map metadata 中记录同一个精确变换。AV2 map JSON 的异构 lane/polygon 几何不被未知 schema 静默改写；后续 map adapter 必须使用该 metadata 对每个点应用相同变换。
 
@@ -39,11 +37,4 @@ bash scripts/validate_phase6b.sh
 
 ## 本地可复现结果
 
-当前容器没有官方 MPFR development headers/native interval ABI，也没有服务器数据路径和 AV2 parquet engine。Phase 6B/6C-A dependency-free harness 执行 47 个纯 Python 回归测试全部通过；`compileall` 和 `bash -n scripts/validate_phase6b.sh` 通过。服务器仍必须安装 `.[datasets]` 并运行上面的真实数据脚本。
-
-
-## 性能审计与优化（2026-11）
-
-新增 `PHASE6B_PERFORMANCE_AUDIT.md`。修正了 bounded sample 前对整个 WOMD shard 的无条件 SHA-256、AV2 Parquet 重复文件哈希、AV2 map JSON 重复读盘、AV2 全量列读取及大 split 全量 Path 排序。快速抽样模式保留每条 WOMD protobuf record hash、AV2 canonical parsed-row hash、canonical scene hash 与 map hash；源文件 SHA-256 明确标记为未计算，不会伪造文件级 digest。需要完整来源文件指纹时显式设置 `HASH_SOURCE_FILES=1`。
-
-同时修复 WOMD dynamic map state digest 对 Python `str(object)` 的潜在非确定性依赖，改为 deterministic protobuf serialization/canonical value digest；`scenario_content_sha256` 不再受来源哈希策略元数据影响。WOMD/AV2 parser version 已更新为 `v1.1`。
+当前最小容器没有 pytest、native interval backend、TensorFlow/Waymo protobuf 或 parquet engine，因此没有把本地环境伪装成真实数据通过。通过动态 dependency-free harness 执行了 11 个 Phase 6B synthetic regression（WOMD mask/ID/boundary、AV2 dense axis/focal boundary/map、clock relation、reference conversion、missing-center 和 partial-yaw-rate）全部通过；`py_compile` 和 `bash -n scripts/validate_phase6b.sh` 也通过。服务器仍必须运行上面的脚本，只有真实样本抽样 PASS 才能填写 `real_scene_verified=true`。

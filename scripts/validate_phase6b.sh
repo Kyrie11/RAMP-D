@@ -1,40 +1,82 @@
 #!/usr/bin/env bash
-# Strict read-only Phase6B + Phase6C-A2 map smoke. No simulator needed.
-set -uo pipefail
+set -euo pipefail
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+REPORT_DIR="${REPORT_DIR:-$ROOT/reports/phase6b_$(date -u +%Y%m%dT%H%M%SZ)}"
+PYTHON_BIN="${PYTHON_BIN:-python}"
 WOMD_ROOT="${WOMD_ROOT:-/data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed/scenario}"
 AV2_ROOT="${AV2_ROOT:-/data0/senzeyu2/dataset/Argoverse2/motion}"
-MAX_RECORDS="${MAX_RECORDS:-1}"
-MAX_FILES="${MAX_FILES:-3}"
-REPORT_DIR="${REPORT_DIR:-$ROOT/reports/phase6b_$(date -u +%Y%m%dT%H%M%SZ)}"
-mkdir -p "$REPORT_DIR" "$ROOT/reports"
-cd "$ROOT" || exit 4
+MAX_RECORDS="${MAX_RECORDS:-3}"
+mkdir -p "$REPORT_DIR"
 export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD="${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-1}"
 
-"$PYTHON_BIN" -c 'import sys; assert sys.version_info >= (3,10), "Python 3.10+ required"' \
-  || { echo 'PHASE6B_STATUS=ERROR:PYTHON_VERSION'; exit 4; }
+"$PYTHON_BIN" -m pytest -q "$ROOT/tests/test_phase6_data_audit.py" \
+  "$ROOT/tests/test_phase6b_record_adapters.py" \
+  --junitxml="$REPORT_DIR/phase6b_pytest.xml" | tee "$REPORT_DIR/phase6b_pytest.log"
 
-"$PYTHON_BIN" scripts/validate_phase6c_a_dependency_free.py \
-  --junitxml "$REPORT_DIR/phase6b_pytest.xml" > "$REPORT_DIR/phase6b_pytest.log" 2>&1
-TEST_RC=$?
-cat "$REPORT_DIR/phase6b_pytest.log"
-if [[ $TEST_RC -ne 0 ]]; then
-  printf '{"status":"ERROR","reason":"unit tests failed","real_scene_verified":false}\n' > "$REPORT_DIR/phase6b_acceptance_summary.json"
-  echo "PHASE6B_STATUS=ERROR report=$REPORT_DIR"
-  exit 4
-fi
+"$PYTHON_BIN" - <<'PY' "$REPORT_DIR" "$WOMD_ROOT" "$AV2_ROOT" "$MAX_RECORDS"
+import json
+from pathlib import Path
+import sys
 
-"$PYTHON_BIN" scripts/validate_phase6b_real.py \
-  --womd-root "$WOMD_ROOT" --av2-root "$AV2_ROOT" \
-  --max-records "$MAX_RECORDS" --max-files "$MAX_FILES" \
-  --output "$REPORT_DIR/phase6b_acceptance_summary.json" \
-  > "$REPORT_DIR/phase6b_real.log" 2>&1
-REAL_RC=$?
-cat "$REPORT_DIR/phase6b_real.log"
-"$PYTHON_BIN" scripts/package_report_phase6b.py --report "$REPORT_DIR" \
-  --output "$ROOT/reports/RAMP-D_Phase6B_server_report.zip" || true
-if [[ $REAL_RC -eq 0 ]]; then STATUS=PASS; elif [[ $REAL_RC -eq 3 ]]; then STATUS=SKIP; else STATUS=ERROR; fi
-echo "PHASE6B_STATUS=$STATUS report=$REPORT_DIR"
-exit "$REAL_RC"
+from rampd_core import (OptionalDependencyError, iter_av2_validation,
+                        iter_womd_validation)
+
+report_dir = Path(sys.argv[1])
+womd_root, av2_root, max_records = sys.argv[2], sys.argv[3], int(sys.argv[4])
+
+def sample(name, iterator_factory):
+    rows = []
+    try:
+        for parsed in iterator_factory():
+            rows.append({
+                "scenario_id": parsed.scenario_id,
+                "source_file": parsed.source_file,
+                "record_index": parsed.record_index,
+                "content_sha256": parsed.content_sha256,
+                "record_content_sha256": parsed.record_content_sha256,
+                "map_content_sha256": parsed.map_content_sha256,
+                "parser_version": parsed.parser_version,
+                "source_schema": parsed.source_schema,
+                "split": parsed.scene.manifest.split,
+                "current_time_index": parsed.scene.manifest.current_time_index,
+                "track_count": len(parsed.scene.tracks),
+                "future_available": parsed.scene.manifest.future_available,
+                "position_reference": parsed.scene.manifest.position_reference,
+                "coordinate_frame": parsed.scene.manifest.coordinate_frame,
+                "map_file": parsed.map_file,
+                "clocks": None if parsed.clocks is None else parsed.clocks.to_dict(),
+            })
+    except (FileNotFoundError, OptionalDependencyError) as exc:
+        return {"status": "SKIP", "reason": f"{type(exc).__name__}: {exc}", "samples": []}
+    except Exception as exc:
+        return {"status": "ERROR", "reason": f"{type(exc).__name__}: {exc}", "samples": []}
+    return {"status": "PASS" if rows else "SKIP", "reason": None, "samples": rows}
+
+payload = {
+    "schema": "rampd.phase6b.acceptance.v1",
+    "phase": "6B",
+    "womd_validation": sample("womd_validation",
+                               lambda: iter_womd_validation(womd_root, max_records=max_records)),
+    "av2_validation": sample("av2_validation",
+                              lambda: iter_av2_validation(av2_root, max_records=max_records)),
+    "simulators_used": False,
+    "four_clock_injection": "explicit_only_no_dataset_inference",
+    "future_leakage_guard": True,
+    "content_hash_recorded": True,
+}
+statuses = [payload[x]["status"] for x in ("womd_validation", "av2_validation")]
+payload["status"] = "PASS" if all(x == "PASS" for x in statuses) else ("SKIP" if "ERROR" not in statuses else "ERROR")
+(report_dir / "phase6b_acceptance_summary.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+print(json.dumps(payload, indent=2, sort_keys=True))
+PY
+
+"$PYTHON_BIN" "$ROOT/scripts/package_report_phase6b.py" \
+  --report "$REPORT_DIR" --output "$ROOT/reports/RAMP-D_Phase6B_server_report.zip"
+"$PYTHON_BIN" - <<'PY' "$REPORT_DIR/phase6b_acceptance_summary.json"
+import json, sys
+status=json.load(open(sys.argv[1]))['status']
+print('PHASE6B_DATASET_' + status)
+raise SystemExit(0 if status == 'PASS' else 2)
+PY
