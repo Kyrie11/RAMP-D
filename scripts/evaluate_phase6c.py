@@ -6,51 +6,93 @@ from pathlib import Path
 
 from rampd_core.record_adapters import (iter_womd_split, iter_av2_split,
                                         OptionalDependencyError)
+from rampd_core.supervision_inventory import supervision_inventory
 from rampd_core.phase6c import (ForecastJob, constant_velocity_proposals,
                                 offline_forecast_metrics, stable_split_fingerprint)
 
 
 def one_split(dataset, split, iterator):
-    rows, keys = [], []
+    """Evaluate a bounded sample without losing earlier rows on one failure.
+
+    A successfully parsed scene is recorded even when a later one fails. Such
+    failures always make the split ERROR, not a deceptively partial PASS.
+    """
+    rows, keys, failures = [], [], []
     try:
         for parsed in iterator:
             scene = parsed.scene
             key = (scene.manifest.dataset, scene.manifest.split, parsed.scenario_id)
             keys.append(key)
-            job = ForecastJob.from_scene(scene)
-            # Use the full available logged future (nominally WOMD 8 s /
-            # AV2 6 s); never feed labels into the forecast job.
-            future_steps = len(scene.manifest.timestamps)-1-scene.manifest.current_time_index
-            sets = constant_velocity_proposals(job, horizon_steps=future_steps) if future_steps > 0 else ()
-            target_ids = {t.track_id for t in scene.tracks if t.to_predict}
-            scored = tuple(s for s in sets if s.actor_id in target_ids)
-            metrics = offline_forecast_metrics(scene, scored) if split in ("validation", "training", "train") else None
-            rows.append({"scenario_id":parsed.scenario_id,
-                         "source_file":parsed.source_file,
-                         "record_index":parsed.record_index,
-                         "content_sha256":parsed.content_sha256,
-                         "record_content_sha256":parsed.record_content_sha256,
-                         "source_schema":parsed.source_schema,
-                         "parser_version":parsed.parser_version,
-                         "map_file":parsed.map_file,
-                         "map_content_sha256":parsed.map_content_sha256,
-                         "num_tracks":len(scene.tracks),
-                         "to_predict_count":len(target_ids),
-                         "sdc_ids":[t.track_id for t in scene.tracks if t.is_sdc],
-                         "prediction_proposals":sum(len(s.proposals) for s in scored),
-                         "scoreable_future_rows":0 if metrics is None else metrics["count"],
-                         "logged_action_metrics":None if metrics is None else metrics["rows"][:10]})
-        if not rows:
-            return {"status":"SKIP","reason":"NO_ROWS","samples":[]}, set()
-        if not any(row["scoreable_future_rows"] > 0 for row in rows):
-            return {"status":"SKIP","reason":"NO_SCOREABLE_FUTURE_TARGETS",
-                    "samples":rows}, set(x[2] for x in keys)
-        return {"status":"PASS","reason":None,"samples":rows,
-                "sample_fingerprint":stable_split_fingerprint(keys)},set(x[2] for x in keys)
+            try:
+                job = ForecastJob.from_scene(scene)
+                # The model is history-only, hence horizon length is an
+                # experiment config (not read from future state contents).
+                # For this bounded dataset gate the known benchmark horizon
+                # is requested explicitly; no future positions are inputs.
+                future_steps = len(scene.manifest.timestamps)-1-scene.manifest.current_time_index
+                sets = constant_velocity_proposals(job, horizon_steps=future_steps,
+                                                  include_sdc=True) if future_steps > 0 else ()
+                target_ids = {t.track_id for t in scene.tracks if t.to_predict}
+                scored = tuple(p for p in sets if p.actor_id in target_ids)
+                metrics = (offline_forecast_metrics(scene, scored)
+                           if split in ("validation", "training", "train") else None)
+                rows.append({"scenario_id":parsed.scenario_id,
+                             "source_file":parsed.source_file,
+                             "record_index":parsed.record_index,
+                             "content_sha256":parsed.content_sha256,
+                             "record_sha256":parsed.record_sha256,
+                             "source_file_sha256":parsed.source_file_sha256,
+                             "scenario_content_sha256":parsed.scenario_content_sha256,
+                             "source_schema":parsed.source_schema,
+                             "parser_version":parsed.parser_version,
+                             "map_file":parsed.map_file,
+                             "map_content_sha256":parsed.map_content_sha256,
+                             "supervision_inventory":supervision_inventory(scene),
+                             "num_tracks":len(scene.tracks),
+                             "to_predict_count":len(target_ids),
+                             "sdc_ids":[t.track_id for t in scene.tracks if t.is_sdc],
+                             "prediction_proposals":sum(len(x.proposals) for x in scored),
+                             "scoreable_future_rows":0 if metrics is None else metrics["count"],
+                             "logged_action_metrics":None if metrics is None else metrics["rows"][:10],
+                             "mean_ade_m":(None if metrics is None or not metrics["rows"]
+                                           else sum(x["ade_m"] for x in metrics["rows"])
+                                                /len(metrics["rows"])),
+                             "max_slot_offset_s":(None if metrics is None or not metrics["rows"]
+                                                 else max(x["max_slot_offset_s"] for x in metrics["rows"]))})
+            except Exception as exc:
+                failures.append({"scenario_id": parsed.scenario_id,
+                                 "source_file": parsed.source_file,
+                                 "failure_type": type(exc).__name__,
+                                 "reason": str(exc), "stage":"forecast_or_metric"})
     except (FileNotFoundError, OptionalDependencyError) as exc:
-        return {"status":"SKIP", "reason":f"{type(exc).__name__}: {exc}", "samples":[]},set()
+        if rows or failures:
+            failures.append({"failure_type": type(exc).__name__,
+                             "reason": str(exc), "stage": "dataset_iterator"})
+        else:
+            return {"status":"SKIP", "reason":f"{type(exc).__name__}: {exc}",
+                    "samples":[], "failure_cases":[]}, set()
     except Exception as exc:
-        return {"status":"ERROR", "reason":f"{type(exc).__name__}: {exc}", "samples":[]},set()
+        failures.append({"failure_type": type(exc).__name__,
+                         "reason": str(exc), "stage":"dataset_iterator"})
+    ids=set(x[2] for x in keys)
+    if len(keys) != len(ids):
+        failures.append({"failure_type":"DuplicateScenarioID",
+                         "reason":"repeated (dataset,split,scenario_id) in bounded sample",
+                         "stage":"identity"})
+    sample_ids=sorted(ids)
+    if failures:
+        return {"status":"ERROR", "reason":"SCENE_OR_ITERATOR_FAILURE",
+                "samples":rows, "failure_cases":failures,
+                "sample_ids":sample_ids},ids
+    if not rows:
+        return {"status":"SKIP", "reason":"NO_ROWS", "samples":[],
+                "failure_cases":[]},ids
+    if not any(row["scoreable_future_rows"] > 0 for row in rows):
+        return {"status":"SKIP", "reason":"NO_SCOREABLE_FUTURE_TARGETS",
+                "samples":rows, "failure_cases":[]},ids
+    return {"status":"PASS", "reason":None, "samples":rows,
+            "failure_cases":[],
+            "sample_fingerprint":stable_split_fingerprint(keys)},ids
 
 
 def main():

@@ -89,6 +89,8 @@ class PredictionProposal:
         object.__setattr__(self, "valid", valid or (True,) * len(points))
         if not self.reference_point:
             raise ValueError("reference_point must be explicit")
+        if not isinstance(self.nms_applied, bool):
+            raise TypeError("nms_applied must be bool")
 
     @classmethod
     def from_mtr_row(cls, actor_id: str, mode_id: str, frame_id: str,
@@ -133,13 +135,32 @@ class PredictionProposal:
         }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class ProposalSet:
     actor_id: str
     frame_id: str
     proposals: tuple[PredictionProposal, ...]
     source: str
-    complete_modes: bool = True
+    all_emitted_modes_retained: bool = True
+
+    def __init__(self, actor_id: str, frame_id: str,
+                 proposals: tuple[PredictionProposal, ...], source: str,
+                 all_emitted_modes_retained: bool = True, *,
+                 complete_modes: bool | None = None):
+        # ``complete_modes`` is accepted as a compatibility alias only.  Its
+        # old name was ambiguous: retaining all modes emitted by a predictor
+        # does NOT mean that the predictor covers all physically possible
+        # behaviours.
+        if complete_modes is not None:
+            all_emitted_modes_retained = complete_modes
+        if not isinstance(all_emitted_modes_retained, bool):
+            raise TypeError("all_emitted_modes_retained must be bool")
+        object.__setattr__(self, "actor_id", actor_id)
+        object.__setattr__(self, "frame_id", frame_id)
+        object.__setattr__(self, "proposals", tuple(proposals))
+        object.__setattr__(self, "source", source)
+        object.__setattr__(self, "all_emitted_modes_retained", all_emitted_modes_retained)
+        self.__post_init__()
 
     def __post_init__(self):
         proposals = tuple(self.proposals)
@@ -152,6 +173,16 @@ class ProposalSet:
             raise ValueError("proposal source is required")
         object.__setattr__(self, "proposals", proposals)
 
+    @property
+    def complete_modes(self) -> bool:
+        """Deprecated alias for all_emitted_modes_retained (not full support)."""
+        return self.all_emitted_modes_retained
+
+    @property
+    def behavior_support_complete(self) -> bool:
+        """Learned proposal sets never establish complete physical support."""
+        return False
+
     def ranked(self):
         return tuple(sorted(self.proposals, key=lambda p: (-p.score, p.mode_id)))
 
@@ -159,11 +190,14 @@ class ProposalSet:
         if isinstance(k, bool) or not isinstance(k, int) or k <= 0:
             raise ValueError("k must be a positive integer")
         return ProposalSet(self.actor_id, self.frame_id, self.ranked()[:k], self.source,
-                           complete_modes=(self.complete_modes and k >= len(self.proposals)))
+                           all_emitted_modes_retained=(
+                               self.all_emitted_modes_retained and k >= len(self.proposals)))
 
     def digest(self):
         raw = json.dumps({"actor_id": self.actor_id, "frame_id": self.frame_id,
-                          "source": self.source, "complete_modes": self.complete_modes,
+                          "source": self.source,
+                          "all_emitted_modes_retained": self.all_emitted_modes_retained,
+                          "behavior_support_complete": False,
                           "proposals": [p.to_dict() for p in self.proposals]},
                          sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         return "proposal-sha256:" + hashlib.sha256(raw).hexdigest()
@@ -186,7 +220,7 @@ def proposal_only(proposals: Iterable[PredictionProposal], *, source: str) -> Pr
         reason = "SCORED_PROPOSALS_ONLY_NOT_A_SAFETY_SUPPORT"
     first = proposals[0]
     result = ProposalSet(first.actor_id, first.frame_id, proposals, source,
-                         complete_modes=not any(p.nms_applied for p in proposals))
+                         all_emitted_modes_retained=not any(p.nms_applied for p in proposals))
     return ProposalAdapterResult(ProposalStatus.PROPOSAL_ONLY, reason, result)
 
 

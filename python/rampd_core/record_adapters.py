@@ -23,11 +23,12 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from .protocol import ClockTrace, TimeWindow
 from .scene_schema import SceneManifest, SceneTrack, TrackState, UnifiedScene
+from .map_context import MapContext, from_womd_scenario, from_av2_map_json
 
 
 PHASE6B_SCHEMA = "rampd.phase6b.record-adapter.v1"
-WOMD_PARSER_VERSION = "rampd-womd-scenario-v1"
-AV2_PARSER_VERSION = "rampd-av2-motion-v2"
+WOMD_PARSER_VERSION = "rampd-womd-scenario-v1.1"
+AV2_PARSER_VERSION = "rampd-av2-motion-v1.1"
 
 
 class OptionalDependencyError(RuntimeError):
@@ -48,6 +49,18 @@ def _finite(value: Any, name: str) -> float:
     return result
 
 
+def _integer(value: Any, name: str) -> int:
+    if isinstance(value, bool):
+        raise RecordParseError(f"{name} must be an integer")
+    try:
+        result = int(value)
+        if float(value) != float(result):
+            raise RecordParseError(f"{name} must be an exact integer")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise RecordParseError(f"{name} must be an integer") from exc
+    return result
+
+
 def _optional_float(value: Any, name: str) -> float | None:
     if value is None:
         return None
@@ -56,6 +69,22 @@ def _optional_float(value: Any, name: str) -> float | None:
     except (TypeError, ValueError) as exc:
         raise RecordParseError(f"{name} must be numeric or null") from exc
     return result if math.isfinite(result) else None
+
+
+def _strict_bool(value: Any, name: str) -> bool:
+    """Decode parquet booleans without Python truthiness coercions.
+
+    In particular, bool("False") and bool(float("nan")) are both True,
+    which would silently corrupt AV2's observed mask. NumPy bool scalars are
+    accepted without making NumPy a hard dependency of this adapter.
+    """
+    if isinstance(value, bool):
+        return value
+    if type(value).__name__ == "bool_":
+        return bool(value)
+    if isinstance(value, int) and not isinstance(value, bool) and value in (0, 1):
+        return bool(value)
+    raise RecordParseError(f"{name} must be a boolean value")
 
 
 def _window(value: float | int | None) -> TimeWindow | None:
@@ -159,17 +188,52 @@ class ParsedScene:
     clocks: FourClockInjection | None = None
     map_file: str | None = None
     map_content_sha256: str | None = None
-    record_content_sha256: str | None = None
+    source_file_sha256: str | None = None
+    record_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if len(self.content_sha256) != 64 or any(c not in "0123456789abcdef" for c in self.content_sha256.lower()):
             raise ValueError("content_sha256 must be a lowercase/uppercase SHA-256 digest")
         if self.scene.manifest.source_file != self.source_file:
             raise ValueError("scene/source_file mismatch")
+        for name in ("source_file_sha256", "record_sha256", "map_content_sha256"):
+            value = getattr(self, name)
+            if value is not None and (len(value) != 64 or
+                                      any(c not in "0123456789abcdef" for c in value.lower())):
+                raise ValueError(f"{name} must be a SHA-256 digest or null")
 
     @property
     def scenario_id(self) -> str:
         return self.scene.manifest.scenario_id
+
+    @property
+    def scenario_content_sha256(self) -> str:
+        """Canonical parsed-scenario digest, independent of its source path.
+
+        This is distinct from ``content_sha256`` (the legacy source/record
+        digest), because multiple WOMD records can share one TFRecord shard
+        and therefore share the shard's file hash.
+        """
+        payload = self.scene.to_dict()
+        manifest = dict(payload["manifest"])
+        manifest.pop("source_file", None)
+        manifest.pop("source_digest", None)
+        metadata = dict(manifest.get("metadata", {}))
+        # Provenance policy must not change the canonical semantic scene hash.
+        # These fields describe how the source was fingerprinted, not the
+        # scenario's decoded states, map, identities, masks, or time axis.
+        for key in ("map_file", "source_file_hash_status", "content_sha256_semantics"):
+            metadata.pop(key, None)
+        manifest["metadata"] = metadata
+        payload["manifest"] = manifest
+        # AV2 map archives carry a location-dependent file path in the scene's
+        # map_metadata. Keep their content digest, but exclude that path.
+        map_metadata = dict(payload.get("map_metadata", {}))
+        map_metadata.pop("map_file", None)
+        payload["map_metadata"] = map_metadata
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                         ensure_ascii=True, allow_nan=False, default=str).encode()
+        return hashlib.sha256(raw).hexdigest()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -178,16 +242,18 @@ class ParsedScene:
             "source_file": self.source_file,
             "record_index": self.record_index,
             "content_sha256": self.content_sha256,
+            "source_file_sha256": self.source_file_sha256,
+            "record_sha256": self.record_sha256,
+            "scenario_content_sha256": self.scenario_content_sha256,
             "parser_version": self.parser_version,
             "source_schema": self.source_schema,
             "clocks": None if self.clocks is None else self.clocks.to_dict(),
             "map_file": self.map_file,
             "map_content_sha256": self.map_content_sha256,
-            "record_content_sha256": self.record_content_sha256,
         }
 
 
-def sha256_file(path: str | Path, *, chunk_size: int = 1024 * 1024) -> str:
+def sha256_file(path: str | Path, *, chunk_size: int = 8 * 1024 * 1024) -> str:
     """Return the full SHA-256 of a source file without modifying it."""
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -206,17 +272,9 @@ def _json_digest(value: Any) -> str:
 
 
 def _field(obj: Any, name: str, default: Any = None) -> Any:
-    """Read optional proto2 scalar fields with presence, not protobuf zero defaults."""
+    """Get a protobuf field or mapping item without accepting magic defaults."""
     if isinstance(obj, Mapping):
         return obj.get(name, default)
-    presence = getattr(obj, "HasField", None)
-    if callable(presence):
-        try:
-            if not presence(name):
-                return default
-        except (ValueError, TypeError):
-            # Repeated fields and proto3 scalars do not expose presence.
-            pass
     return getattr(obj, name, default)
 
 
@@ -229,7 +287,7 @@ def _enum_name(value: Any, names: Mapping[int, str], default: str = "unknown") -
         return default
 
 
-_WOMD_OBJECT_TYPES = {0: "TYPE_UNSET", 1: "vehicle", 2: "pedestrian", 3: "cyclist", 4: "other"}
+_WOMD_OBJECT_TYPES = {0: "TYPE_UNSET", 1: "vehicle", 2: "pedestrian", 3: "cyclist"}
 
 
 def _state_from_womd(state: Any, timestamp: float, observed: bool) -> TrackState:
@@ -267,19 +325,47 @@ def _proto_bytes(value: Any) -> bytes | None:
     serializer = getattr(value, "SerializeToString", None)
     if callable(serializer):
         try:
-            return bytes(serializer())
+            try:
+                return bytes(serializer(deterministic=True))
+            except TypeError:
+                # Lightweight test doubles and older protobuf APIs may not
+                # expose the deterministic keyword.
+                return bytes(serializer())
         except Exception:
             return None
     return None
 
 
-def _without_future(track: SceneTrack, current_index: int) -> SceneTrack:
-    """Physically erase withheld future labels; preserve clock slots only."""
-    return replace(track, states=tuple(
-        state if i <= current_index else TrackState(
-            timestamp=state.timestamp, x=None, y=None, heading=None,
-            vx=None, vy=None, valid=False, observed=False)
-        for i, state in enumerate(track.states)))
+def _canonical_json_value(value: Any) -> Any:
+    """Convert nested protobuf/mapping values to a stable JSON-safe form."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return str(value)
+        return value
+    if isinstance(value, bytes):
+        return {"bytes_sha256": hashlib.sha256(value).hexdigest()}
+    if isinstance(value, Mapping):
+        return {str(key): _canonical_json_value(item)
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_json_value(item) for item in value]
+    raw = _proto_bytes(value)
+    if raw is not None:
+        return {"protobuf_sha256": hashlib.sha256(raw).hexdigest()}
+    if hasattr(value, "tolist"):
+        try:
+            return _canonical_json_value(value.tolist())
+        except Exception:
+            pass
+    if hasattr(value, "__dict__"):
+        return _canonical_json_value(vars(value))
+    raise TypeError(
+        "cannot produce a deterministic digest for "
+        f"{type(value).__module__}.{type(value).__qualname__}; "
+        "expected a protobuf, mapping, sequence, or scalar"
+    )
 
 
 def parse_womd_scenario_proto(
@@ -288,6 +374,8 @@ def parse_womd_scenario_proto(
     source_file: str | Path = "<memory>",
     record_index: int | None = None,
     content_sha256: str | None = None,
+    source_file_sha256: str | None = None,
+    record_sha256: str | None = None,
     clocks: FourClockInjection | None = None,
     split: str = "unknown",
     parser_version: str = WOMD_PARSER_VERSION,
@@ -305,6 +393,9 @@ def parse_womd_scenario_proto(
     timestamps = tuple(_finite(x, "timestamps_seconds") for x in timestamps_raw)
     if any(b <= a for a, b in zip(timestamps, timestamps[1:])):
         raise RecordParseError("WOMD timestamps_seconds must be strictly increasing")
+    time_deltas = tuple(b - a for a, b in zip(timestamps, timestamps[1:]))
+    sample_rate_hz = (10.0 if time_deltas and
+                      all(abs(dt - 0.1) <= 1e-6 for dt in time_deltas) else None)
     current = int(_field(scenario, "current_time_index", -1))
     if not 0 <= current < len(timestamps):
         raise RecordParseError("WOMD current_time_index is out of range")
@@ -348,6 +439,8 @@ def parse_womd_scenario_proto(
         idx = int(idx)
         if idx < 0 or idx >= len(track_ids):
             raise RecordParseError("WOMD tracks_to_predict index is out of range")
+        if idx in to_predict_indices:
+            raise RecordParseError("WOMD tracks_to_predict contains a duplicate track index")
         to_predict_indices.append(idx)
         to_predict_ids.append(index_to_id[idx])
     predict_set = set(to_predict_ids)
@@ -362,44 +455,69 @@ def parse_womd_scenario_proto(
         if value is not None:
             map_ids.append(str(value))
     objects_of_interest = tuple(_field(scenario, "objects_of_interest", ()) or ())
+    objects_of_interest_ids = [int(x) for x in objects_of_interest]
+    known_track_ids = set(track_ids)
+    missing_interest_ids = [x for x in objects_of_interest_ids if str(x) not in known_track_ids]
+    if missing_interest_ids:
+        raise RecordParseError(
+            "WOMD objects_of_interest contains Track.id values absent from tracks: "
+            + ",".join(map(str, missing_interest_ids))
+        )
     metadata: dict[str, Any] = {
         "schema": "waymo_open_dataset.protos.scenario_pb2.Scenario",
         "parser_version": parser_version,
+        "source_file_hash_status": "computed" if source_file_sha256 else "not_computed",
+        "content_sha256_semantics": (
+            "source_file_sha256" if source_file_sha256 and content_sha256 == source_file_sha256
+            else "record_sha256"
+        ),
         "source_track_count": len(tracks),
         "source_track_indices": list(range(len(tracks))),
         "sdc_track_index": sdc_index,
         "tracks_to_predict_indices": to_predict_indices,
         "tracks_to_predict_ids": to_predict_ids,
-        "objects_of_interest": [int(x) for x in objects_of_interest],
+        "objects_of_interest": objects_of_interest_ids,
         "dynamic_map_state_count": len(dynamic_states),
-        "dynamic_map_states_digest": _json_digest([str(x) for x in dynamic_states]) if dynamic_states else None,
+        "dynamic_map_states_digest": (
+            _json_digest(_canonical_json_value(dynamic_states)) if dynamic_states else None
+        ),
         "map_feature_count": len(map_features),
         "sampling_semantics": "dataset_10hz_discrete_not_continuous_safety",
+        "observed_semantics": "history_current_prefix_not_measurement_validity; combine with valid mask",
+        "actual_sample_rate_hz": sample_rate_hz,
         "online_boundary_semantics": "current_time_index_prefix",
         "future_label_semantics": "withheld" if str(split).casefold() in {"test", "testing"} else "available",
     }
     raw = _proto_bytes(scenario)
-    record_digest = hashlib.sha256(raw).hexdigest() if raw is not None else None
-    content_sha256 = content_sha256 or (hashlib.sha256(raw).hexdigest() if raw is not None else _json_digest(metadata))
+    computed_record_sha256 = (hashlib.sha256(raw).hexdigest() if raw is not None
+                              else _json_digest(metadata))
+    record_sha256 = record_sha256 or computed_record_sha256
+    # Backward-compatible content_sha256: when the caller is iterating a
+    # TFRecord, it historically denotes the shard hash; for an in-memory
+    # protobuf it denotes the serialized record hash. New code must use the
+    # explicit source_file_sha256 / record_sha256 fields below.
+    content_sha256 = content_sha256 or record_sha256
+    if source_file_sha256 is not None:
+        content_sha256 = source_file_sha256
     manifest = SceneManifest(
         dataset="womd_scenario", dataset_version="1.3.1",
         split=str(split), scenario_id=str(_field(scenario, "scenario_id", "")),
         source_file=source_file, timestamps=timestamps, current_time_index=current,
         coordinate_frame="womd_global_xy", position_reference="bounding_box_center",
-        future_available=str(split).casefold() not in {"test", "testing"}, sample_rate_hz=10.0, source_digest=content_sha256,
+        future_available=str(split).casefold() not in {"test", "testing"}, sample_rate_hz=sample_rate_hz, source_digest=content_sha256,
         metadata=metadata,
     )
     if not manifest.scenario_id:
         raise RecordParseError("WOMD scenario_id is empty")
-    if not manifest.future_available:
-        # Even a physically present test annotation is not an authorized label.
-        tracks = [_without_future(track, current) for track in tracks]
+    map_ctx = from_womd_scenario(scenario)
     scene = UnifiedScene(manifest, tuple(tracks), tuple(map_ids),
-                         {"dynamic_map_states": metadata["dynamic_map_states_digest"]})
+                         {"dynamic_map_states": metadata["dynamic_map_states_digest"],
+                          "map_geometry_complete": map_ctx.complete_geometry}, map_ctx)
     scene.assert_valid()
     return ParsedScene(scene, source_file, record_index, content_sha256,
                        parser_version, "womd-scenario-proto-v1", clocks,
-                       record_content_sha256=record_digest)
+                       source_file_sha256=source_file_sha256,
+                       record_sha256=record_sha256)
 
 
 def _resolve_split(root: Path, names: Sequence[str]) -> Path:
@@ -428,10 +546,19 @@ def _iter_tfrecord(path: Path) -> Iterator[bytes]:
 
 
 def iter_womd_scenario_file(
-    path: str | Path, *, max_records: int = 10, split: str = "validation",
+    path: str | Path, *, max_records: int = 10,
     clocks: FourClockInjection | None = None,
+    hash_source_file: bool = True,
+    split: str = "validation",
 ) -> Iterator[ParsedScene]:
-    """Yield at most ``max_records`` Scenario protos from one TFRecord shard."""
+    """Yield at most ``max_records`` Scenario protos from one TFRecord shard.
+
+    ``hash_source_file=False`` is intended for bounded parser smoke tests: it
+    avoids scanning the entire (often multi-GB) TFRecord shard merely to read a
+    few records.  Each emitted protobuf still receives an exact SHA-256 over
+    its serialized record bytes, and ParsedScene computes a canonical scene
+    digest.  The source-file digest remains null and is never fabricated.
+    """
     if max_records <= 0:
         return
     try:
@@ -439,34 +566,52 @@ def iter_womd_scenario_file(
     except ImportError as exc:
         raise OptionalDependencyError("WOMD parsing requires waymo_open_dataset") from exc
     path = Path(path)
-    digest = sha256_file(path)
+    digest = sha256_file(path) if hash_source_file else None
     for index, payload in enumerate(_iter_tfrecord(path)):
         if index >= max_records:
             break
         scenario = scenario_pb2.Scenario()
         scenario.ParseFromString(payload)
+        record_digest = hashlib.sha256(payload).hexdigest()
         yield parse_womd_scenario_proto(scenario, source_file=path,
                                          record_index=index,
-                                         content_sha256=digest, clocks=clocks,
+                                         content_sha256=digest,
+                                         source_file_sha256=digest,
+                                         record_sha256=record_digest,
+                                         clocks=clocks,
                                          split=split)
 
 
+
 def iter_womd_split(
-    root: str | Path, *, split: str, max_records: int = 10, max_files: int = 10,
-    clocks: FourClockInjection | None = None,
+    root: str | Path, *, split: str, max_records: int = 10,
+    max_files: int = 10, clocks: FourClockInjection | None = None,
+    hash_source_files: bool = False,
 ) -> Iterator[ParsedScene]:
-    """Explicit split-specific bounded ingestion; does not mix validation/train."""
-    if split not in {"validation", "training", "testing"}:
-        raise ValueError(f"unsupported WOMD Scenario split {split!r}")
-    split_root = _resolve_split(Path(root).expanduser(), (split,))
-    files = sorted(p for p in split_root.rglob("*") if p.is_file() and
-                   (p.name.endswith(".tfrecord") or ".tfrecord-" in p.name))
+    """Bounded Scenario split reader; forwards split into every parsed manifest.
+
+    IMPORTANT: the source shard SHA is optional for bounded experiments;
+    the per-record SHA remains available even without a complete shard scan.
+    """
+    aliases = {"validation": ("validation", "val"),
+               "training": ("training", "train"),
+               "test": ("test", "testing")}
+    if split not in aliases:
+        raise ValueError(f"invalid WOMD split {split!r}")
+    if max_records <= 0 or max_files <= 0:
+        raise ValueError("max_records/max_files must be positive")
+    split_root = _resolve_split(Path(root).expanduser(), aliases[split])
+    import heapq
+    matches = (p for p in split_root.rglob("*") if p.is_file() and
+               (p.name.endswith(".tfrecord") or ".tfrecord-" in p.name))
+    files = heapq.nsmallest(max_files, matches)
     if not files:
-        raise FileNotFoundError(f"no TFRecord shards below {split_root}")
+        raise FileNotFoundError(f"no WOMD TFRecord shards below {split_root}")
     emitted = 0
-    for path in files[:max_files]:
-        for parsed in iter_womd_scenario_file(path, max_records=max_records-emitted,
-                                              clocks=clocks, split=split):
+    for path in files:
+        for parsed in iter_womd_scenario_file(
+                path, max_records=max_records - emitted, clocks=clocks,
+                hash_source_file=hash_source_files, split=split):
             yield parsed
             emitted += 1
             if emitted >= max_records:
@@ -476,9 +621,23 @@ def iter_womd_split(
 def iter_womd_validation(
     root: str | Path, *, max_records: int = 10, max_files: int = 10,
     clocks: FourClockInjection | None = None,
+    hash_source_files: bool = True,
 ) -> Iterator[ParsedScene]:
-    return iter_womd_split(root, split="validation", max_records=max_records,
-                           max_files=max_files, clocks=clocks)
+    """Read a bounded sample from the case-insensitive Scenario/validation split."""
+    split_root = _resolve_split(Path(root).expanduser(), ("validation",))
+    files = sorted(p for p in split_root.rglob("*") if p.is_file() and
+                   (p.name.endswith(".tfrecord") or ".tfrecord-" in p.name))
+    if not files:
+        raise FileNotFoundError(f"no TFRecord shards below {split_root}")
+    emitted = 0
+    for path in files[:max_files]:
+        for parsed in iter_womd_scenario_file(
+                path, max_records=max_records - emitted, clocks=clocks,
+                hash_source_file=hash_source_files):
+            yield parsed
+            emitted += 1
+            if emitted >= max_records:
+                return
 
 
 def _row_dicts(rows: Any) -> list[dict[str, Any]]:
@@ -509,17 +668,64 @@ def _first_value(rows: Sequence[Mapping[str, Any]], names: Sequence[str], defaul
     return default
 
 
-def _av2_map_metadata(map_file: str | Path | None) -> tuple[str | None, tuple[str, ...], dict[str, Any]]:
+def _is_missing(value: Any) -> bool:
+    if value is None:
+        return True
+    try:
+        return bool(math.isnan(float(value)))
+    except (TypeError, ValueError):
+        return False
+
+
+def _consistent_value(rows: Sequence[Mapping[str, Any]], name: str,
+                      aliases: Sequence[str] = ()) -> Any:
+    names = (name, *aliases)
+    values = []
+    for row in rows:
+        for key in names:
+            if key in row and not _is_missing(row[key]):
+                values.append(row[key])
+                break
+    if not values:
+        return None
+    # Avoid comparing NumPy scalar types or mixed int/float metadata directly.
+    normalized = {str(v) for v in values}
+    if len(normalized) != 1:
+        raise RecordParseError(f"AV2 scenario metadata {name} is inconsistent across rows")
+    return values[0]
+
+
+def _integer_ns(value: Any, name: str) -> int:
+    if isinstance(value, bool):
+        raise RecordParseError(f"{name} must be an integer nanosecond timestamp")
+    try:
+        result = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise RecordParseError(f"{name} must be an integer nanosecond timestamp") from exc
+    try:
+        if float(value) != float(result):
+            raise RecordParseError(f"{name} must be an exact integer nanosecond timestamp")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise RecordParseError(f"{name} must be an integer nanosecond timestamp") from exc
+    return result
+
+
+def _av2_map_metadata(map_file: str | Path | None, scenario_id: str) -> tuple[str | None, tuple[str, ...], dict[str, Any], MapContext | None]:
     if map_file is None:
-        return None, (), {"map_status": "not_provided"}
+        return None, (), {"map_status": "not_provided"}, None
     path = Path(map_file)
     if not path.is_file():
         raise FileNotFoundError(path)
     try:
-        value = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
+        raw = path.read_bytes()
+        value = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RecordParseError(f"invalid AV2 map JSON: {path}") from exc
-    content_digest = sha256_file(path)
+    map_ctx = from_av2_map_json(value, scenario_id=scenario_id,
+                                content_sha256=hashlib.sha256(raw).hexdigest())
+    # Hash the exact bytes already read for JSON decoding; do not reread the
+    # map archive from disk.
+    content_digest = hashlib.sha256(raw).hexdigest()
     semantic_digest = _json_digest(value)
     ids: list[str] = []
     if isinstance(value, Mapping):
@@ -538,7 +744,8 @@ def _av2_map_metadata(map_file: str | Path | None) -> tuple[str | None, tuple[st
         "map_semantic_sha256": semantic_digest,
         "map_feature_count": len(ids),
         "map_coordinate_frame": "av2_city_xy",
-    }
+        "map_geometry_complete": map_ctx.complete_geometry,
+    }, map_ctx
 
 
 def resolve_av2_map(parquet_file: str | Path, scenario_id: str | None = None,
@@ -578,9 +785,11 @@ def parse_av2_rows(
     rows: Any, *, source_file: str | Path = "<memory>",
     split: str = "validation", scenario_id: str | None = None,
     map_file: str | Path | None = None, content_sha256: str | None = None,
+    source_file_sha256: str | None = None,
     clocks: FourClockInjection | None = None,
     parser_version: str = AV2_PARSER_VERSION,
     nominal_sample_rate_hz: float = 10.0,
+    hash_source_file: bool = True,
 ) -> ParsedScene:
     """Convert AV2 Motion parquet rows into a dense ``UnifiedScene``.
 
@@ -594,7 +803,8 @@ def parse_av2_rows(
     records = _row_dicts(rows)
     if not records:
         raise RecordParseError("AV2 parquet contains no rows")
-    sid_values = {str(r["scenario_id"]) for r in records if r.get("scenario_id") not in (None, "")}
+    sid_values = {str(r["scenario_id"]) for r in records
+                  if not _is_missing(r.get("scenario_id")) and str(r.get("scenario_id")) != ""}
     if len(sid_values) > 1:
         raise RecordParseError("AV2 parquet mixes scenario_id values")
     sid = scenario_id or (next(iter(sid_values)) if sid_values else None)
@@ -606,80 +816,139 @@ def parse_av2_rows(
     for row in records:
         if row.get("timestep") is None:
             raise RecordParseError("AV2 rows require timestep")
-        timestep = int(row["timestep"])
+        timestep = _integer(row["timestep"], "timestep")
         if timestep < 0:
             raise RecordParseError("AV2 timestep must be nonnegative")
         timestep_values.append(timestep)
-    start_ns = _first_value(records, ("start_timestamp", "start_timestamp_ns"))
-    end_ns = _first_value(records, ("end_timestamp", "end_timestamp_ns"))
-    n_steps_raw = _first_value(records, ("num_timestamps", "num_timesteps"))
-    n_steps = int(n_steps_raw) if n_steps_raw is not None else max(timestep_values) + 1
+    start_ns = _consistent_value(records, "start_timestamp", ("start_timestamp_ns",))
+    end_ns = _consistent_value(records, "end_timestamp", ("end_timestamp_ns",))
+    n_steps_raw = _consistent_value(records, "num_timestamps", ("num_timesteps",))
+    n_steps = _integer(n_steps_raw, "num_timestamps") if n_steps_raw is not None else max(timestep_values) + 1
     if n_steps <= max(timestep_values):
         raise RecordParseError("AV2 num_timestamps does not cover row timesteps")
-    row_ts = {int(r["timestep"]): r.get("timestamp_ns") for r in records
-              if r.get("timestamp_ns") is not None}
-    all_ts = [x for x in row_ts.values() if x is not None]
-    if len(all_ts) >= 2:
-        first_ns = _finite(min(all_ts), "timestamp_ns")
-        timestamps = tuple((_finite(row_ts.get(i, first_ns + i * 1e8), "timestamp_ns") - first_ns) / 1e9
-                           for i in range(n_steps))
-        time_source = "row_timestamp_ns"
-    elif start_ns is not None and end_ns is not None:
-        start = _finite(start_ns, "start_timestamp_ns")
-        end = _finite(end_ns, "end_timestamp_ns")
-        if end <= start:
+    if n_steps <= 0:
+        raise RecordParseError("AV2 num_timestamps must be positive")
+
+    # The official AV2 parquet schema stores scenario-level start/end and
+    # num_timestamps.  The official reader reconstructs the global timestamp
+    # axis with a linear interpolation (np.linspace); it does not store a
+    # timestamp_ns on each track row.  An optional row timestamp extension is
+    # accepted only if it is internally consistent and complete, or agrees
+    # with the official scenario-level axis.
+    row_ts: dict[int, int] = {}
+    for row in records:
+        value = row.get("timestamp_ns")
+        if _is_missing(value):
+            continue
+        timestep = _integer(row["timestep"], "timestep")
+        ns = _integer_ns(value, "timestamp_ns")
+        if timestep in row_ts and row_ts[timestep] != ns:
+            raise RecordParseError(f"AV2 timestamp_ns differs across tracks at timestep {timestep}")
+        row_ts[timestep] = ns
+
+    if start_ns is not None and end_ns is not None:
+        start, end = _integer_ns(start_ns, "start_timestamp"), _integer_ns(end_ns, "end_timestamp")
+        if end < start or (n_steps > 1 and end == start):
             raise RecordParseError("AV2 end_timestamp must exceed start_timestamp")
-        timestamps = tuple((start + (end - start) * i / (n_steps - 1) - start) / 1e9
-                           for i in range(n_steps)) if n_steps > 1 else (0.0,)
+        from fractions import Fraction
+        timestamps = tuple(float(Fraction((end - start) * i, max(1, n_steps - 1)) /
+                                 1_000_000_000) for i in range(n_steps))
         time_source = "scenario_start_end_timestamp_ns"
+        for index, ns in row_ts.items():
+            expected = start + ((end - start) * index / max(1, n_steps - 1))
+            if abs(ns - expected) > 1_000:
+                raise RecordParseError(
+                    f"AV2 row timestamp_ns at timestep {index} conflicts with scenario time axis"
+                )
+    elif row_ts:
+        if set(row_ts) != set(range(n_steps)):
+            raise RecordParseError(
+                "AV2 row timestamp_ns must cover every timestep when scenario start/end are absent"
+            )
+        ordered_ns = [row_ts[i] for i in range(n_steps)]
+        if any(b <= a for a, b in zip(ordered_ns, ordered_ns[1:])):
+            raise RecordParseError("AV2 row timestamps must be strictly increasing")
+        first_ns = ordered_ns[0]
+        timestamps = tuple((ns - first_ns) / 1e9 for ns in ordered_ns)
+        time_source = "complete_row_timestamp_ns"
     else:
+        nominal_sample_rate_hz = _finite(nominal_sample_rate_hz, "nominal_sample_rate_hz")
+        if nominal_sample_rate_hz <= 0:
+            raise RecordParseError("nominal_sample_rate_hz must be positive")
         timestamps = tuple(i / nominal_sample_rate_hz for i in range(n_steps))
         time_source = "nominal_sample_rate_fallback"
     if any(b <= a for a, b in zip(timestamps, timestamps[1:])):
         raise RecordParseError("AV2 timestamps must be strictly increasing")
+    actual_sample_rate_hz = None
+    if len(timestamps) > 1:
+        intervals = [b - a for a, b in zip(timestamps, timestamps[1:])]
+        median_dt = sorted(intervals)[len(intervals) // 2]
+        if median_dt > 0 and all(abs(dt - median_dt) <= 1e-9 for dt in intervals):
+            actual_sample_rate_hz = 1.0 / median_dt
     for row in records:
         if "observed" not in row:
             raise RecordParseError("AV2 rows require observed mask")
-    focal_id = _first_value(records, ("focal_track_id",))
+        _strict_bool(row["observed"], "observed")
+    focal_id = _consistent_value(records, "focal_track_id")
     focal_id_source = "focal_track_id" if focal_id is not None else None
     if focal_id is None:
         focal_candidates = sorted({str(r.get("track_id")) for r in records
-                                   if _av2_category(r.get("object_category", r.get("track_category", "")))
+                                   if _av2_category(r.get("object_category", r.get("track_category", "unknown")))
                                    == "FOCAL_TRACK"})
         if len(focal_candidates) == 1:
             focal_id = focal_candidates[0]
             focal_id_source = "object_category"
-    focal_observed_indices = [int(r["timestep"]) for r in records
-                              if str(r.get("track_id", "")) == str(focal_id)
-                              and bool(r["observed"])] if focal_id is not None else []
-    observed_indices = focal_observed_indices or [int(r["timestep"]) for r in records
-                                                   if bool(r["observed"])]
+    focal_observed_indices = (
+        [_integer(r["timestep"], "timestep") for r in records
+         if str(r.get("track_id", "")) == str(focal_id)
+         and _strict_bool(r["observed"], "observed")]
+        if focal_id is not None else []
+    )
+    if focal_id is not None and not focal_observed_indices:
+        raise RecordParseError("AV2 focal_track_id has no observed history states")
+    observed_indices = focal_observed_indices or [
+        _integer(r["timestep"], "timestep") for r in records
+        if _strict_bool(r["observed"], "observed")
+    ]
     current_index_source = ("focal_track_observed" if focal_observed_indices
                             else "global_observed_fallback")
     if not observed_indices:
         raise RecordParseError("AV2 has no observed prefix")
     current = max(observed_indices)
-    if any(int(r["timestep"]) > current and bool(r["observed"]) for r in records):
-        raise RecordParseError("AV2 observed boundary inconsistent across actors")
     if current >= n_steps:
         raise RecordParseError("AV2 current index out of range")
+    if focal_id is not None and str(focal_id) not in {str(r.get("track_id", "")) for r in records}:
+        raise RecordParseError("AV2 focal_track_id does not identify a track in this scenario")
     by_track: dict[str, dict[int, Mapping[str, Any]]] = {}
     track_meta: dict[str, Mapping[str, Any]] = {}
     for row in records:
-        track_id = str(row.get("track_id", ""))
+        raw_track_id = row.get("track_id")
+        track_id = "" if _is_missing(raw_track_id) else str(raw_track_id)
         if not track_id:
             raise RecordParseError("AV2 track_id is empty")
-        timestep = int(row["timestep"])
+        timestep = _integer(row["timestep"], "timestep")
         bucket = by_track.setdefault(track_id, {})
         if timestep in bucket:
             raise RecordParseError(f"duplicate AV2 state for {track_id}@{timestep}")
         bucket[timestep] = row
-        track_meta.setdefault(track_id, row)
+        if track_id not in track_meta:
+            track_meta[track_id] = row
+        else:
+            previous = track_meta[track_id]
+            for field_name in ("object_type", "object_category", "track_category"):
+                a, b = previous.get(field_name), row.get(field_name)
+                if not _is_missing(a) and not _is_missing(b) and str(a) != str(b):
+                    raise RecordParseError(
+                        f"AV2 {field_name} changes within track {track_id}"
+                    )
     tracks: list[SceneTrack] = []
     for track_id in sorted(by_track):
         prototype = track_meta[track_id]
-        object_type = str(prototype.get("object_type", "unknown"))
-        category = _av2_category(prototype.get("object_category", prototype.get("track_category", "unknown")))
+        object_type_value = prototype.get("object_type", "unknown")
+        category_value = prototype.get("object_category", prototype.get("track_category", "unknown"))
+        object_type = "unknown" if _is_missing(object_type_value) else str(object_type_value)
+        category = (_av2_category(category_value)
+                    if not _is_missing(category_value) else "unknown")
         states: list[TrackState] = []
         for i, timestamp in enumerate(timestamps):
             row = by_track[track_id].get(i)
@@ -687,7 +956,7 @@ def parse_av2_rows(
                 states.append(TrackState(timestamp, None, None, None, None, None,
                                          False, observed=None))
                 continue
-            observed = bool(row["observed"])
+            observed = _strict_bool(row["observed"], "observed")
             x = _optional_float(row.get("position_x"), "position_x")
             y = _optional_float(row.get("position_y"), "position_y")
             valid = x is not None and y is not None
@@ -697,16 +966,37 @@ def parse_av2_rows(
                                      _optional_float(row.get("velocity_y"), "velocity_y"),
                                      valid, observed=observed,
                                      metadata={"source_timestep": i}))
+        is_av_track = track_id == "AV"
+        if is_av_track and object_type.casefold() != "vehicle":
+            raise RecordParseError("AV2 reserved track_id 'AV' must have object_type VEHICLE")
         tracks.append(SceneTrack(track_id, object_type, tuple(states),
-                                 is_sdc=track_id == "AV",
+                                 is_sdc=is_av_track,
                                  to_predict=category in {"FOCAL_TRACK", "SCORED_TRACK"},
                                  metadata={"object_type": object_type,
-                                           "object_category": category}))
-    map_path, map_ids, map_metadata = _av2_map_metadata(map_file)
-    content_sha256 = content_sha256 or (sha256_file(source_file) if Path(source_file).is_file()
-                                        else _json_digest(records))
+                                           "object_category": category,
+                                           "is_focal_track": str(focal_id) == track_id,
+                                           "is_sdc_track": is_av_track,
+                                           "sdc_identity_source": "av2_api_track_id_AV_convention"
+                                           if is_av_track else None},
+                                 is_focal=str(focal_id) == track_id))
+    map_path, map_ids, map_metadata, map_ctx = _av2_map_metadata(map_file, str(sid))
+    if map_path is not None:
+        expected_map_name = f"log_map_archive_{sid}.json"
+        if Path(map_path).name != expected_map_name:
+            raise RecordParseError(
+                f"AV2 map archive {Path(map_path).name!r} does not match scenario {sid!r}"
+            )
+    if hash_source_file and source_file_sha256 is None and Path(source_file).is_file():
+        source_file_sha256 = sha256_file(source_file)
+    if content_sha256 is None:
+        content_sha256 = source_file_sha256 or _json_digest(records)
     metadata: dict[str, Any] = {
         "schema": "av2.motion_forecasting.parquet",
+        "source_file_hash_status": "computed" if source_file_sha256 else "not_computed",
+        "content_sha256_semantics": (
+            "source_file_sha256" if source_file_sha256 and content_sha256 == source_file_sha256
+            else "canonical_parsed_rows_sha256"
+        ),
         "parser_version": parser_version,
         "time_axis_source": time_source,
         "timestamp_unit": "seconds_relative_to_first_timestamp",
@@ -714,11 +1004,14 @@ def parse_av2_rows(
         "source_timestamps_end_ns": end_ns,
         "num_timestamps": n_steps,
         "focal_track_id": None if focal_id is None else str(focal_id),
-        "sdc_id_source": "AV_track_id" if "AV" in by_track else "not_present",
+        "sdc_track_id": "AV" if any(t.track_id == "AV" for t in tracks) else None,
+        "sdc_identity_source": "av2_api_track_id_AV_convention"
+        if any(t.track_id == "AV" for t in tracks) else None,
         "focal_track_id_source": focal_id_source,
         "current_index_source": current_index_source,
         "map_file": map_path,
         "sampling_semantics": "dataset_10hz_discrete_not_continuous_safety",
+        "actual_sample_rate_hz": actual_sample_rate_hz,
         **map_metadata,
     }
     future_available = str(split).casefold() not in {"test", "testing"}
@@ -727,73 +1020,126 @@ def parse_av2_rows(
         split=str(split), scenario_id=str(sid), source_file=source_file,
         timestamps=timestamps, current_time_index=current,
         coordinate_frame="av2_city_xy", position_reference="bounding_box_center",
-        future_available=future_available, sample_rate_hz=nominal_sample_rate_hz,
+        future_available=future_available, sample_rate_hz=actual_sample_rate_hz,
         source_digest=content_sha256, metadata=metadata,
     )
-    if not future_available:
-        tracks = [_without_future(track, current) for track in tracks]
-    scene = UnifiedScene(manifest, tuple(tracks), map_ids, map_metadata)
+    scene = UnifiedScene(manifest, tuple(tracks), map_ids, map_metadata, map_ctx)
     scene.assert_valid()
+    source_digest = source_file_sha256
     return ParsedScene(scene, source_file, None, content_sha256, parser_version,
                        "av2-motion-parquet-v1", clocks, map_path,
-                       map_metadata.get("map_content_sha256"))
+                       map_metadata.get("map_content_sha256"),
+                       source_file_sha256=source_digest)
+
+
+# All columns consumed by ``parse_av2_rows``.  Projecting to this allow-list
+# avoids decoding unused parquet columns while retaining every field that can
+# affect track identity, masks, timestamps, kinematics, or focal/SDC semantics.
+_AV2_READER_COLUMNS = (
+    "scenario_id", "track_id", "object_type", "object_category", "track_category",
+    "timestep", "position_x", "position_y", "heading", "velocity_x", "velocity_y",
+    "observed", "focal_track_id", "start_timestamp", "start_timestamp_ns",
+    "end_timestamp", "end_timestamp_ns", "num_timestamps", "num_timesteps",
+    "timestamp_ns",
+)
 
 
 def parse_av2_parquet(path: str | Path, *, split: str = "validation",
                       map_file: str | Path | None = None,
                       clocks: FourClockInjection | None = None,
-                      require_map: bool = True) -> ParsedScene:
+                      require_map: bool = True,
+                      hash_source_file: bool = True) -> ParsedScene:
     try:
         import pandas as pd  # type: ignore
+        import pyarrow.parquet as pq  # type: ignore
     except ImportError as exc:
-        raise OptionalDependencyError("AV2 parsing requires pandas and a parquet engine") from exc
+        raise OptionalDependencyError("AV2 parsing requires pandas and pyarrow") from exc
     path = Path(path)
+
+    # Inspect the parquet schema, then read only fields used by the adapter.
+    # This is a lossless projection: all parser-consumed columns, including
+    # optional aliases, are retained; unrelated columns are not materialized.
     try:
-        frame = pd.read_parquet(path)
+        parquet_file = pq.ParquetFile(path)
+        available = set(parquet_file.schema.names)
+        columns = [name for name in _AV2_READER_COLUMNS if name in available]
+        if not columns:
+            raise RecordParseError(f"AV2 parquet has no recognized motion columns: {path}")
+        frame = pd.read_parquet(path, columns=columns, engine="pyarrow")
     except ImportError as exc:
-        raise OptionalDependencyError("AV2 parquet parsing requires pyarrow or fastparquet") from exc
+        raise OptionalDependencyError("AV2 parquet parsing requires pyarrow") from exc
+    except RecordParseError:
+        raise
     except Exception as exc:
         raise RecordParseError(f"unable to decode AV2 parquet {path}: {exc}") from exc
+
     resolved_map = resolve_av2_map(path, map_file=map_file)
     if require_map and resolved_map is None:
         raise RecordParseError(
             f"AV2 scenario map archive unresolved for {path}; pass map_file explicitly"
         )
-    return parse_av2_rows(frame, source_file=path, split=split,
-                          map_file=resolved_map, content_sha256=sha256_file(path),
-                          clocks=clocks)
+
+    # A full file digest is optional for bounded smoke tests.  When enabled it
+    # is computed exactly once and reused for both legacy and explicit fields.
+    source_digest = sha256_file(path) if hash_source_file else None
+    return parse_av2_rows(
+        frame, source_file=path, split=split, map_file=resolved_map,
+        content_sha256=source_digest, source_file_sha256=source_digest,
+        clocks=clocks, hash_source_file=False,
+    )
+
 
 
 def iter_av2_split(root: str | Path, *, split: str, max_records: int = 10,
-                   clocks: FourClockInjection | None = None) -> Iterator[ParsedScene]:
-    """Bounded AV2 parquet reader; split selection is always explicit."""
-    aliases = {"validation": ("validation", "val"), "train": ("train", "training"),
+                   clocks: FourClockInjection | None = None,
+                   hash_source_files: bool = False) -> Iterator[ParsedScene]:
+    """Bounded official AV2 Parquet reader for train/validation/test."""
+    aliases = {"validation": ("validation", "val"),
+               "train": ("train", "training"),
                "test": ("test", "testing")}
     if split not in aliases:
-        raise ValueError(f"unsupported AV2 split {split!r}")
+        raise ValueError(f"invalid AV2 split {split!r}")
+    if max_records <= 0:
+        raise ValueError("max_records must be positive")
     split_root = _resolve_split(Path(root).expanduser(), aliases[split])
-    files = sorted(split_root.rglob("scenario_*.parquet"))
+    import heapq
+    files = heapq.nsmallest(max_records, split_root.rglob("scenario_*.parquet"))
     if not files:
-        raise FileNotFoundError(f"no AV2 scenario parquet below {split_root}")
-    for path in files[:max_records]:
-        yield parse_av2_parquet(path, split=split, clocks=clocks)
+        raise FileNotFoundError(f"no AV2 Parquet below {split_root}")
+    for path in files:
+        yield parse_av2_parquet(path, split=split, clocks=clocks,
+                                hash_source_file=hash_source_files)
 
 
 def iter_av2_validation(root: str | Path, *, max_records: int = 10,
-                        clocks: FourClockInjection | None = None) -> Iterator[ParsedScene]:
-    return iter_av2_split(root, split="validation", max_records=max_records, clocks=clocks)
+                        clocks: FourClockInjection | None = None,
+                        hash_source_files: bool = True) -> Iterator[ParsedScene]:
+    split_root = _resolve_split(Path(root).expanduser(), ("validation", "val"))
+    if max_records <= 0:
+        return
+    # Keep the deterministic lexicographically-smallest sample without
+    # materializing and sorting every Path in a large AV2 split.
+    import heapq
+    files = heapq.nsmallest(max_records, split_root.rglob("scenario_*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"no AV2 scenario parquet below {split_root}")
+    for path in files:
+        yield parse_av2_parquet(
+            path, split="validation", clocks=clocks,
+            hash_source_file=hash_source_files,
+        )
 
 
 def localize_scene(scene: UnifiedScene, *, origin_xy: tuple[float, float] = (0.0, 0.0),
                    yaw_rad: float = 0.0,
                    origin_track_id: str | None = None,
                    origin_time_index: int | None = None) -> UnifiedScene:
-    """Convert track states to a deterministic local XY frame.
+    """Convert trajectories and parsed map geometry to a local XY frame.
 
-    Map JSON remains attached by provenance; its geometry is not silently
-    rewritten because AV2 map archives contain heterogeneous lane/polygon
-    schemas.  ``map_metadata.local_transform`` is the exact rigid transform a
-    downstream map adapter must apply to every map point.
+    Map provenance is preserved. The same world-to-local rigid transform is
+    applied to every track state, map vertex, and signal stop point. This is
+    ordinary floating-point coordinate conversion, not interval-certified
+    geometry for a safety verifier.
     """
     resolved_origin_index = origin_time_index
     if origin_track_id is not None:
@@ -840,101 +1186,152 @@ def localize_scene(scene: UnifiedScene, *, origin_xy: tuple[float, float] = (0.0
     manifest = replace(scene.manifest, coordinate_frame="local_xy", metadata=metadata)
     map_metadata = dict(scene.map_metadata)
     map_metadata["local_transform"] = metadata["local_transform"]
-    return UnifiedScene(manifest, tuple(tracks), scene.map_ids, map_metadata)
+    map_ctx = (scene.map_context.transform((ox, oy), yaw)
+               if scene.map_context is not None else None)
+    if map_ctx is not None:
+        map_metadata["map_coordinate_frame"] = "local_xy"
+    return UnifiedScene(manifest, tuple(tracks), scene.map_ids, map_metadata, map_ctx)
 
 
 def convert_center_scene_to_rear_axle(
-    scene: UnifiedScene, *, offset_body: tuple[float, float] | None = None,
-    offsets_body_by_track: Mapping[str, tuple[float, float]] | None = None,
+    scene: UnifiedScene, *, offset_body: tuple[float, float],
     offset_source: str = "explicit_vehicle_geometry",
     yaw_rates: Mapping[tuple[str, int], float] | None = None,
     geometry_uncertainty: str = "explicit",
+    track_ids: Iterable[str] | None = None,
 ) -> UnifiedScene:
-    """Apply ``p_rear = p_center - R(psi)o`` when an explicit offset is known.
+    """Convert selected box-centre tracks to rear-axle reference.
 
-    ``offset_body`` is the vector from the rear axle to the box centre in the
-    body frame.  If yaw rates are supplied, velocity uses
-    ``v_rear=v_center-psi_dot R(psi)J o``.  Without yaw rates the position is
-    converted but velocity provenance remains explicitly marked as center-frame
-    so a continuous-time verifier can reject the mixed reference if needed.
+    ``offset_body`` points from the rear axle to the box centre in the body
+    frame.  For a rigid body,
+
+        p_rear = p_center - R(psi) o
+        v_rear = v_center - psi_dot R(psi) J o.
+
+    Position conversion requires a valid heading for every converted valid
+    state.  Velocity conversion additionally requires a yaw rate at that
+    state; otherwise the velocity remains centre-referenced and is marked as
+    such.  If only some tracks are converted, the scene-level reference is
+    explicitly ``mixed_center_and_rear_axle`` rather than falsely claiming
+    that every track uses rear-axle coordinates.
+
+    By default the same explicit offset is applied to all tracks.  For mixed
+    classes, callers should pass only the vehicle track IDs for which this
+    geometry is valid; pedestrians/cyclists should retain their own geometry
+    and reference convention.
     """
-    if offsets_body_by_track is not None:
-        if offset_body is not None:
-            raise RecordParseError("use offset_body OR offsets_body_by_track, not both")
-        if set(offsets_body_by_track) != {t.track_id for t in scene.tracks}:
-            raise RecordParseError("every actor must have its own explicit rear-axle offset")
-        offsets = {tid: (_finite(off[0], "offset.x"), _finite(off[1], "offset.y"))
-                   for tid, off in offsets_body_by_track.items()}
-    elif offset_body is not None and len(scene.tracks) == 1:
-        offsets = {scene.tracks[0].track_id: (
-            _finite(offset_body[0], "offset_body.x"), _finite(offset_body[1], "offset_body.y"))}
-    else:
-        raise RecordParseError("per-actor offsets required for multi-actor scenes")
-    if scene.manifest.position_reference != "bounding_box_center":
-        raise RecordParseError("center-to-rear conversion requires center-reference source")
-    for track in scene.tracks:
-        # A global rear-axle coordinate label is undefined for pedestrian or
-        # cyclist tracks.  Mixed scenes must retain center references and
-        # convert only the ego when constructing its dynamic state.
-        if track.category.casefold() not in {"vehicle", "bus"}:
-            raise RecordParseError("global rear-axle conversion cannot label non-car actors; convert ego separately")
-        if any(s.valid and s.heading is None for s in track.states):
-            raise RecordParseError("valid center state lacks heading; rear axle position unknown")
+    ox = _finite(offset_body[0], "offset_body.x")
+    oy = _finite(offset_body[1], "offset_body.y")
+    if not offset_source or not geometry_uncertainty:
+        raise RecordParseError("offset source and geometry uncertainty provenance are required")
     yaw_rates = yaw_rates or {}
+    selected = None if track_ids is None else {str(x) for x in track_ids}
+    known_ids = {track.track_id for track in scene.tracks}
+    if selected is not None and not selected.issubset(known_ids):
+        raise RecordParseError("track_ids contains an ID absent from the scene")
+
     velocity_total = 0
     velocity_converted = 0
+    converted_track_ids: list[str] = []
     tracks: list[SceneTrack] = []
+    position_reference_by_track: dict[str, str] = {}
+    velocity_reference_by_track: dict[str, str] = {}
+
     for track in scene.tracks:
-        ox, oy = offsets[track.track_id]
+        should_convert = selected is None or track.track_id in selected
+        states = []
         track_velocity_total = 0
         track_velocity_converted = 0
-        states = []
+        track_position_total = 0
+        if not should_convert:
+            tracks.append(track)
+            position_reference_by_track[track.track_id] = "bounding_box_center"
+            velocity_reference_by_track[track.track_id] = "center_or_unmodified"
+            continue
+
         for i, state in enumerate(track.states):
-            if not state.valid or state.x is None or state.y is None or state.heading is None:
+            if not state.valid:
                 states.append(state)
                 continue
+            if state.x is None or state.y is None or state.heading is None:
+                raise RecordParseError(
+                    f"cannot convert {track.track_id}@{i}: valid state lacks position or heading"
+                )
+            track_position_total += 1
             c, s = math.cos(state.heading), math.sin(state.heading)
-            rx, ry = state.x - (c * ox - s * oy), state.y - (s * ox + c * oy)
+            rx = state.x - (c * ox - s * oy)
+            ry = state.y - (s * ox + c * oy)
             vx, vy = state.vx, state.vy
+            yaw_rate_raw = yaw_rates.get((track.track_id, i))
+            yaw_rate = None if yaw_rate_raw is None else _finite(yaw_rate_raw, "yaw_rate")
             if vx is not None and vy is not None:
                 velocity_total += 1
                 track_velocity_total += 1
-            yaw_rate = yaw_rates.get((track.track_id, i))
-            if vx is not None and vy is not None:
-                if yaw_rate is not None or (ox == 0.0 and oy == 0.0):
-                    # v_rear = v_center - yaw_rate R(psi) J o. A zero offset
-                    # needs no yaw rate. Other missing yaw rates invalidate
-                    # the velocity, rather than mixing center vx with rear x.
-                    jx, jy = -oy, ox
-                    rjx, rjy = c * jx - s * jy, s * jx + c * jy
-                    rate = 0.0 if yaw_rate is None else _finite(yaw_rate, "yaw_rate")
-                    vx, vy = vx - rate * rjx, vy - rate * rjy
-                    velocity_converted += 1
-                    track_velocity_converted += 1
-                else:
-                    vx, vy = None, None
-            states.append(replace(state, x=rx, y=ry, vx=vx, vy=vy,
-                                  metadata={**state.metadata,
-                                            "reference_conversion": "center_to_rear_axle",
-                                            "rear_axle_offset_body": [ox, oy],
-                                            "yaw_rate_available": yaw_rate is not None}))
-        tracks.append(replace(track, states=tuple(states),
-                              metadata={**track.metadata,
-                                        "reference_conversion": "center_to_rear_axle",
-                                        "rear_axle_offset_body": [ox, oy],
-                                        "rear_axle_offset_source": offset_source,
-                                        "geometry_uncertainty": geometry_uncertainty,
-                                        "velocity_reference": "rear_axle" if track_velocity_total and track_velocity_converted == track_velocity_total else "rear_axle_incomplete"}))
-    velocity_reference = ("rear_axle" if velocity_total and velocity_converted == velocity_total
-                          else "rear_axle_incomplete")
-    manifest = replace(scene.manifest, position_reference="rear_axle_center",
-                       metadata={**scene.manifest.metadata,
-                                 "position_reference_source": "explicit_center_to_rear_axle",
-                                 "per_actor_offset_required": True,
-                                 "rear_axle_offset_source": offset_source,
-                                 "geometry_uncertainty": geometry_uncertainty,
-                                 "velocity_reference": velocity_reference})
-    return UnifiedScene(manifest, tuple(tracks), scene.map_ids, scene.map_metadata)
+            if vx is not None and vy is not None and yaw_rate is not None:
+                # J o = (-oy, ox), then rotate by R(psi).
+                jx, jy = -oy, ox
+                rjx, rjy = c * jx - s * jy, s * jx + c * jy
+                vx, vy = vx - yaw_rate * rjx, vy - yaw_rate * rjy
+                velocity_converted += 1
+                track_velocity_converted += 1
+            states.append(replace(
+                state, x=rx, y=ry, vx=vx, vy=vy,
+                metadata={**state.metadata,
+                          "reference_conversion": "center_to_rear_axle",
+                          "rear_axle_offset_body": [ox, oy],
+                          "yaw_rate_available": yaw_rate is not None},
+            ))
+
+        converted_track_ids.append(track.track_id)
+        if track_velocity_total == 0:
+            track_velocity_reference = "not_available"
+        elif track_velocity_converted == track_velocity_total:
+            track_velocity_reference = "rear_axle"
+        elif track_velocity_converted == 0:
+            track_velocity_reference = "center_unconverted"
+        else:
+            track_velocity_reference = "mixed"
+        position_reference_by_track[track.track_id] = "rear_axle_center"
+        velocity_reference_by_track[track.track_id] = track_velocity_reference
+        tracks.append(replace(
+            track, states=tuple(states),
+            metadata={**track.metadata,
+                      "reference_conversion": "center_to_rear_axle",
+                      "rear_axle_offset_body": [ox, oy],
+                      "rear_axle_offset_source": offset_source,
+                      "geometry_uncertainty": geometry_uncertainty,
+                      "velocity_reference": track_velocity_reference},
+        ))
+
+    if not converted_track_ids:
+        position_reference = scene.manifest.position_reference
+    elif len(converted_track_ids) == len(scene.tracks):
+        position_reference = "rear_axle_center"
+    else:
+        position_reference = "mixed_center_and_rear_axle"
+
+    if velocity_total == 0:
+        velocity_reference = "not_available"
+    elif velocity_converted == 0:
+        velocity_reference = "center_unconverted"
+    elif velocity_converted == velocity_total:
+        velocity_reference = "rear_axle"
+    else:
+        velocity_reference = "mixed_center_and_rear_axle"
+
+    manifest = replace(
+        scene.manifest,
+        position_reference=position_reference,
+        metadata={**scene.manifest.metadata,
+                  "position_reference_source": "explicit_center_to_rear_axle",
+                  "rear_axle_offset_source": offset_source,
+                  "geometry_uncertainty": geometry_uncertainty,
+                  "converted_track_ids": converted_track_ids,
+                  "position_reference_by_track": position_reference_by_track,
+                  "velocity_reference_by_track": velocity_reference_by_track,
+                  "velocity_reference": velocity_reference},
+    )
+    return UnifiedScene(manifest, tuple(tracks), scene.map_ids, scene.map_metadata, scene.map_context)
 
 
 __all__ = [

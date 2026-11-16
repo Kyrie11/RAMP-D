@@ -1,0 +1,4 @@
+# Install in the existing Python 3.10 mfrp environment, not in a separate Python:
+# python -m pip install -r requirements-data.txt
+pandas>=1.5,<3
+pyarrow>=12

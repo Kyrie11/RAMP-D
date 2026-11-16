@@ -12,12 +12,23 @@
 | 4 | Protocol automata, full-support tube/resource verifier, CERTIFIED/COUNTEREXAMPLE/UNKNOWN | implemented first explicit synthetic-support verifier; real scene integration pending |
 | 5 | Concrete/spurious counterexample handling and CEGAR | server Python regression passed; native CTest gate hardened |
 | 6A | Read-only AV2/WOMD manifest audit, unified scene contract, future-leakage guard | implemented and locally tested |
-| 6B | Validation record parsers, center/reference conversion, four-clock injection | server WOMD 3/3 PASS; AV2 SKIP pyarrow; repaired semantics, rerun pending |
-| 6C | Train/val sampling, prediction proposal, soft rule ranking, synchronized CARLA/SUMO smoke | scoped CV/RuleNet-score hook/clock smoke candidate implemented; target-server full regression + AV2 + CARLA/SUMO pending; trained joint model/full closed loop NOT built |
+| 6B | Validation record parsers, center/reference conversion, four-clock injection | parser audit/fixes local; WOMD server sample PASS, AV2 SKIP pending pyarrow |
+| 6C-A | History/future data split, joint-mode/observation proposals, RuleNet soft ranking, non-pruning branch order, simulator sync contracts | 47 dependency-free tests passed locally; no real data/simulator/native certification |
+| 6C-A2 | WOMD/AV2 unified vector-map geometry and dynamic-signal timeline | completed local data contracts; server WOMD 1 record PASS, AV2 SKIP |
+| 6C-A3 (math gate) | Phase 4/5 public API fix + finite task-winning inner family, completion rank, conditional margin lower bounds; server native gate pending | local finite Python proof-kernel tests; native pending |
+| 6C-B | CARLA/SUMO bridge, single tick owner, actor/TLS mapping, sensor and four-clock alignment | pending Phase 6B full PASS and mathematical verifier gate; requires user-started simulators |
+| 6C-C | Train/evaluate joint prediction and planning-guided model; closed-loop experiments | pending |
 
 Phase 2 does not require datasets or simulators. Phase 3 uses
-synthetic bounded dynamics and validated tubes. Phase 4 now provides versioned protocol/resource/agent/observation contracts and a conservative verifier. Phase 5 adds a version-bound CEGAR refinement layer over those finite synthetic fixtures; complete real-scene contracts are still required before dataset integration. Phase 6 is the
-Phase 6A reads only directory metadata and requires no simulator. 6B now has
-dependency-free synthetic regression plus bounded real-record readers; the
-server sample gate is still required before claiming `real_scene_verified`.
-6C requires the SUMO/CARLA headless co-simulation bridge. The latest manuscript additionally requires task-winning terminal tails, persistent strictly decreasing completion rank, same-prefix information–commitment gap and dynamic scheduling, not delivered by safety-only finite fixed-point modules. See PHASE6C_MATHEMATICAL_AUDIT.md.
+synthetic bounded dynamics and validated tubes. Phase 4 provides versioned
+protocol/resource/agent/observation contracts and a conservative verifier.
+Phase 5 adds a version-bound CEGAR refinement layer over finite synthetic
+fixtures. The current audit has found finite-horizon value/CCG and silence
+deadline-evidence gaps that must be closed before formal end-to-end claims.
+Phase 6A reads directory metadata; 6B has bounded real-record readers and
+synthetic regression, but the server AV2 gate is still SKIP until pyarrow is
+installed and the samples pass.
+6C-B requires the SUMO/CARLA headless co-simulation bridge. Phase 6C-A is a
+pure-Python contract layer and does not start either simulator. Complete the
+6C-A2 map/signal adapters and the Phase 2–5 mathematical gaps before running
+closed-loop simulation.

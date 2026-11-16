@@ -7,6 +7,7 @@ mkdir -p "$REPORT_DIR"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 
 export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+"$PYTHON_BIN" "$ROOT/scripts/verify_release.py"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD="${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-1}"
 if [[ -z "${RAMPD_INTERVAL_LIB:-}" && -f "$ROOT/build_phase3/librampd_interval.so" ]]; then
   export RAMPD_INTERVAL_LIB="$ROOT/build_phase3/librampd_interval.so"

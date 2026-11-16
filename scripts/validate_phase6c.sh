@@ -12,6 +12,10 @@ mkdir -p "$REPORT_DIR"
 export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD="${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-1}"
 
+# Verify a frozen source tree first. A2/A3 tests mixed with older source
+# files are a reproducible version error, not an expected test failure.
+"$PYTHON_BIN" "$ROOT/scripts/verify_release.py" || exit 4
+
 # The standard import path requires native MPFR; its absence is a regression
 # blocker, not a reason to claim the full tests passed.
 if [[ -z "${RAMPD_INTERVAL_LIB:-}" && -f "$ROOT/build_phase3/librampd_interval.so" ]]; then
@@ -32,14 +36,16 @@ if [[ "${RUN_FULL_REGRESSION:-1}" == "1" ]]; then
     --junitxml="$REPORT_DIR/all_pytest.xml" \
     > "$REPORT_DIR/all_pytest.log" 2>&1
   FULL_RC=$?
-  if [[ -f "$ROOT/build_phase3/CTestTestfile.cmake" ]]; then
-    ctest --test-dir "$ROOT/build_phase3" --output-on-failure \
-      > "$REPORT_DIR/native_ctest.log" 2>&1
-    NATIVE_RC=$?
-  else
-    NATIVE_RC=2
-    echo "SKIP: missing built CTest native regression manifest" > "$REPORT_DIR/native_ctest.log"
+  NATIVE_BUILD="${NATIVE_BUILD_DIR:-}"
+  if [[ -z "$NATIVE_BUILD" ]]; then
+    for d in "$ROOT/build_phase3" "$ROOT/build_phase1d"; do
+      if [[ -f "$d/CTestTestfile.cmake" ]]; then NATIVE_BUILD="$d"; break; fi
+    done
   fi
+  "$PYTHON_BIN" "$ROOT/scripts/check_native_ctest.py" \
+    "${NATIVE_BUILD:-$ROOT/build_phase3}" \
+    --log "$REPORT_DIR/native_ctest.log" > "$REPORT_DIR/native_ctest_summary.log" 2>&1
+  NATIVE_RC=$?
 else
   FULL_RC=2; NATIVE_RC=2
   echo "SKIP: RUN_FULL_REGRESSION=0" > "$REPORT_DIR/all_pytest.log"
@@ -83,7 +89,7 @@ all_pass=(test_rc==0 and full_rc==0 and native_rc==0 and data_rc==0
 full_enabled=__import__('os').environ.get('RUN_FULL_REGRESSION','1')=='1'
 failed_test=(test_rc!=0 or (full_enabled and full_rc!=0))
 status=('PASS' if all_pass else
-        'ERROR' if failed_test or native_rc not in (0,2) or data=='ERROR' or
+        'ERROR' if failed_test or (full_enabled and native_rc!=0) or data=='ERROR' or
         (data_rc not in (0,2)) or sim=='ERROR' or sim_rc not in (0,2)
         else 'SKIP')
 result={'schema':'rampd.phase6c.acceptance.v1', 'phase':'6C',

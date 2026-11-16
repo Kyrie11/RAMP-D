@@ -97,6 +97,8 @@ Phase 3 的 assurance scope 为 `LOCAL_BICYCLE_STATIC_SCENE_DECLARED_OBSERVATION
 
 发布延迟 `t_issue - t_change` 和传递延迟 `t_receipt - t_issue` 不可合并。真实物理变化后，消息可以尚未发布、在途或丢失，本地还可能被遮挡。
 
+`t_first_local_observation` 与 `t_receipt` 是独立信息通道；本地首次检测可以早于或晚于消息 receipt。协议自动机应分别表示 local-detection 与 message-receipt observation branch，不应默认要求 `receipt <= local` 或隐式取两者最大值。
+
 `silence` 必须作为观测覆盖中的真实分支。没有明确发布保证时，未收到消息不能删除“变化已经发生”分支。即使有发布期限，若没有相应传递/不丢包保证，未收到也通常不足以排除变化。只有完整协议能证明“若该变化已发生，则到当前时间必然已收到或已可观察”，才可据 silence 排除相应历史。
 
 消息乱序、重复、旧版本晚到、公告取消以及 receipt 与局部观测同时发生时的处理，需要可测试的确定性规则或完整枚举其允许顺序。不得由 Python 字典遍历顺序决定协议语义。

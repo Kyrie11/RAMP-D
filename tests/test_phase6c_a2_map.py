@@ -210,3 +210,30 @@ def test_optional_proto_stop_point_presence_avoids_invented_zero_coordinate():
         lane=11, state=4, stop_point=Obj(x=0., y=0., z=0.))
     m = from_womd_scenario(src)
     assert m.signals[0].stop_point is None
+
+
+def test_av2_official_numeric_track_category_maps_to_benchmark_targets():
+    rows = _av2_rows()
+    for row in rows:
+        row['object_category'] = 3
+        row['focal_track_id'] = 'AV'
+    parsed = parse_av2_rows(rows)
+    focal = parsed.scene.tracks[0]
+    assert focal.track_id == 'AV'
+    assert focal.is_focal and focal.to_predict
+    assert focal.metadata['object_category'] == 'FOCAL_TRACK'
+    # Explicit category fallback must work when focal_track_id isn't supplied.
+    for row in rows:
+        row.pop('focal_track_id')
+    inferred = parse_av2_rows(rows)
+    assert inferred.scene.manifest.metadata['focal_track_id_source'] == 'object_category'
+    assert inferred.scene.tracks[0].to_predict
+
+
+def test_av2_unknown_track_category_rejected_instead_of_erasing_score_mask():
+    rows = _av2_rows()
+    for row in rows:
+        row['object_category'] = 8
+    from rampd_core import RecordParseError
+    with pytest.raises(RecordParseError, match='object_category'):
+        parse_av2_rows(rows)
