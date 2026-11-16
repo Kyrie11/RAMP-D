@@ -23,6 +23,7 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from .protocol import ClockTrace, TimeWindow
 from .scene_schema import SceneManifest, SceneTrack, TrackState, UnifiedScene
+from .map_context import MapContext, from_womd_scenario, from_av2_map_json
 
 
 PHASE6B_SCHEMA = "rampd.phase6b.record-adapter.v1"
@@ -508,8 +509,10 @@ def parse_womd_scenario_proto(
     )
     if not manifest.scenario_id:
         raise RecordParseError("WOMD scenario_id is empty")
+    map_ctx = from_womd_scenario(scenario)
     scene = UnifiedScene(manifest, tuple(tracks), tuple(map_ids),
-                         {"dynamic_map_states": metadata["dynamic_map_states_digest"]})
+                         {"dynamic_map_states": metadata["dynamic_map_states_digest"],
+                          "map_geometry_complete": map_ctx.complete_geometry}, map_ctx)
     scene.assert_valid()
     return ParsedScene(scene, source_file, record_index, content_sha256,
                        parser_version, "womd-scenario-proto-v1", clocks,
@@ -670,9 +673,9 @@ def _integer_ns(value: Any, name: str) -> int:
     return result
 
 
-def _av2_map_metadata(map_file: str | Path | None) -> tuple[str | None, tuple[str, ...], dict[str, Any]]:
+def _av2_map_metadata(map_file: str | Path | None, scenario_id: str) -> tuple[str | None, tuple[str, ...], dict[str, Any], MapContext | None]:
     if map_file is None:
-        return None, (), {"map_status": "not_provided"}
+        return None, (), {"map_status": "not_provided"}, None
     path = Path(map_file)
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -681,6 +684,8 @@ def _av2_map_metadata(map_file: str | Path | None) -> tuple[str | None, tuple[st
         value = json.loads(raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RecordParseError(f"invalid AV2 map JSON: {path}") from exc
+    map_ctx = from_av2_map_json(value, scenario_id=scenario_id,
+                                content_sha256=hashlib.sha256(raw).hexdigest())
     # Hash the exact bytes already read for JSON decoding; do not reread the
     # map archive from disk.
     content_digest = hashlib.sha256(raw).hexdigest()
@@ -702,7 +707,8 @@ def _av2_map_metadata(map_file: str | Path | None) -> tuple[str | None, tuple[st
         "map_semantic_sha256": semantic_digest,
         "map_feature_count": len(ids),
         "map_coordinate_frame": "av2_city_xy",
-    }
+        "map_geometry_complete": map_ctx.complete_geometry,
+    }, map_ctx
 
 
 def resolve_av2_map(parquet_file: str | Path, scenario_id: str | None = None,
@@ -918,7 +924,7 @@ def parse_av2_rows(
                                            "sdc_identity_source": "av2_api_track_id_AV_convention"
                                            if is_av_track else None},
                                  is_focal=str(focal_id) == track_id))
-    map_path, map_ids, map_metadata = _av2_map_metadata(map_file)
+    map_path, map_ids, map_metadata, map_ctx = _av2_map_metadata(map_file, str(sid))
     if map_path is not None:
         expected_map_name = f"log_map_archive_{sid}.json"
         if Path(map_path).name != expected_map_name:
@@ -962,7 +968,7 @@ def parse_av2_rows(
         future_available=future_available, sample_rate_hz=actual_sample_rate_hz,
         source_digest=content_sha256, metadata=metadata,
     )
-    scene = UnifiedScene(manifest, tuple(tracks), map_ids, map_metadata)
+    scene = UnifiedScene(manifest, tuple(tracks), map_ids, map_metadata, map_ctx)
     scene.assert_valid()
     source_digest = source_file_sha256
     return ParsedScene(scene, source_file, None, content_sha256, parser_version,
@@ -1051,12 +1057,12 @@ def localize_scene(scene: UnifiedScene, *, origin_xy: tuple[float, float] = (0.0
                    yaw_rad: float = 0.0,
                    origin_track_id: str | None = None,
                    origin_time_index: int | None = None) -> UnifiedScene:
-    """Convert track states to a deterministic local XY frame.
+    """Convert trajectories and parsed map geometry to a local XY frame.
 
-    Map JSON remains attached by provenance; its geometry is not silently
-    rewritten because AV2 map archives contain heterogeneous lane/polygon
-    schemas.  ``map_metadata.local_transform`` is the exact rigid transform a
-    downstream map adapter must apply to every map point.
+    Map provenance is preserved. The same world-to-local rigid transform is
+    applied to every track state, map vertex, and signal stop point. This is
+    ordinary floating-point coordinate conversion, not interval-certified
+    geometry for a safety verifier.
     """
     resolved_origin_index = origin_time_index
     if origin_track_id is not None:
@@ -1103,7 +1109,11 @@ def localize_scene(scene: UnifiedScene, *, origin_xy: tuple[float, float] = (0.0
     manifest = replace(scene.manifest, coordinate_frame="local_xy", metadata=metadata)
     map_metadata = dict(scene.map_metadata)
     map_metadata["local_transform"] = metadata["local_transform"]
-    return UnifiedScene(manifest, tuple(tracks), scene.map_ids, map_metadata)
+    map_ctx = (scene.map_context.transform((ox, oy), yaw)
+               if scene.map_context is not None else None)
+    if map_ctx is not None:
+        map_metadata["map_coordinate_frame"] = "local_xy"
+    return UnifiedScene(manifest, tuple(tracks), scene.map_ids, map_metadata, map_ctx)
 
 
 def convert_center_scene_to_rear_axle(
@@ -1244,7 +1254,7 @@ def convert_center_scene_to_rear_axle(
                   "velocity_reference_by_track": velocity_reference_by_track,
                   "velocity_reference": velocity_reference},
     )
-    return UnifiedScene(manifest, tuple(tracks), scene.map_ids, scene.map_metadata)
+    return UnifiedScene(manifest, tuple(tracks), scene.map_ids, scene.map_metadata, scene.map_context)
 
 
 __all__ = [

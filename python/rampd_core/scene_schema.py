@@ -8,11 +8,13 @@ has no TensorFlow, parquet, Waymo or Argoverse dependency.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 import hashlib
 import json
 import math
 from typing import Any, Mapping, Optional
+
+from .map_context import MapContext
 
 
 def _finite(value: float) -> bool:
@@ -182,6 +184,7 @@ class UnifiedScene:
     tracks: tuple[SceneTrack, ...]
     map_ids: tuple[str, ...] = ()
     map_metadata: Mapping[str, Any] = field(default_factory=dict)
+    map_context: Optional[MapContext] = None
 
     def validate(self) -> tuple[str, ...]:
         errors = list(self.manifest.validate())
@@ -192,6 +195,15 @@ class UnifiedScene:
             errors.append("tracks:multiple_sdc")
         for track in self.tracks:
             errors.extend(track.validate(self.manifest.timestamps))
+        if self.map_context is not None:
+            if self.map_context.scenario_id != self.manifest.scenario_id:
+                errors.append("map_context:scenario_id_mismatch")
+            if self.map_context.coordinate_frame != self.manifest.coordinate_frame:
+                errors.append("map_context:coordinate_frame_mismatch")
+            if any(sig.timestep >= len(self.manifest.timestamps) or
+                   sig.timestamp_s != self.manifest.timestamps[sig.timestep]
+                   for sig in self.map_context.signals):
+                errors.append("map_context:signal_time_axis_mismatch")
         return tuple(errors)
 
     def assert_valid(self) -> None:
@@ -210,12 +222,20 @@ class UnifiedScene:
             coordinate_frame=m.coordinate_frame, position_reference=m.position_reference,
             future_available=False, sample_rate_hz=m.sample_rate_hz,
             source_digest=m.source_digest,
-            metadata={**m.metadata, "source_timestamps": list(m.timestamps)},
+            # Preserve only public metadata; even the full source time axis
+            # belongs to the offline record, not the online observation view.
+            metadata={k: v for k, v in m.metadata.items()
+                      if k not in {"dynamic_map_states_digest", "dynamic_map_state_count",
+                                   "source_timestamps", "future_signal_states"}},
         )
         tracks = tuple(SceneTrack(t.track_id, t.category, t.online_states(idx),
                                   t.is_sdc, t.to_predict, t.metadata, t.is_focal)
                        for t in self.tracks)
-        return UnifiedScene(manifest, tracks, self.map_ids, self.map_metadata)
+        # Never carry a future-dependent dynamic-signal digest into an online view.
+        online_map_metadata = {k: v for k, v in self.map_metadata.items()
+                               if k not in {"dynamic_map_states", "dynamic_map_states_digest"}}
+        map_ctx = self.map_context.prefix(idx) if self.map_context is not None else None
+        return UnifiedScene(manifest, tracks, self.map_ids, online_map_metadata, map_ctx)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -226,6 +246,7 @@ class UnifiedScene:
                          "metadata": dict(t.metadata), "is_focal": t.is_focal}
                         for t in self.tracks],
             "map_ids": list(self.map_ids), "map_metadata": dict(self.map_metadata),
+            "map_context": asdict(self.map_context) if self.map_context is not None else None,
         }
 
     def digest(self) -> str:

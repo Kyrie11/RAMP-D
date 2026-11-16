@@ -180,6 +180,74 @@ class ProtocolState:
                    tuple((x[0], int(x[1])) for x in value.get("received_messages", ())))
 
 
+
+@dataclass(frozen=True)
+class SilenceExclusionEvidence:
+    """Version/identity/time-bound *model-assumption* witness for no receipt.
+
+    A model-specific publication obligation is assumed, not inferred from a
+    dataset.  Every omitted source mode must be explicitly in excluded_modes.
+    This prevents a caller from silently deleting an unrelated hidden state
+    by setting a bare `silence_exclusion_proved=True` boolean.
+    """
+
+    expected_message_id: str
+    protocol_version: str
+    guarantee_contract_sha256: str
+    latest_issue_s: Fraction
+    max_delivery_delay_s: Fraction
+    observation_cutoff_s: Fraction
+    publication_guaranteed: bool
+    delivery_guaranteed: bool
+    excluded_modes: tuple[tuple[tuple[str, str], ...], ...] = ()
+
+    def __post_init__(self):
+        if not self.expected_message_id or not self.protocol_version:
+            raise ValueError("silence evidence missing message identity / protocol version")
+        digest = self.guarantee_contract_sha256.lower()
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise ValueError("silence guarantee requires an explicit SHA-256 digest")
+        for k in ("latest_issue_s", "max_delivery_delay_s", "observation_cutoff_s"):
+            value = Fraction(getattr(self, k))
+            if value < 0:
+                raise ValueError("silence evidence time bounds must be nonnegative")
+            object.__setattr__(self, k, value)
+        if not isinstance(self.publication_guaranteed, bool) or not isinstance(self.delivery_guaranteed, bool):
+            raise TypeError("silence guarantee flags must be bool")
+        modes = tuple(tuple(sorted(tuple(pair) for pair in mode)) for mode in self.excluded_modes)
+        if len(modes) != len(set(modes)):
+            raise ValueError("duplicate excluded modes")
+        object.__setattr__(self, "excluded_modes", modes)
+
+    def to_dict(self):
+        def frac(x):
+            return [x.numerator, x.denominator]
+        return {"expected_message_id": self.expected_message_id,
+                "protocol_version": self.protocol_version,
+                "guarantee_contract_sha256": self.guarantee_contract_sha256,
+                "latest_issue_s": frac(self.latest_issue_s),
+                "max_delivery_delay_s": frac(self.max_delivery_delay_s),
+                "observation_cutoff_s": frac(self.observation_cutoff_s),
+                "publication_guaranteed": self.publication_guaranteed,
+                "delivery_guaranteed": self.delivery_guaranteed,
+                "excluded_modes": [[list(x) for x in mode] for mode in self.excluded_modes]}
+
+    @classmethod
+    def from_dict(cls, value):
+        return cls(value["expected_message_id"], value["protocol_version"],
+                   value["guarantee_contract_sha256"], Fraction(*value["latest_issue_s"]),
+                   Fraction(*value["max_delivery_delay_s"]),
+                   Fraction(*value["observation_cutoff_s"]),
+                   value["publication_guaranteed"], value["delivery_guaranteed"],
+                   tuple(tuple(tuple(pair) for pair in mode)
+                         for mode in value.get("excluded_modes", ())))
+
+    def time_guarantee_holds(self, local: TimeWindow | None) -> bool:
+        return (local is not None and self.publication_guaranteed and
+                self.delivery_guaranteed and bool(self.excluded_modes) and
+                self.latest_issue_s + self.max_delivery_delay_s <= self.observation_cutoff_s and
+                self.observation_cutoff_s <= local.lo)
+
 @dataclass(frozen=True)
 class ProtocolTransition:
     transition_id: str
@@ -192,6 +260,7 @@ class ProtocolTransition:
     silence: bool = False
     guard_tag: str = ""
     silence_exclusion_proved: bool = False
+    silence_evidence: SilenceExclusionEvidence | None = None
 
     def __post_init__(self):
         if not self.transition_id or not self.source_state_id or not self.target_state_id:
@@ -213,6 +282,10 @@ class ProtocolTransition:
             raise ValueError("unsupported guard tag; use always/unknown/false")
         if self.silence_exclusion_proved and not self.silence:
             raise ValueError("silence exclusion applies only to silence branches")
+        if self.silence_evidence is not None and not self.silence:
+            raise ValueError("silence evidence can only be attached to silence branches")
+        if self.silence_evidence is not None and not isinstance(self.silence_evidence, SilenceExclusionEvidence):
+            raise TypeError("silence_evidence must be SilenceExclusionEvidence")
         if not isinstance(self.silence, bool) or not isinstance(self.silence_exclusion_proved, bool):
             raise TypeError("silence flags must be bool")
         object.__setattr__(self, "events", ev)
@@ -224,7 +297,9 @@ class ProtocolTransition:
                 "clocks": self.clocks.to_dict(), "observation": self.observation,
                 "message": None if self.message is None else self.message.to_dict(),
                 "silence": bool(self.silence), "guard_tag": self.guard_tag,
-                "silence_exclusion_proved": bool(self.silence_exclusion_proved)}
+                "silence_exclusion_proved": bool(self.silence_exclusion_proved),
+                "silence_evidence": (None if self.silence_evidence is None else
+                                     self.silence_evidence.to_dict())}
 
     @classmethod
     def from_dict(cls, value):
@@ -234,7 +309,9 @@ class ProtocolTransition:
                    ClockTrace.from_dict(value["clocks"]), value["observation"],
                    None if msg is None else MessageSpec.from_dict(msg),
                    value.get("silence", False), value.get("guard_tag", ""),
-                   value.get("silence_exclusion_proved", False))
+                   value.get("silence_exclusion_proved", False),
+                   (None if value.get("silence_evidence") is None else
+                    SilenceExclusionEvidence.from_dict(value["silence_evidence"])))
 
 
 @dataclass(frozen=True)
@@ -367,16 +444,23 @@ def public_observation_window(branch: ProtocolTransition) -> TimeWindow | None:
     return branch.clocks.local
 
 
-def silence_knowledge_status(branch: ProtocolTransition):
-    """Whether this silence branch may exclude its hidden event histories."""
+def silence_knowledge_status(branch: ProtocolTransition, *, protocol_version: str | None = None):
+    """Deadline-based exclusion valid only under versioned guarantee assumptions.
+
+    The boolean alone is intentionally insufficient: the claimed deadline
+    must be reproducible and must cover each mode proposed for removal.
+    """
     if not branch.silence:
         return "PROVED", "NOT_SILENCE"
     if not branch.silence_exclusion_proved:
         return "UNKNOWN", "SILENCE_DOES_NOT_EXCLUDE_HIDDEN_EVENT"
+    evidence = branch.silence_evidence
+    if evidence is None:
+        return "UNKNOWN", "SILENCE_DEADLINE_EVIDENCE_MISSING"
+    if protocol_version is not None and evidence.protocol_version != protocol_version:
+        return "UNKNOWN", "SILENCE_PROTOCOL_VERSION_MISMATCH"
+    if not evidence.time_guarantee_holds(branch.clocks.local):
+        return "UNKNOWN", "SILENCE_DEADLINE_NOT_PROVED"
     if branch.message is not None:
         return "UNKNOWN", "INVALID_SILENCE_MESSAGE"
-    return "PROVED", "PUBLICATION_AND_DELIVERY_DEADLINE_PROVED"
-
-
-def build_coverage_ledger(automaton):
-    return automaton.coverage()
+    return "PROVED", "VERSIONED_PUBLICATION_AND_DELIVERY_DEADLINE_ASSUMED"

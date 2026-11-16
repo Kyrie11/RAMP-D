@@ -16,6 +16,7 @@ import hashlib
 import json
 from typing import Callable, Mapping
 
+from .protocol import silence_knowledge_status
 from .protocol import (ProtocolAutomaton, ProtocolTransition, branch_temporal_status,
                        public_observation_window)
 from .observations import ObservationModel, ObservationBranch, PosteriorResult
@@ -265,13 +266,19 @@ class FullSupportVerifier:
                 # information.  Unless an explicit publication/delivery
                 # deadline contract proves exclusion, a checker cannot drop
                 # a hidden mode merely because no report was received.
-                if tr.silence and not tr.silence_exclusion_proved:
+                if tr.silence:
                     source_modes = {a.mode for a in task.support}
                     successor_modes = {a.mode for a in checked.support}
-                    if not source_modes.issubset(successor_modes):
-                        unresolved.append(
-                            f"{tr.transition_id}:SILENCE_REMOVES_HIDDEN_HISTORY_WITHOUT_PROOF")
-                        continue
+                    removed = source_modes - successor_modes
+                    if removed:
+                        evidence_status, _ = silence_knowledge_status(
+                            tr, protocol_version=self.contract.automaton.version)
+                        permitted = (set(tr.silence_evidence.excluded_modes)
+                                     if tr.silence_evidence is not None else set())
+                        if evidence_status != "PROVED" or not removed.issubset(permitted):
+                            unresolved.append(
+                                f"{tr.transition_id}:SILENCE_REMOVES_HIDDEN_HISTORY_WITHOUT_REPLAYABLE_DEADLINE")
+                            continue
                 branches.append(ObservationBranch(tr.transition_id, tr.observation, checked.support))
             if not branches:
                 continue

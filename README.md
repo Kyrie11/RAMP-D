@@ -1,13 +1,13 @@
-# RAMP-D — Phase 6C-A development snapshot (0.9.0)
+# RAMP-D — Phase 6C-A2 local validation snapshot (0.9.1)
 
 This repository contains the current research implementation of RAMP-D. The mathematical specification of record is `AnonymousSubmission2027(1).tex`; implementation history and phase acceptance criteria are in `docs/`.
 
 ## Current status
 
-- **Phase 6B:** parser and scene contracts have been audited and corrected locally. The uploaded server report shows WOMD Scenario validation PASS (3 records) and AV2 Motion SKIP because the server environment lacked `pyarrow`/`fastparquet`; therefore Phase 6B is not yet accepted end-to-end.
-- **Phase 6C-A:** pure-Python contracts for history/future separation, joint modes, observation histories, RuleNet-inspired soft ordering, and CARLA/SUMO synchronization are implemented. The dependency-free validation harness currently reports **47 passed**.
-- **Cross-phase audit:** a protocol timing bug was corrected so a hidden rule change that occurs before message receipt remains in support. Message receipt and local detection are independent observation channels.
-- **Not complete:** native MPFR replay, full Phase 2–5 mathematical audit, finite-horizon `W_H^SC`/rank/value/CCG coverage, replayable silence-deadline evidence, vector-map geometry adapters, actual CARLA/SUMO bridge, predictor training, and closed-loop experiments.
+- **Phase 6B:** six newly uploaded 2026-11-16 log archives do **not** include real-data acceptance reports: four failed at test collection and two ran 25 pass / 1 failing parquet mock. An earlier project note claimed WOMD 3-record PASS and AV2 SKIP, but that claim was not independently replayed here. The missing lower-case validator has been restored, now with strict status + source SHA logging; both real datasets require a fresh server PASS.
+- **Phase 6C-A2:** preserves Phase 6C-A's history/future, joint-mode, soft-ranking and simulator-time contracts; adds WOMD/AV2 per-scenario map geometry, WOMD signal timestamps with strict online/label separation, common local coordinates, and versioned silence/deadline evidence. The dependency-free regression now reports **67 passed**. Real datasets/native ABI not tested locally.
+- **Cross-phase audit:** change-before-receipt remains hidden; message receipt and local detection remain separate. A bare `silence_exclusion_proved=True` no longer suffices to delete a hidden mode: a versioned deadline/mode evidence object is required. Trust in the external delivery guarantee remains an explicit assumption.
+- **Not complete:** native MPFR replay of this patch, user-server real-data pass, full Phase 2–5 mathematical audit, finite-horizon `W_H^SC`/rank/value/CCG, independent proof of communication guarantees, real CARLA/SUMO bridge, predictor training, and closed-loop experiments.
 
 No current report should be interpreted as `full_support_certified=true` or as a real-road safety guarantee.
 
@@ -19,11 +19,15 @@ From the project root, in the server environment:
 # Install the optional parquet readers used by AV2 Motion
 pip install -e ".[datasets]"
 
-# Full project tests plus real WOMD/AV2 validation samples.
-# The capital-B entry point is kept as a compatibility wrapper.
-bash scripts/validate_phase6B.sh
+# Pure contracts (67 tests) + source/geometry/semantic guards.
+bash scripts/validate_phase6c_a2.sh
 
-# Pure-Python Phase 6B adapter + Phase 6C-A regression harness.
+# Real WOMD/AV2 validation: 0 PASS / 3 SKIP / 4 ERROR.
+export WOMD_ROOT=/data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed/scenario
+export AV2_ROOT=/data0/senzeyu2/dataset/Argoverse2/motion
+MAX_RECORDS=1 bash scripts/validate_phase6B.sh
+
+# Optional legacy Phase 6C-A smoke.
 scripts/validate_phase6c_a.sh
 ```
 
@@ -31,8 +35,10 @@ The Phase 6B script returns exit code `0` for PASS, `3` for SKIP, and `4` for ER
 
 ## Important implementation documents
 
-- `docs/PHASE6B_AUDIT_AND_FIXES.md` — data schema, masks, timestamps, digests, and original server report findings.
-- `docs/PHASE6C_A_PLAN.md` — Phase 6C-A contracts, RuleNet math, supervision boundaries, and next subphases.
+- `docs/PHASE6B_SIX_LOGS_REVIEW.md` — per-archive diagnosis of six 2026-11-16 Phase 6B runs.
+- `docs/PHASE6B_AUDIT_AND_FIXES.md` — data schema, masks, timestamps, and digest contracts.
+- `docs/PHASE6C_A_PLAN.md` — Phase 6C-A contracts and RuleNet ordering math.
+- `docs/PHASE6C_A2_PLAN.md`, `docs/PHASE6C_A2_IMPLEMENTATION_REPORT.md` — new map/signal, silence-evidence work and acceptance gates.
 - `docs/PHASE6C_A_IMPLEMENTATION_REPORT.md` — code changes, tests, and explicit limitations.
 - `docs/MATHEMATICAL_AUDIT_PHASE1_5.md` — current cross-phase math audit and unresolved gaps.
 - `docs/DATASETS_AND_SIMULATORS.md` — WOMD, AV2, CARLA 0.9.16, and SUMO 1.20 data/integration policy.

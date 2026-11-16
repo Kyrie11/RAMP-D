@@ -16,6 +16,7 @@ import math
 from typing import Iterable, Mapping, Sequence
 
 from .scene_schema import UnifiedScene, TrackState
+from .map_context import MapContext, SignalRecord
 from .forecast import PredictionProposal
 
 
@@ -95,6 +96,11 @@ class SceneForecastSample:
     map_ids: tuple[str, ...]
     map_digest: str | None
     source_digest: str
+    # Full logged map/timeline is kept outside model-facing inputs. Only static
+    # geometry is exposed by default; dynamic records are supervision, not
+    # proof of actual ego observations.
+    map_context_history: MapContext | None = None
+    future_signal_targets: tuple[SignalRecord, ...] = ()
 
     def __post_init__(self):
         if not self.scenario_id or not self.dataset or not self.split:
@@ -125,6 +131,15 @@ class SceneForecastSample:
             raise Phase6CContractError("duplicate history track IDs")
         if len({x.track_id for x in self.future_targets}) != len(self.future_targets):
             raise Phase6CContractError("duplicate future target IDs")
+        if self.map_context_history is not None:
+            if self.map_context_history.coordinate_frame != self.coordinate_frame:
+                raise Phase6CContractError("map/track coordinate frames differ")
+            if any(s.timestamp_s > self.current_timestamp_s for s in self.map_context_history.signals):
+                raise Phase6CContractError("future dynamic signals in map history")
+        if any(s.timestamp_s <= self.current_timestamp_s for s in self.future_signal_targets):
+            raise Phase6CContractError("signal labels must follow current time")
+        if not self.future_available and self.future_signal_targets:
+            raise Phase6CContractError("test/no-future samples cannot expose future signals")
         if sum(1 for x in self.history_tracks if x.is_sdc) > 1:
             raise Phase6CContractError("a scene cannot contain multiple explicit SDC tracks")
         if any(len(x.states) != len(self.history_timestamps_s) for x in self.history_tracks):
@@ -198,6 +213,10 @@ class SceneForecastSample:
             "position_reference": self.position_reference,
             "map_ids": self.map_ids,
             "map_digest": self.map_digest,
+            "static_map": (self.map_context_history.static_only()
+                           if self.map_context_history is not None else None),
+            # Recorded traffic-signal history is not automatically ego-visible.
+            # A later observation adapter may add proven-visible signals.
         }
 
 
@@ -254,6 +273,11 @@ def build_scene_forecast_sample(scene: UnifiedScene) -> SceneForecastSample:
         map_ids=scene.map_ids,
         map_digest=None if map_digest is None else str(map_digest),
         source_digest=manifest.source_digest,
+        map_context_history=(scene.map_context.prefix(current)
+                             if scene.map_context is not None else None),
+        future_signal_targets=(tuple(s for s in scene.map_context.signals
+                                     if s.timestep > current)
+                               if scene.map_context is not None and manifest.future_available else ()),
     )
 
 

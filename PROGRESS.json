@@ -1,6 +1,6 @@
 {
-  "release": "0.9.0",
-  "phase": "6C-A",
+  "release": "0.9.1",
+  "phase": "6C-A2",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
@@ -20,9 +20,9 @@
     "carla_api": "0.9.16",
     "simulator_mode": "headless"
   },
-  "local_limit": "Local container lacks official MPFR development headers/native interval ABI and the user server dataset paths. Pure-Python Phase 6B/6C-A harness passed 47 tests; this does not run the native Phase 0-5 suite, validate real AV2/WOMD records, start CARLA/SUMO, or certify full support.",
+  "local_limit": "Local container lacks MPFR development headers and the user /data0 datasets: cannot verify real WOMD/AV2 record schema or run native proof backend. 67 pure Python contract tests pass; full-support certification remains false.",
   "full_support_certified": false,
-  "assurance_scope": "PHASE6C_A_DATA_AND_PROPOSAL_CONTRACTS_ONLY",
+  "assurance_scope": "PHASE6C_A2_MAP_SIGNAL_AND_SILENCE_CONTRACTS_LOCAL_ONLY",
   "manuscript_files_required": false,
   "current_scene_verified": false,
   "concrete_safety_certified": false,
@@ -38,7 +38,7 @@
   "phase5_local_limit": "Local container lacks CMake and official MPFR development headers; local Python/Phase 5 smoke used a temporary declaration-only header with the system MPFR runtime.",
   "phase6b": "local adapter implementation audited: AV2 focal is distinct from SDC; official track_id == \"AV\" convention identifies ego when present, strict observed mask parsing, official scenario timestamp reconstruction, mixed reference tracking, and shard/record/scenario digests. Server gate remains SKIP until pyarrow is installed and AV2 validation samples pass.",
   "phase6c_a": "implemented locally: history/future separated SceneForecastSample, joint-mode plus observation-history schema, RuleNet-inspired soft risk scoring, non-pruning branch ordering, fixed-step CARLA/SUMO synchrony contract, actor ID registry, and sensor production/delivery records; 47 dependency-free tests passed. Map geometry and dynamic traffic-signal timelines are not yet exposed; current encoder input carries map IDs/digests only.",
-  "phase6b_server_status": "SKIP: WOMD validation PASS; AV2 validation SKIP because parquet engine (pyarrow/fastparquet) missing",
+  "phase6b_server_status": "UNVERIFIED_THIS_ROUND: six uploaded archives have pytest logs only; previous project history says WOMD PASS/AV2 SKIP. Re-run both real validation splits.",
   "phase6b_fixes": {
     "av2_focal_vs_sdc": "focal_track_id remains is_focal only; official AV2 track_id == \"AV\" convention maps to is_sdc when present and vehicle typed; WOMD uses sdc_track_index",
     "av2_observed_mask": "strict bool decoding; reject strings and NaN",
@@ -48,14 +48,14 @@
     "validation_exit_codes": "PASS=0, SKIP=3, ERROR=4"
   },
   "phase6c_a_tests": {
-    "dependency_free_python_tests": 47,
-    "status": "PASS",
+    "dependency_free_python_tests": 67,
+    "status": "PASS_LOCAL_ONLY",
     "native_backend_tested": false,
     "real_data_tested": false,
     "simulators_used": false
   },
   "phase4_5_clock_audit": "Corrected: hidden change-before-receipt branches remain in support until proved public observation; message branches use receipt, local-detection branches use local; receipt->local is not required.",
-  "phase4_5_open_audit": "silence_exclusion_proved remains a boolean and needs independently replayable publication/delivery-deadline evidence; Phase 2/3 finite-horizon W_H^SC, rank, value function and CCG implementation coverage still need audit/implementation.",
-  "phase6c_a2": "pending: unified WOMD/AV2 vector map primitives, lane topology, crosswalk/drivable polygons, and WOMD dynamic signal timeline; required before map-aware predictor training.",
-  "next_gate": "Install pyarrow and rerun Phase 6B server validation; then implement Phase 6C-A2 map/signal adapters and close Phase 2-5 mathematical gaps (finite-horizon W_H^SC/rank/value/CCG and replayable silence-deadline evidence) before Phase 6C-B CARLA/SUMO bridge."
+  "phase4_5_open_audit": "External trust/replay of guarantee contract remains open; full native verifier not exercised. Phase 2/3 finite-horizon W_H^SC, rank, value function, complete terminal contract, and CCG still unimplemented.",
+  "phase6c_a2": "implemented and dependency-free regression PASS (67 tests): WOMD + AV2 Motion map geometry, WOMD signal record timeline, online/label gating, map transform, versioned silence exclusion evidence; user-server dataset & native verifier pending",
+  "next_gate": "User-server: run 67 dependency-free tests; real WOMD/AV2 smoke with SHA and map; complete native CTest/Phase4/5 regressions. Then implement paper-correct finite task-winning W_H^SC/rank/V_H^SC/CCG prior to 6C-B simulator bridge."
 }

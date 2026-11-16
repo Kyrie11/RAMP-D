@@ -6,7 +6,7 @@ import pytest
 from rampd_core.protocol import (
     CausalStage, ClockTrace, EffectiveInterval, MessageSpec, ProtocolAutomaton,
     ProtocolState, ProtocolTransition, TimeWindow, branch_temporal_status,
-    silence_knowledge_status,
+    silence_knowledge_status, SilenceExclusionEvidence,
 )
 from rampd_core.resources import (
     ActorFootprint, ResourceRegion, ResourceState, ResourceStatus, OccupancyStatus,
@@ -51,7 +51,15 @@ def test_four_clocks_and_silence_do_not_create_knowledge():
                                   (("external", CausalStage.EXTERNAL),), clocks(0),
                                   "silence", silence=True, guard_tag="always",
                                   silence_exclusion_proved=True)
-    assert silence_knowledge_status(explicit)[0] == "PROVED"
+    assert silence_knowledge_status(explicit) == (
+        "UNKNOWN", "SILENCE_DEADLINE_EVIDENCE_MISSING"
+    )
+    certified = replace(explicit, clocks=clocks(3), silence_evidence=SilenceExclusionEvidence(
+        "expected-rule-report", "phase4-protocol-v1", "a" * 64,
+        Q(1), Q(1), Q(3), True, True,
+        ((('rule', 'changed'),),),
+    ))
+    assert silence_knowledge_status(certified, protocol_version="phase4-protocol-v1")[0] == "PROVED"
 
 
 def test_message_clock_order_requires_explicit_relation():

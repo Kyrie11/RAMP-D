@@ -23,7 +23,7 @@ pkg = types.ModuleType("rampd_core")
 pkg.__path__ = [str(PACKAGE_DIR)]
 sys.modules["rampd_core"] = pkg
 
-for name in ("protocol", "scene_schema", "record_adapters", "forecast", "phase6c",
+for name in ("protocol", "map_context", "scene_schema", "record_adapters", "forecast", "phase6c",
              "dataset_audit"):
     module = importlib.import_module(f"rampd_core.{name}")
     for symbol in getattr(module, "__all__", ()):
@@ -38,5 +38,7 @@ pytest_args = [
     str(ROOT / "tests" / "test_forecast_adapter.py"),
     str(ROOT / "tests" / "test_phase6c.py"),
     str(ROOT / "tests" / "test_phase6c_protocol_regression.py"),
+    str(ROOT / "tests" / "test_phase6c_a2_map.py"),
+    str(ROOT / "tests" / "test_phase6c_silence_evidence.py"),
 ]
 raise SystemExit(pytest.main( [*pytest_args, *sys.argv[1:]] ))

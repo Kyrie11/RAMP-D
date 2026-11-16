@@ -30,7 +30,7 @@ from .backup_graph import (BackupNode, BackupPolicyGraph, BackupExecutor,
                            BackupExecutionError, build_backup_graph,
                            save_backup_graph, load_backup_graph)
 from .protocol import (CausalStage, TimeWindow, ClockTrace, EffectiveInterval,
-                       MessageSpec, ProtocolState, ProtocolTransition,
+                       MessageSpec, SilenceExclusionEvidence, ProtocolState, ProtocolTransition,
                        CoverageLedger, ProtocolAutomaton, branch_temporal_status,
                        public_observation_window, silence_knowledge_status,
                        build_coverage_ledger)
@@ -54,6 +54,9 @@ from .cegar import (PHASE5_SCOPE, CEGAR_SCHEMA, CounterexampleKind, ReplayAssess
 from .forecast import (ProposalStatus, PredictionProposal, ProposalSet,
                        ProposalAdapterResult, proposal_only,
                        hard_support_from_prediction)
+from .map_context import (MapContractError, MapVertex, MapPrimitive, SignalRecord,
+                          MapContext, from_womd_scenario, from_av2_map_json,
+                          load_av2_map_file)
 from .scene_schema import (SceneManifest, TrackState, SceneTrack, UnifiedScene,
                            build_scene_digest)
 from .dataset_audit import (AuditIssue, FileEntry, SplitAudit, DatasetAuditReport,
@@ -78,5 +81,5 @@ from .phase6c import (
     SynchronizedFrameLedger, SensorDeliveryRecord, ActorIdentityRegistry,
 )
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 __all__ = [name for name in globals() if not name.startswith("_")]

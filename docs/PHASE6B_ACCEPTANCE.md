@@ -13,7 +13,7 @@
 
 ## 当前本地结果
 
-本轮纯 Python adapter/Phase 6C-A dependency-free harness 结果为 **47 passed**；它不代替 native interval/backend 测试，也不代表真实数据已通过。服务器报告中 WOMD 为 PASS、AV2 因缺少 `pyarrow` 为 SKIP，故 Phase 6B 整体验收仍未通过。安装 `.[datasets]` 后重跑真实数据脚本。未获得 WOMD 与 AV2 双 PASS 前，不得将 Phase 6B 标记为 `real_scene_verified` 或 `full_support_certified`。
+本轮纯 Python adapter/Phase 6C-A dependency-free harness 结果为 **67 passed**；它不代替 native interval/backend 测试，也不代表真实数据已通过。本轮上传六份新报告仅包含 pytest 日志（四次收集失败、两次 25 PASS/1 FAIL），没有真实数据 scene summary。旧工程历史报告曾称 WOMD PASS/AV2 SKIP，故 Phase 6B 整体验收仍未通过。安装 `.[datasets]` 后重跑真实数据脚本。未获得 WOMD 与 AV2 双 PASS 前，不得将 Phase 6B 标记为 `real_scene_verified` 或 `full_support_certified`。
 
 ## 失败分流
 
