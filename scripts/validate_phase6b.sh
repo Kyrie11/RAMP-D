@@ -13,6 +13,9 @@ cd "$ROOT" || exit 4
 export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD="${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-1}"
 
+# Reject a mixed or edited release before producing real-dataset claims.
+"$PYTHON_BIN" scripts/verify_release.py || exit 4
+
 "$PYTHON_BIN" -c 'import sys; assert sys.version_info >= (3,10), "Python 3.10+ required"' \
   || { echo 'PHASE6B_STATUS=ERROR:PYTHON_VERSION'; exit 4; }
 

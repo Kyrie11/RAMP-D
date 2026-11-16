@@ -10,7 +10,7 @@
 bash scripts/validate_phase6b.sh
 ```
 
-`validate_phase6B.sh`（大写 B）是兼容包装脚本；`validation_phase6B.sh` 并不是本工程中的文件名。
+当前版本统一使用小写 `scripts/validate_phase6b.sh`，不再发布大写 `validate_phase6B.sh` 兼容包装脚本；`validation_phase6B.sh` 也不是有效文件名。
 
 ## 2. 定位到的性能问题
 

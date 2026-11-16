@@ -49,7 +49,7 @@ export WOMD_ROOT=/data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncom
 export AV2_ROOT=/data0/senzeyu2/dataset/Argoverse2/motion
 export MAX_RECORDS=1
 bash scripts/validate_phase6c_a2.sh
-bash scripts/validate_phase6B.sh
+bash scripts/validate_phase6b.sh
 # 检查 reports/phase6b_*/phase6b_acceptance_summary.json 的双 PASS + SHA
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j4

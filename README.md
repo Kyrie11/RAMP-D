@@ -1,6 +1,9 @@
-## Phase6C integrated repair (0.9.3, 2026-11-16)
+## Phase6C integrated repair (0.9.3-p1, 2026-11-16)
 
 This release **combines Phase6C-A3 SC/rank + A2 map/protocol with the earlier Phase6C offline CV/simulation diagnostics**. DO NOT overlay it on an older checkout: extract into a fresh directory and run `python scripts/verify_release.py`. Fixes, evidence scope and commands: [Phase6C integration repair](docs/PHASE6C_INTEGRATION_REPAIR_20261116.md). Supervision policy: [eight losses](docs/SUPERVISION_SOURCE_POLICY_20261116.md). Locally 84 synthetic data/protocol tests and 13 synthetic finite SC/rank tests pass; native/data/simulator gates are pending target server.
+
+
+**Filename and release-integrity hotfix (0.9.3-p1):** Phase6B is exclusively `scripts/validate_phase6b.sh` (lowercase `b`). The obsolete uppercase wrapper has been removed and the SHA-256 release manifest regenerated. `verify_release.py` now prints individual missing/changed/untracked paths with recovery guidance. For a working checkout, do not delete `python/`, `tests/`, or `scripts/`; install this patch in a new directory instead of overlaying an old checkout.
 
 ---
 
@@ -42,7 +45,7 @@ bash scripts/validate_phase6c_a2.sh
 # Real WOMD/AV2 validation: 0 PASS / 3 SKIP / 4 ERROR.
 export WOMD_ROOT=/data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed/scenario
 export AV2_ROOT=/data0/senzeyu2/dataset/Argoverse2/motion
-MAX_RECORDS=1 bash scripts/validate_phase6B.sh
+MAX_RECORDS=1 bash scripts/validate_phase6b.sh
 
 # Optional legacy Phase 6C-A smoke.
 scripts/validate_phase6c_a.sh

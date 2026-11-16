@@ -13,6 +13,6 @@
 
 工程 ZIP 中的 `tests/test_phase6b_record_adapters.py` 已具有不依赖真实 pandas 的 `fake_pandas` unit stub，67 个 dependency-free Phase 6B/6C 合同测试在本地通过。**该成功不代表已读取过任何用户服务器的数据。**
 
-此外，上传工程有大小写包装入口 `scripts/validate_phase6B.sh`，但其调用的小写 `scripts/validate_phase6b.sh` 在输入 ZIP 中缺失（旧 MANIFEST 曾列出该文件）。本轮补了主脚本并以 `0=PASS, 3=SKIP, 4=ERROR` 为约束。可用 `MAX_RECORDS=1` 在服务器验证 WOMD/AV2，`MAX_RECORDS=10` 后再压力验证。报告明确记录场景 ID、源数据 SHA、解析摘要、地图 primitive 和信号 label 数。
+历史版本曾混用大写与小写的 Phase6B 脚本名称，且出现过小写主脚本缺失。本发布版仅保留 `scripts/validate_phase6b.sh`，并以 `0=PASS, 3=SKIP, 4=ERROR` 为退出码约束。可用 `MAX_RECORDS=1` 在服务器验证 WOMD/AV2，`MAX_RECORDS=10` 后再压力验证。报告明确记录场景 ID、源数据 SHA、解析摘要、地图 primitive 和信号 label 数。
 
 WOMD 在旧工程历史文档中被报告过三条服务器样本 PASS，AV2 曾因缺失 parquet engine 为 SKIP；这是**历史记录中的说法**，不属于本轮六个日志包独立证实的结果。两份数据的当前状态都等待服务器这轮重新验证。

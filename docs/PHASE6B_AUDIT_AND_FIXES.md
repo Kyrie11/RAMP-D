@@ -43,7 +43,7 @@ v_{rear}=v_{center}-\dot\psi R(\psi)Jo.
 conda activate mfrp
 cd /home/senzeyu2/code/RAMP-D
 pip install -e ".[datasets]"
-bash scripts/validate_phase6B.sh
+bash scripts/validate_phase6b.sh
 ```
 
 如果报告仍为 SKIP，先检查报告中的具体 dependency/path reason；只有 WOMD 和 AV2 都为 PASS，Phase 6B 才能验收。当前没有把服务器目录内容或 AV2 解析成功写成既成事实。
