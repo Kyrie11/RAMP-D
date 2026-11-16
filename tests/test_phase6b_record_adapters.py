@@ -1,5 +1,7 @@
 import hashlib
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,7 @@ from rampd_core import (
     parse_av2_rows,
     parse_womd_scenario_proto,
 )
+from rampd_core import record_adapters
 
 
 class Obj:
@@ -212,6 +215,116 @@ def test_in_memory_av2_rows_digest_is_not_mislabeled_as_source_file_hash():
         parse_av2_rows(rows)
 
 
+def test_av2_fast_sample_does_not_hash_entire_source_file(tmp_path: Path, monkeypatch):
+    source = tmp_path / "scenario_fast.parquet"
+    source.write_bytes(b"placeholder parquet bytes")
+
+    def forbidden_full_file_hash(*args, **kwargs):
+        raise AssertionError("fast sample must not read/hash the entire parquet file")
+
+    monkeypatch.setattr(record_adapters, "sha256_file", forbidden_full_file_hash)
+    parsed = parse_av2_rows(
+        _av2_rows(), source_file=source, hash_source_file=False,
+    )
+    assert parsed.source_file_sha256 is None
+    assert parsed.content_sha256
+    assert parsed.scene.manifest.metadata["source_file_hash_status"] == "not_computed"
+    assert parsed.scene.manifest.metadata["content_sha256_semantics"] == "canonical_parsed_rows_sha256"
+    fully_fingerprinted = parse_av2_rows(
+        _av2_rows(), source_file=source, content_sha256="b" * 64,
+        source_file_sha256="b" * 64, hash_source_file=False,
+    )
+    assert parsed.scenario_content_sha256 == fully_fingerprinted.scenario_content_sha256
+
+
+def test_av2_parquet_reader_projects_used_columns_and_hashes_source_once(
+    tmp_path: Path, monkeypatch,
+):
+    source = tmp_path / "scenario_projection.parquet"
+    source.write_bytes(b"parquet")
+    rows = _av2_rows()
+    available_columns = list(rows[0].keys())
+    read_calls = []
+    hash_calls = []
+
+    class Schema:
+        names = available_columns
+
+    class FakeParquetFile:
+        schema = Schema()
+
+    fake_parquet = types.ModuleType("pyarrow.parquet")
+    fake_parquet.ParquetFile = lambda path: FakeParquetFile()
+    fake_pyarrow = types.ModuleType("pyarrow")
+    fake_pyarrow.__path__ = []
+    fake_pyarrow.parquet = fake_parquet
+    monkeypatch.setitem(sys.modules, "pyarrow", fake_pyarrow)
+    monkeypatch.setitem(sys.modules, "pyarrow.parquet", fake_parquet)
+
+    import pandas as pd
+
+    def fake_read_parquet(path, *, columns, engine):
+        read_calls.append((tuple(columns), engine))
+        return rows
+
+    monkeypatch.setattr(pd, "read_parquet", fake_read_parquet)
+    digest = "a" * 64
+
+    def counted_hash(path, **kwargs):
+        hash_calls.append(str(path))
+        return digest
+
+    monkeypatch.setattr(record_adapters, "sha256_file", counted_hash)
+    parsed = record_adapters.parse_av2_parquet(
+        source, require_map=False, hash_source_file=True,
+    )
+    fast_parsed = record_adapters.parse_av2_parquet(
+        source, require_map=False, hash_source_file=False,
+    )
+    assert parsed.source_file_sha256 == digest
+    assert fast_parsed.source_file_sha256 is None
+    assert hash_calls == [str(source)]
+    assert parsed.scenario_content_sha256 == fast_parsed.scenario_content_sha256
+    assert len(read_calls) == 2
+    for projected, engine in read_calls:
+        assert engine == "pyarrow"
+        assert set(projected) == set(available_columns)
+        assert "unused_column_not_in_adapter" not in projected
+
+
+def test_womd_fast_sample_hashes_record_without_hashing_full_shard(
+    tmp_path: Path, monkeypatch,
+):
+    payload = b"serialized scenario payload"
+
+    class FakeScenario(Obj):
+        def ParseFromString(self, value):
+            assert value == payload
+            self.__dict__.update(_womd().__dict__)
+
+    scenario_pb2 = types.SimpleNamespace(Scenario=FakeScenario)
+    waymo_pkg = types.ModuleType("waymo_open_dataset")
+    waymo_pkg.__path__ = []
+    protos_pkg = types.ModuleType("waymo_open_dataset.protos")
+    protos_pkg.scenario_pb2 = scenario_pb2
+    monkeypatch.setitem(sys.modules, "waymo_open_dataset", waymo_pkg)
+    monkeypatch.setitem(sys.modules, "waymo_open_dataset.protos", protos_pkg)
+    monkeypatch.setattr(record_adapters, "_iter_tfrecord", lambda path: iter([payload]))
+
+    def forbidden_full_file_hash(*args, **kwargs):
+        raise AssertionError("fast sample must not read/hash the entire TFRecord shard")
+
+    monkeypatch.setattr(record_adapters, "sha256_file", forbidden_full_file_hash)
+    parsed = next(record_adapters.iter_womd_scenario_file(
+        tmp_path / "validation.tfrecord-00000-of-00150",
+        max_records=1, hash_source_file=False,
+    ))
+    assert parsed.source_file_sha256 is None
+    assert parsed.record_sha256 == hashlib.sha256(payload).hexdigest()
+    assert parsed.content_sha256 == parsed.record_sha256
+    assert parsed.scene.manifest.metadata["source_file_hash_status"] == "not_computed"
+
+
 def test_av2_row_timestamps_must_agree_with_scenario_axis():
     rows = _av2_rows()
     for row in rows:
@@ -261,3 +374,25 @@ def test_womd_source_shard_and_record_digests_are_separate():
     assert parsed.source_file_sha256 == shard
     assert parsed.record_sha256 == record
     assert parsed.scenario_content_sha256 != shard
+
+
+    fast_parsed = parse_womd_scenario_proto(
+        _womd(), source_file="validation.tfrecord-00000-of-00150",
+        record_sha256=record,
+    )
+    assert fast_parsed.source_file_sha256 is None
+    assert fast_parsed.scenario_content_sha256 == parsed.scenario_content_sha256
+
+
+def test_av2_scenario_digest_is_independent_of_map_archive_path(tmp_path: Path):
+    map_a = tmp_path / "a" / "log_map_archive_av2-1.json"
+    map_b = tmp_path / "b" / "log_map_archive_av2-1.json"
+    map_a.parent.mkdir()
+    map_b.parent.mkdir()
+    raw = json.dumps({"lane_segments": {"lane-1": {"id": "lane-1"}}}).encode()
+    map_a.write_bytes(raw)
+    map_b.write_bytes(raw)
+    parsed_a = parse_av2_rows(_av2_rows(), map_file=map_a)
+    parsed_b = parse_av2_rows(_av2_rows(), map_file=map_b)
+    assert parsed_a.map_content_sha256 == parsed_b.map_content_sha256
+    assert parsed_a.scenario_content_sha256 == parsed_b.scenario_content_sha256

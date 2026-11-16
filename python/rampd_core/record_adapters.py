@@ -26,8 +26,8 @@ from .scene_schema import SceneManifest, SceneTrack, TrackState, UnifiedScene
 
 
 PHASE6B_SCHEMA = "rampd.phase6b.record-adapter.v1"
-WOMD_PARSER_VERSION = "rampd-womd-scenario-v1"
-AV2_PARSER_VERSION = "rampd-av2-motion-v1"
+WOMD_PARSER_VERSION = "rampd-womd-scenario-v1.1"
+AV2_PARSER_VERSION = "rampd-av2-motion-v1.1"
 
 
 class OptionalDependencyError(RuntimeError):
@@ -218,9 +218,18 @@ class ParsedScene:
         manifest.pop("source_file", None)
         manifest.pop("source_digest", None)
         metadata = dict(manifest.get("metadata", {}))
-        metadata.pop("map_file", None)
+        # Provenance policy must not change the canonical semantic scene hash.
+        # These fields describe how the source was fingerprinted, not the
+        # scenario's decoded states, map, identities, masks, or time axis.
+        for key in ("map_file", "source_file_hash_status", "content_sha256_semantics"):
+            metadata.pop(key, None)
         manifest["metadata"] = metadata
         payload["manifest"] = manifest
+        # AV2 map archives carry a location-dependent file path in the scene's
+        # map_metadata. Keep their content digest, but exclude that path.
+        map_metadata = dict(payload.get("map_metadata", {}))
+        map_metadata.pop("map_file", None)
+        payload["map_metadata"] = map_metadata
         raw = json.dumps(payload, sort_keys=True, separators=(",", ":"),
                          ensure_ascii=True, allow_nan=False, default=str).encode()
         return hashlib.sha256(raw).hexdigest()
@@ -243,7 +252,7 @@ class ParsedScene:
         }
 
 
-def sha256_file(path: str | Path, *, chunk_size: int = 1024 * 1024) -> str:
+def sha256_file(path: str | Path, *, chunk_size: int = 8 * 1024 * 1024) -> str:
     """Return the full SHA-256 of a source file without modifying it."""
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -315,10 +324,47 @@ def _proto_bytes(value: Any) -> bytes | None:
     serializer = getattr(value, "SerializeToString", None)
     if callable(serializer):
         try:
-            return bytes(serializer())
+            try:
+                return bytes(serializer(deterministic=True))
+            except TypeError:
+                # Lightweight test doubles and older protobuf APIs may not
+                # expose the deterministic keyword.
+                return bytes(serializer())
         except Exception:
             return None
     return None
+
+
+def _canonical_json_value(value: Any) -> Any:
+    """Convert nested protobuf/mapping values to a stable JSON-safe form."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return str(value)
+        return value
+    if isinstance(value, bytes):
+        return {"bytes_sha256": hashlib.sha256(value).hexdigest()}
+    if isinstance(value, Mapping):
+        return {str(key): _canonical_json_value(item)
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_json_value(item) for item in value]
+    raw = _proto_bytes(value)
+    if raw is not None:
+        return {"protobuf_sha256": hashlib.sha256(raw).hexdigest()}
+    if hasattr(value, "tolist"):
+        try:
+            return _canonical_json_value(value.tolist())
+        except Exception:
+            pass
+    if hasattr(value, "__dict__"):
+        return _canonical_json_value(vars(value))
+    raise TypeError(
+        "cannot produce a deterministic digest for "
+        f"{type(value).__module__}.{type(value).__qualname__}; "
+        "expected a protobuf, mapping, sequence, or scalar"
+    )
 
 
 def parse_womd_scenario_proto(
@@ -419,6 +465,11 @@ def parse_womd_scenario_proto(
     metadata: dict[str, Any] = {
         "schema": "waymo_open_dataset.protos.scenario_pb2.Scenario",
         "parser_version": parser_version,
+        "source_file_hash_status": "computed" if source_file_sha256 else "not_computed",
+        "content_sha256_semantics": (
+            "source_file_sha256" if source_file_sha256 and content_sha256 == source_file_sha256
+            else "record_sha256"
+        ),
         "source_track_count": len(tracks),
         "source_track_indices": list(range(len(tracks))),
         "sdc_track_index": sdc_index,
@@ -426,7 +477,9 @@ def parse_womd_scenario_proto(
         "tracks_to_predict_ids": to_predict_ids,
         "objects_of_interest": objects_of_interest_ids,
         "dynamic_map_state_count": len(dynamic_states),
-        "dynamic_map_states_digest": _json_digest([str(x) for x in dynamic_states]) if dynamic_states else None,
+        "dynamic_map_states_digest": (
+            _json_digest(_canonical_json_value(dynamic_states)) if dynamic_states else None
+        ),
         "map_feature_count": len(map_features),
         "sampling_semantics": "dataset_10hz_discrete_not_continuous_safety",
         "observed_semantics": "history_current_prefix_not_measurement_validity; combine with valid mask",
@@ -492,8 +545,16 @@ def _iter_tfrecord(path: Path) -> Iterator[bytes]:
 def iter_womd_scenario_file(
     path: str | Path, *, max_records: int = 10,
     clocks: FourClockInjection | None = None,
+    hash_source_file: bool = True,
 ) -> Iterator[ParsedScene]:
-    """Yield at most ``max_records`` Scenario protos from one TFRecord shard."""
+    """Yield at most ``max_records`` Scenario protos from one TFRecord shard.
+
+    ``hash_source_file=False`` is intended for bounded parser smoke tests: it
+    avoids scanning the entire (often multi-GB) TFRecord shard merely to read a
+    few records.  Each emitted protobuf still receives an exact SHA-256 over
+    its serialized record bytes, and ParsedScene computes a canonical scene
+    digest.  The source-file digest remains null and is never fabricated.
+    """
     if max_records <= 0:
         return
     try:
@@ -501,17 +562,18 @@ def iter_womd_scenario_file(
     except ImportError as exc:
         raise OptionalDependencyError("WOMD parsing requires waymo_open_dataset") from exc
     path = Path(path)
-    digest = sha256_file(path)
+    digest = sha256_file(path) if hash_source_file else None
     for index, payload in enumerate(_iter_tfrecord(path)):
         if index >= max_records:
             break
         scenario = scenario_pb2.Scenario()
         scenario.ParseFromString(payload)
+        record_digest = hashlib.sha256(payload).hexdigest()
         yield parse_womd_scenario_proto(scenario, source_file=path,
                                          record_index=index,
                                          content_sha256=digest,
                                          source_file_sha256=digest,
-                                         record_sha256=hashlib.sha256(payload).hexdigest(),
+                                         record_sha256=record_digest,
                                          clocks=clocks,
                                          split="validation")
 
@@ -519,6 +581,7 @@ def iter_womd_scenario_file(
 def iter_womd_validation(
     root: str | Path, *, max_records: int = 10, max_files: int = 10,
     clocks: FourClockInjection | None = None,
+    hash_source_files: bool = True,
 ) -> Iterator[ParsedScene]:
     """Read a bounded sample from the case-insensitive Scenario/validation split."""
     split_root = _resolve_split(Path(root).expanduser(), ("validation",))
@@ -528,8 +591,9 @@ def iter_womd_validation(
         raise FileNotFoundError(f"no TFRecord shards below {split_root}")
     emitted = 0
     for path in files[:max_files]:
-        for parsed in iter_womd_scenario_file(path, max_records=max_records - emitted,
-                                              clocks=clocks):
+        for parsed in iter_womd_scenario_file(
+                path, max_records=max_records - emitted, clocks=clocks,
+                hash_source_file=hash_source_files):
             yield parsed
             emitted += 1
             if emitted >= max_records:
@@ -613,10 +677,13 @@ def _av2_map_metadata(map_file: str | Path | None) -> tuple[str | None, tuple[st
     if not path.is_file():
         raise FileNotFoundError(path)
     try:
-        value = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
+        raw = path.read_bytes()
+        value = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RecordParseError(f"invalid AV2 map JSON: {path}") from exc
-    content_digest = sha256_file(path)
+    # Hash the exact bytes already read for JSON decoding; do not reread the
+    # map archive from disk.
+    content_digest = hashlib.sha256(raw).hexdigest()
     semantic_digest = _json_digest(value)
     ids: list[str] = []
     if isinstance(value, Mapping):
@@ -662,6 +729,7 @@ def parse_av2_rows(
     clocks: FourClockInjection | None = None,
     parser_version: str = AV2_PARSER_VERSION,
     nominal_sample_rate_hz: float = 10.0,
+    hash_source_file: bool = True,
 ) -> ParsedScene:
     """Convert AV2 Motion parquet rows into a dense ``UnifiedScene``.
 
@@ -857,10 +925,17 @@ def parse_av2_rows(
             raise RecordParseError(
                 f"AV2 map archive {Path(map_path).name!r} does not match scenario {sid!r}"
             )
-    content_sha256 = content_sha256 or (sha256_file(source_file) if Path(source_file).is_file()
-                                        else _json_digest(records))
+    if hash_source_file and source_file_sha256 is None and Path(source_file).is_file():
+        source_file_sha256 = sha256_file(source_file)
+    if content_sha256 is None:
+        content_sha256 = source_file_sha256 or _json_digest(records)
     metadata: dict[str, Any] = {
         "schema": "av2.motion_forecasting.parquet",
+        "source_file_hash_status": "computed" if source_file_sha256 else "not_computed",
+        "content_sha256_semantics": (
+            "source_file_sha256" if source_file_sha256 and content_sha256 == source_file_sha256
+            else "canonical_parsed_rows_sha256"
+        ),
         "parser_version": parser_version,
         "time_axis_source": time_source,
         "timestamp_unit": "seconds_relative_to_first_timestamp",
@@ -890,48 +965,86 @@ def parse_av2_rows(
     scene = UnifiedScene(manifest, tuple(tracks), map_ids, map_metadata)
     scene.assert_valid()
     source_digest = source_file_sha256
-    if source_digest is None and Path(source_file).is_file():
-        source_digest = content_sha256 or sha256_file(source_file)
     return ParsedScene(scene, source_file, None, content_sha256, parser_version,
                        "av2-motion-parquet-v1", clocks, map_path,
                        map_metadata.get("map_content_sha256"),
                        source_file_sha256=source_digest)
 
 
+# All columns consumed by ``parse_av2_rows``.  Projecting to this allow-list
+# avoids decoding unused parquet columns while retaining every field that can
+# affect track identity, masks, timestamps, kinematics, or focal/SDC semantics.
+_AV2_READER_COLUMNS = (
+    "scenario_id", "track_id", "object_type", "object_category", "track_category",
+    "timestep", "position_x", "position_y", "heading", "velocity_x", "velocity_y",
+    "observed", "focal_track_id", "start_timestamp", "start_timestamp_ns",
+    "end_timestamp", "end_timestamp_ns", "num_timestamps", "num_timesteps",
+    "timestamp_ns",
+)
+
+
 def parse_av2_parquet(path: str | Path, *, split: str = "validation",
                       map_file: str | Path | None = None,
                       clocks: FourClockInjection | None = None,
-                      require_map: bool = True) -> ParsedScene:
+                      require_map: bool = True,
+                      hash_source_file: bool = True) -> ParsedScene:
     try:
         import pandas as pd  # type: ignore
+        import pyarrow.parquet as pq  # type: ignore
     except ImportError as exc:
-        raise OptionalDependencyError("AV2 parsing requires pandas and a parquet engine") from exc
+        raise OptionalDependencyError("AV2 parsing requires pandas and pyarrow") from exc
     path = Path(path)
+
+    # Inspect the parquet schema, then read only fields used by the adapter.
+    # This is a lossless projection: all parser-consumed columns, including
+    # optional aliases, are retained; unrelated columns are not materialized.
     try:
-        frame = pd.read_parquet(path)
+        parquet_file = pq.ParquetFile(path)
+        available = set(parquet_file.schema.names)
+        columns = [name for name in _AV2_READER_COLUMNS if name in available]
+        if not columns:
+            raise RecordParseError(f"AV2 parquet has no recognized motion columns: {path}")
+        frame = pd.read_parquet(path, columns=columns, engine="pyarrow")
     except ImportError as exc:
-        raise OptionalDependencyError("AV2 parquet parsing requires pyarrow or fastparquet") from exc
+        raise OptionalDependencyError("AV2 parquet parsing requires pyarrow") from exc
+    except RecordParseError:
+        raise
     except Exception as exc:
         raise RecordParseError(f"unable to decode AV2 parquet {path}: {exc}") from exc
+
     resolved_map = resolve_av2_map(path, map_file=map_file)
     if require_map and resolved_map is None:
         raise RecordParseError(
             f"AV2 scenario map archive unresolved for {path}; pass map_file explicitly"
         )
-    return parse_av2_rows(frame, source_file=path, split=split,
-                          map_file=resolved_map, content_sha256=sha256_file(path),
-                          source_file_sha256=sha256_file(path),
-                          clocks=clocks)
+
+    # A full file digest is optional for bounded smoke tests.  When enabled it
+    # is computed exactly once and reused for both legacy and explicit fields.
+    source_digest = sha256_file(path) if hash_source_file else None
+    return parse_av2_rows(
+        frame, source_file=path, split=split, map_file=resolved_map,
+        content_sha256=source_digest, source_file_sha256=source_digest,
+        clocks=clocks, hash_source_file=False,
+    )
 
 
 def iter_av2_validation(root: str | Path, *, max_records: int = 10,
-                        clocks: FourClockInjection | None = None) -> Iterator[ParsedScene]:
+                        clocks: FourClockInjection | None = None,
+                        hash_source_files: bool = True) -> Iterator[ParsedScene]:
     split_root = _resolve_split(Path(root).expanduser(), ("validation", "val"))
-    files = sorted(split_root.rglob("scenario_*.parquet"))
+    if max_records <= 0:
+        return
+    # Keep the deterministic lexicographically-smallest sample without
+    # materializing and sorting every Path in a large AV2 split.
+    import heapq
+    files = heapq.nsmallest(max_records, split_root.rglob("scenario_*.parquet"))
     if not files:
         raise FileNotFoundError(f"no AV2 scenario parquet below {split_root}")
-    for path in files[:max_records]:
-        yield parse_av2_parquet(path, split="validation", clocks=clocks)
+    for path in files:
+        yield parse_av2_parquet(
+            path, split="validation", clocks=clocks,
+            hash_source_file=hash_source_files,
+        )
 
 
 def localize_scene(scene: UnifiedScene, *, origin_xy: tuple[float, float] = (0.0, 0.0),

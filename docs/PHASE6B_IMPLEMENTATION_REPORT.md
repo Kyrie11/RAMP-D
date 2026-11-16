@@ -40,3 +40,10 @@ bash scripts/validate_phase6b.sh
 ## 本地可复现结果
 
 当前容器没有官方 MPFR development headers/native interval ABI，也没有服务器数据路径和 AV2 parquet engine。Phase 6B/6C-A dependency-free harness 执行 47 个纯 Python 回归测试全部通过；`compileall` 和 `bash -n scripts/validate_phase6b.sh` 通过。服务器仍必须安装 `.[datasets]` 并运行上面的真实数据脚本。
+
+
+## 性能审计与优化（2026-11）
+
+新增 `PHASE6B_PERFORMANCE_AUDIT.md`。修正了 bounded sample 前对整个 WOMD shard 的无条件 SHA-256、AV2 Parquet 重复文件哈希、AV2 map JSON 重复读盘、AV2 全量列读取及大 split 全量 Path 排序。快速抽样模式保留每条 WOMD protobuf record hash、AV2 canonical parsed-row hash、canonical scene hash 与 map hash；源文件 SHA-256 明确标记为未计算，不会伪造文件级 digest。需要完整来源文件指纹时显式设置 `HASH_SOURCE_FILES=1`。
+
+同时修复 WOMD dynamic map state digest 对 Python `str(object)` 的潜在非确定性依赖，改为 deterministic protobuf serialization/canonical value digest；`scenario_content_sha256` 不再受来源哈希策略元数据影响。WOMD/AV2 parser version 已更新为 `v1.1`。
