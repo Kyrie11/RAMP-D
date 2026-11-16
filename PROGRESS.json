@@ -1,6 +1,6 @@
 {
-  "release": "0.8.0",
-  "phase": "6B",
+  "release": "0.9.0",
+  "phase": "6C-A",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
@@ -10,7 +10,7 @@
   "phase3_public_backup_controller": "Implemented and regression-tested in local physical scope; target server report available.",
   "phase4_protocol_full_support_verifier": "implemented first explicit synthetic-support verifier; corrected public observation timing and retained real-scene boundary",
   "phase5_cegar": "server regression passed: 10 Phase 5 tests, 23 Phase 4 protocol/full/adapter tests, 328 total Python tests; native CTest manifest must be present and its summary must be checked",
-  "phase6_datasets_and_closed_loop_experiments": "Phase 6A accepted; Phase 6B adapters implemented locally with synthetic regression; server validation sample pending; Phase 6C co-simulation pending",
+  "phase6_datasets_and_closed_loop_experiments": "Phase 6A accepted; Phase 6B parsers and contracts audited/fixed locally; WOMD server validation sample PASS, AV2 SKIP due missing pyarrow; overall Phase 6B not accepted. Phase 6C-A pure-Python contracts implemented and 47 dependency-free tests pass; 6C-B simulator bridge pending.",
   "requires_dataset": true,
   "requires_sumo": false,
   "requires_carla": false,
@@ -20,9 +20,9 @@
     "carla_api": "0.9.16",
     "simulator_mode": "headless"
   },
-  "local_limit": "Local container lacks CMake and official MPFR development headers; Phase 5 smoke used a temporary declaration-only header with the system MPFR runtime. Target-server validation must use official MPFR 4.0.2 headers. Full-support safety and calibrated real-vehicle guarantees remain unimplemented.",
+  "local_limit": "Local container lacks official MPFR development headers/native interval ABI and the user server dataset paths. Pure-Python Phase 6B/6C-A harness passed 47 tests; this does not run the native Phase 0-5 suite, validate real AV2/WOMD records, start CARLA/SUMO, or certify full support.",
   "full_support_certified": false,
-  "assurance_scope": "PHASE6B_RECORD_ADAPTER_CONTRACTS_ONLY",
+  "assurance_scope": "PHASE6C_A_DATA_AND_PROPOSAL_CONTRACTS_ONLY",
   "manuscript_files_required": false,
   "current_scene_verified": false,
   "concrete_safety_certified": false,
@@ -36,5 +36,26 @@
     "native_ctest_verified_by_original_report": false
   },
   "phase5_local_limit": "Local container lacks CMake and official MPFR development headers; local Python/Phase 5 smoke used a temporary declaration-only header with the system MPFR runtime.",
-  "phase6b": "local implementation complete: WOMD/AV2 parsers, dense masks, content hashes, explicit four-clock injection, reference conversion; real_scene_verified remains false until server gate"
+  "phase6b": "local adapter implementation audited: AV2 focal is distinct from SDC; official track_id == \"AV\" convention identifies ego when present, strict observed mask parsing, official scenario timestamp reconstruction, mixed reference tracking, and shard/record/scenario digests. Server gate remains SKIP until pyarrow is installed and AV2 validation samples pass.",
+  "phase6c_a": "implemented locally: history/future separated SceneForecastSample, joint-mode plus observation-history schema, RuleNet-inspired soft risk scoring, non-pruning branch ordering, fixed-step CARLA/SUMO synchrony contract, actor ID registry, and sensor production/delivery records; 47 dependency-free tests passed. Map geometry and dynamic traffic-signal timelines are not yet exposed; current encoder input carries map IDs/digests only.",
+  "phase6b_server_status": "SKIP: WOMD validation PASS; AV2 validation SKIP because parquet engine (pyarrow/fastparquet) missing",
+  "phase6b_fixes": {
+    "av2_focal_vs_sdc": "focal_track_id remains is_focal only; official AV2 track_id == \"AV\" convention maps to is_sdc when present and vehicle typed; WOMD uses sdc_track_index",
+    "av2_observed_mask": "strict bool decoding; reject strings and NaN",
+    "av2_time_axis": "scenario start/end/num timestamps reconstructed by exact rational interpolation and optional row timestamps checked",
+    "reference_conversion": "reject valid states without heading; track-selective conversion; mixed scene/velocity reference explicit",
+    "digests": "source_file_sha256, record_sha256, scenario_content_sha256 separated",
+    "validation_exit_codes": "PASS=0, SKIP=3, ERROR=4"
+  },
+  "phase6c_a_tests": {
+    "dependency_free_python_tests": 47,
+    "status": "PASS",
+    "native_backend_tested": false,
+    "real_data_tested": false,
+    "simulators_used": false
+  },
+  "phase4_5_clock_audit": "Corrected: hidden change-before-receipt branches remain in support until proved public observation; message branches use receipt, local-detection branches use local; receipt->local is not required.",
+  "phase4_5_open_audit": "silence_exclusion_proved remains a boolean and needs independently replayable publication/delivery-deadline evidence; Phase 2/3 finite-horizon W_H^SC, rank, value function and CCG implementation coverage still need audit/implementation.",
+  "phase6c_a2": "pending: unified WOMD/AV2 vector map primitives, lane topology, crosswalk/drivable polygons, and WOMD dynamic signal timeline; required before map-aware predictor training.",
+  "next_gate": "Install pyarrow and rerun Phase 6B server validation; then implement Phase 6C-A2 map/signal adapters and close Phase 2-5 mathematical gaps (finite-horizon W_H^SC/rank/value/CCG and replayable silence-deadline evidence) before Phase 6C-B CARLA/SUMO bridge."
 }

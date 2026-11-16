@@ -250,3 +250,65 @@ PY
 - **[C2] CARLA 0.9.16 同步与时间步**：https://carla.readthedocs.io/en/0.9.16/adv_synchrony_timestep/
 - **[C3] CARLA 0.9.16 渲染/无头模式**：https://carla.readthedocs.io/en/0.9.16/adv_rendering_options/
 - **[S1] SUMO 官方 TraCI 文档**：https://sumo.dlr.de/docs/TraCI/index.html
+
+## 10. Phase 6B/6C-A implementation clarifications (2026-11-16)
+
+- AV2 `focal_track_id` is represented by `SceneTrack.is_focal`; it is **not** mapped to `is_sdc`. The separate official `track_id == "AV"` ego convention is parsed independently (see below).
+- AV2's official scenario-level `start_timestamp`, `end_timestamp`, and `num_timestamps` define the global time axis. The adapter reconstructs it with exact rational interpolation before conversion to seconds. Optional per-row `timestamp_ns` values are consistency-checked; they are not silently mixed with a nominal `0.1 s` fallback.
+- AV2 `observed` values are decoded strictly. A string such as `"False"` or a NaN value is a schema error, not a truthy observation. `valid` and `observed` remain independent masks.
+- In the WOMD adapter, `observed=True` denotes membership in the history/current prefix, not guaranteed valid measurement; the input mask is `valid AND observed`. The future target mask uses `valid` after the current index.
+- The `SceneForecastSample` API separates `history_tracks` (encoder input) from `future_targets` (supervision only). All actors with valid future labels can contribute to joint interaction training; the dataset's `to_predict`/category flags remain a separate benchmark-target mask.
+- `source_file_sha256`, `record_sha256`, and `scenario_content_sha256` have distinct meanings. Multiple records in one WOMD TFRecord shard are expected to share the first hash.
+- `convert_center_scene_to_rear_axle` can be restricted by track ID. Use it only when the offset applies to that actor geometry. If some tracks remain centre-referenced, the scene reports a mixed reference rather than claiming a global rear-axle frame.
+- The first Phase 6C implementation creates simulator synchronization contracts only. It has not imported CARLA/TraCI, started either simulator, or verified the user's server installation.
+
+## 11. Dataset use policy after checking the official schemas (2026-11-16)
+
+### WOMD
+
+Use the **Scenario protobuf branch as the canonical source** for RAMP-D. The official Motion dataset describes 9-second windows with 10 history samples, 1 current sample, and 80 future samples at 10 Hz (91 total); test has only the first 11 samples. Scenario protos preserve vector map features and time-aligned dynamic map states, while `tf.Example` converts them to model tensors and samples maps as points. Keep `tf.Example` as an optional later training/throughput format, not the canonical semantics layer.
+
+- `current_time_index` is the current sample index. Include `i <= current_time_index` in the online history/current input; future labels start at `current_time_index + 1`.
+- `ObjectState.valid` means the state is valid/present. The `observed` mask in our adapter is an explicit prefix-window marker, not a substitute for `valid`.
+- `sdc_track_index` indexes `Scenario.tracks` and is the actual SDC identity.
+- `tracks_to_predict[].track_index` also indexes `Scenario.tracks`; it is not a Track.id.
+- `objects_of_interest` contains Track.id values; the Waymo overview page currently describes these as indices, but the linked `scenario.proto` definition explicitly says they are object IDs corresponding to IDs in `tracks`. The parser follows the proto and validates each ID against Track.id. `tracks_to_predict[].track_index` and `sdc_track_index`, by contrast, are array indices.
+- The Waymo overview page says validation/test expose `tracks_to_predict`, while the proto comment says the field is populated in training as a suggestion. The adapter does not assume a split-wide rule: it uses the field only when present and preserves the exact source split/provenance.
+- `dynamic_map_states` are aligned with timestamps and can supervise signal-state context. They do not provide communication issue/receipt/latency labels.
+- WOMD 1.3.1 also exposes `sdc_paths`: candidate valid future routes for the SDC. These are useful as route-candidate/intent context, but they are not the actually executed ego control sequence and must not be used as a substitute for logged SDC states or as counterfactual agent-response labels. The current adapter does not yet parse them; add that only in a separately tested follow-up.
+
+The server report's `current_time_index=10` and 91 states match the official 1s-history + current + 8s-future layout. Keep the `scenario` and `tf_example` branches from the same release/split paired; do not concatenate them as independent scenarios.
+
+The current Phase 6B adapter validates and digests WOMD map/dynamic-map fields but does not yet decode their complete geometry/state payload into the model-facing `MapContext`. That is a required Phase 6C-A2 task, not a claim that map-aware training is already ready.
+
+### Argoverse 2 Motion Forecasting
+
+Use the Motion Forecasting split at the supplied `motion/` path for base trajectory/map training. Each 11-second scenario is 10 Hz and has a scenario parquet plus a companion scenario-local vector-map JSON. The official serialization writes `start_timestamp`, `end_timestamp`, `num_timestamps`, and `focal_track_id` into the parquet; the official loader reconstructs timestamps by linear interpolation between start/end. The adapter now follows this definition.
+
+- `FOCAL_TRACK` is the single-agent benchmark target; `SCORED_TRACK` is a multi-agent benchmark target; `UNSCORED_TRACK` is contextual; `TRACK_FRAGMENT` is low-quality/fragmentary. All valid future actor states can be retained as auxiliary joint-scene labels, while `to_predict` remains the benchmark mask.
+- The official visualization distinguishes the ego vehicle from the focal agent and identifies the ego track by the reserved `track_id == "AV"` convention. `focal_track_id` therefore must not be mapped to `is_sdc`; the adapter maps the official `AV` track convention to `is_sdc=True` and records the provenance. If a particular AV2 scenario has no `AV` track, do not infer SDC from focal; use symmetric actor prediction only for that sample. Thus AV2 can provide ego-conditioned response supervision when its `AV` track is present.
+- Pair `scenario_{scenario_id}.parquet` with `log_map_archive_{scenario_id}.json` from that Motion scenario's own directory. Do not substitute a map file from the separate Map Change dataset by guessing a scenario/log join.
+- The supplied `map/` path is the separate Map Change dataset. Its role is map-change/out-of-date-map robustness evaluation or a separate map-change model, not the default HD map source for Motion scenarios. It contains 1,000 scenarios, including 200 with annotated real-world map changes; it does not provide the Motion dataset's 3D object annotations, and its labels are not traffic-rule/protocol-change labels.
+
+### Recommended supervision split for RAMP-D
+
+| RAMP-D target | Primary supervision source | What the public logs do not establish |
+|---|---|---|
+| Agent motion/joint modes | WOMD Scenario + AV2 Motion future tracks with valid masks | Exhaustive behaviour support or counterfactual responses |
+| Ego prefix | WOMD `sdc_track_index`; AV2 `track_id == "AV"`; CARLA ego logs | AV2 focal track is not ego identity; if the `AV` track is absent, do not infer an ego |
+| Map/signal context | WOMD vector map + dynamic map; AV2 scenario-local vector map | Hidden protocol/message state |
+| Rule-risk ordering | RuleNet-inspired TTC/gap features on predicted or logged interactions | Legal right-of-way truth or safety proof |
+| Observation/awareness histories | CARLA sensor raycasts + explicit sensor production/delivery logs | Complete observation support from motion labels alone |
+| Four protocol clocks | Paired SUMO/CARLA intervention and message-delivery instrumentation | Not available in WOMD/AV2 trajectory labels |
+| Viability / backup feasibility / certified margin | Exact finite oracle, independent verifier, validated reachable tubes | A single observed trajectory or prediction confidence |
+| Causal effect of ego prefix | Paired simulator interventions with matched initial state, random seed and exogenous protocol realization | Offline observational logs alone |
+
+## 12. CARLA 0.9.16 + SUMO 1.20 synchrony policy
+
+- Use CARLA synchronous mode with fixed `fixed_delta_seconds`; configure SUMO `--step-length` to the same value. CARLA's documented physics constraint is `fixed_delta_seconds <= max_substep_delta_time * max_substeps`; default substep settings are `0.01 s` and 10 substeps. The initial contract uses 0.05 s, 0.01 s and 10.
+- Only one client may call CARLA `world.tick()`. RAMP-D's orchestrator will be the sole tick owner and coordinate both simulators; no second client or helper loop may tick CARLA.
+- If CARLA Traffic Manager is used, its synchronous mode must also be enabled.
+- Select exactly one traffic-light authority (`carla` or `sumo`) for co-simulation; do not allow both simulators to independently control the same signal.
+- Keep the user's `-RenderOffScreen` mode for sensor experiments: off-screen rendering still computes GPU sensors. CARLA no-rendering mode disables graphics and returns empty camera/GPU-sensor data, so use it only for non-visual traffic/kinematics smoke tests.
+- Sensor callbacks may arrive later than the frame that produced the measurement. Store production frame/time and delivery frame/time separately; do not use callback arrival time as the observation production time.
+- The actual 6C-B bridge has not yet been implemented or run. `CoSimulationConfig` and `SynchronizedFrameLedger` currently validate the intended contract only.

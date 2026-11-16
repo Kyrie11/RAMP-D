@@ -147,6 +147,11 @@ class SceneTrack:
     is_sdc: bool = False
     to_predict: bool = False
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    # ``is_focal`` is deliberately distinct from ``is_sdc``.  In AV2 Motion
+    # Forecasting, focal_track_id identifies the prediction target; it does
+    # not identify the self-driving car.  WOMD's sdc_track_index, in contrast,
+    # does identify the SDC track.
+    is_focal: bool = False
 
     def validate(self, timestamps: tuple[float, ...]) -> tuple[str, ...]:
         errors: list[str] = []
@@ -154,6 +159,9 @@ class SceneTrack:
             errors.append("track_id:empty")
         if not self.category:
             errors.append(f"{self.track_id}:category_empty")
+        for name in ("is_sdc", "to_predict", "is_focal"):
+            if not isinstance(getattr(self, name), bool):
+                errors.append(f"{self.track_id}:{name}_not_bool")
         if len(self.states) != len(timestamps):
             errors.append(f"{self.track_id}:state_length_mismatch")
         for i, state in enumerate(self.states):
@@ -205,7 +213,8 @@ class UnifiedScene:
             metadata={**m.metadata, "source_timestamps": list(m.timestamps)},
         )
         tracks = tuple(SceneTrack(t.track_id, t.category, t.online_states(idx),
-                                  t.is_sdc, t.to_predict, t.metadata) for t in self.tracks)
+                                  t.is_sdc, t.to_predict, t.metadata, t.is_focal)
+                       for t in self.tracks)
         return UnifiedScene(manifest, tracks, self.map_ids, self.map_metadata)
 
     def to_dict(self) -> dict[str, Any]:
@@ -214,7 +223,8 @@ class UnifiedScene:
             "tracks": [{"track_id": t.track_id, "category": t.category,
                          "states": [s.to_dict() for s in t.states],
                          "is_sdc": t.is_sdc, "to_predict": t.to_predict,
-                         "metadata": dict(t.metadata)} for t in self.tracks],
+                         "metadata": dict(t.metadata), "is_focal": t.is_focal}
+                        for t in self.tracks],
             "map_ids": list(self.map_ids), "map_metadata": dict(self.map_metadata),
         }
 

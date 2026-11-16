@@ -25,6 +25,10 @@
 | Protocol product and full-support verifier | `protocol.py`, `resources.py`, `agents.py`, `observations.py`, `full_verifier.py` | Phase 4 first explicit finite-support implementation; synthetic contracts only, real-scene integration pending |
 | CEGAR | `python/rampd_core/cegar.py`, `scripts/validate_phase5.sh` | Phase 5 orchestration implemented locally; target-server gate pending; real-scene integration remains Phase 6 |
 | AV2/WOMD training and SUMO/CARLA closed-loop experiments | planned Phase 6 | Not implemented |
+| Dataset history/future separation and benchmark-target masks | `python/rampd_core/phase6c.py` | Phase 6C-A contract; encoder-side history and label-side future are separate; no training run yet |
+| Correlated joint traffic modes and future observation histories | `python/rampd_core/phase6c.py` | Phase 6C-A schema; never forms joint modes by Cartesian product of independent marginals; proposals are not complete support |
+| RuleNet-inspired normalized soft risk ordering | `python/rampd_core/phase6c.py` | Phase 6C-A; bounded heuristic only, with explicit TTC non-closing guard; no hard pruning and no verifier evidence |
+| Fixed-step CARLA/SUMO timebase, frame ledger, actor IDs, sensor production/delivery | `python/rampd_core/phase6c.py` | Phase 6C-A pure contracts only; actual bridge and simulator smoke pending |
 
 The paper's full planner `CERTIFIED` result is not produced by any Phase 1A-1D
 module. No current result authorizes physical control execution.

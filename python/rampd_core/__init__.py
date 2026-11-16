@@ -32,7 +32,8 @@ from .backup_graph import (BackupNode, BackupPolicyGraph, BackupExecutor,
 from .protocol import (CausalStage, TimeWindow, ClockTrace, EffectiveInterval,
                        MessageSpec, ProtocolState, ProtocolTransition,
                        CoverageLedger, ProtocolAutomaton, branch_temporal_status,
-                       silence_knowledge_status, build_coverage_ledger)
+                       public_observation_window, silence_knowledge_status,
+                       build_coverage_ledger)
 from .resources import (OccupancyStatus, ResourceStatus, ResourceRegion,
                         ResourceState, ActorFootprint, Occupancy, ResourceCheck,
                         occupancy, check_resources)
@@ -65,6 +66,17 @@ from .record_adapters import (
     iter_womd_validation, resolve_av2_map, parse_av2_rows, parse_av2_parquet,
     iter_av2_validation, localize_scene, convert_center_scene_to_rear_axle,
 )
+from .phase6c import (
+    Phase6CContractError, HistoryTrackInput, FutureTrackTarget,
+    SceneForecastSample, build_scene_forecast_sample,
+    ObservationEventProposal, ObservationHistoryProposal,
+    JointModeProposal, JointModeSet, hard_support_from_joint_modes,
+    radial_ttc_s, RuleNetThresholds,
+    RuleInteractionTrace, InteractionRisk, RulePriorityReport,
+    RuleNetSoftRanker, BranchPriorityCandidate, BranchOrderingResult,
+    rank_policy_branches, CoSimulationConfig, SynchronizedFrameStamp,
+    SynchronizedFrameLedger, SensorDeliveryRecord, ActorIdentityRegistry,
+)
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 __all__ = [name for name in globals() if not name.startswith("_")]

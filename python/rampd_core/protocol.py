@@ -205,8 +205,8 @@ class ProtocolTransition:
             raise ValueError("silence flag and label disagree")
         if self.silence and self.message is not None:
             raise ValueError("silence cannot carry a message")
-        if not self.silence and self.message is None:
-            raise ValueError("received branch must carry a message")
+        if not self.silence and self.message is None and self.clocks.local is None:
+            raise ValueError("non-message observation branch requires a local-observation clock")
         if self.message is not None and self.message.clocks != self.clocks:
             raise ValueError("message and transition clocks must be identical")
         if self.guard_tag not in ("", "always", "unknown", "false"):
@@ -278,10 +278,19 @@ class ProtocolAutomaton:
     def enumerate_successors(self, state_id, *, at_time=None, observation=None):
         out = self.outgoing(state_id)
         if at_time is not None:
-            # ``at_time`` is the earliest current public time.  A transition
-            # scheduled later remains enabled; collapsing it to an exact
-            # current-time test would silently drop delayed protocol events.
-            out = tuple(t for t in out if t.clocks.change.hi >= at_time)
+            # ``at_time`` is public-information time, not physical change
+            # time. A rule may already have changed while its message/local
+            # observation is still pending. Keep that hidden branch until
+            # its proved public-observation window is before this time.
+            retained = []
+            for transition in out:
+                status, _ = branch_temporal_status(transition)
+                public_window = public_observation_window(transition)
+                if (status == "PROVED" and public_window is not None and
+                        public_window.hi < at_time):
+                    continue
+                retained.append(transition)
+            out = tuple(retained)
         if observation is not None:
             out = tuple(t for t in out if t.observation == observation)
         return out
@@ -328,15 +337,34 @@ def branch_temporal_status(branch: ProtocolTransition):
         return ("UNKNOWN", "GUARD_NOT_PROVED" if branch.guard_tag != "false"
                 else "GUARD_FALSE")
     if branch.message is None:
-        return "PROVED", "SILENCE_BRANCH"
+        if branch.silence:
+            return "PROVED", "SILENCE_BRANCH"
+        if branch.clocks.local is None:
+            return "UNKNOWN", "LOCAL_OBSERVATION_CLOCK_MISSING"
+        return "PROVED", "LOCAL_OBSERVATION_BRANCH"
     c = branch.clocks
     if c.issue is None or c.receipt is None:
         return "UNKNOWN", "MESSAGE_CLOCK_MISSING_ISSUE_OR_RECEIPT"
     if not c.relation_proved("issue", "receipt"):
         return "UNKNOWN", "ISSUE_TO_RECEIPT_ORDER_UNPROVED"
-    if c.local is not None and not c.relation_proved("receipt", "local"):
-        return "UNKNOWN", "RECEIPT_TO_LOCAL_ORDER_UNPROVED"
     return "PROVED", "CLOCK_RELATIONS_PROVED"
+
+
+def public_observation_window(branch: ProtocolTransition) -> TimeWindow | None:
+    """Return the public-time window for this branch's observation channel.
+
+    A message-receipt branch becomes public at receipt. A local-detection or
+    silence-with-local-observation branch becomes public at the local clock.
+    These channels are independent: local detection may precede message
+    receipt, and reports may arrive out of order. If both channels need to be
+    combined to distinguish a richer observation class, that requirement must
+    be represented explicitly by a future protocol extension; it is not
+    inferred by taking ``max(receipt, local)``. Silence without a local clock
+    has no finite public time and cannot exclude a hidden event by itself.
+    """
+    if branch.message is not None:
+        return branch.clocks.receipt
+    return branch.clocks.local
 
 
 def silence_knowledge_status(branch: ProtocolTransition):

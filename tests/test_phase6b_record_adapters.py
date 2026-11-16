@@ -9,6 +9,7 @@ from rampd_core import (
     RecordParseError,
     convert_center_scene_to_rear_axle,
     localize_scene,
+    build_scene_forecast_sample,
     parse_av2_rows,
     parse_womd_scenario_proto,
 )
@@ -57,6 +58,12 @@ def test_womd_parser_preserves_id_index_masks_and_future_boundary(tmp_path: Path
     assert online.manifest.future_available is False
     assert scene.map_ids == ("7",)
     assert parsed.content_sha256 == hashlib.sha256(_womd().SerializeToString()).hexdigest()
+    sample = build_scene_forecast_sample(scene)
+    assert sample.benchmark_target_track_ids == ("42",)
+    assert sample.history_tracks[0].is_sdc is True
+    assert sample.sdc_track_id == "42"
+    assert tuple(x.track_id for x in sample.ego_future_targets) == ("42",)
+    assert sample.agent_response_targets == ()
 
 
 def test_womd_parser_rejects_state_length_mismatch():
@@ -78,7 +85,9 @@ def test_four_clocks_do_not_infer_relations():
 
 def _av2_rows():
     rows = []
-    for track_id, category, x0 in (("ego", "FOCAL_TRACK", 0.0), ("a", "SCORED_TRACK", 5.0)):
+    for track_id, category, x0 in (("AV", "UNSCORED_TRACK", -5.0),
+                                   ("ego", "FOCAL_TRACK", 0.0),
+                                   ("a", "SCORED_TRACK", 5.0)):
         for timestep in (0, 1, 2):
             if track_id == "a" and timestep == 1:
                 continue
@@ -109,7 +118,16 @@ def test_av2_parser_reconstructs_dense_axis_and_map(tmp_path: Path):
     other = next(t for t in scene.tracks if t.track_id == "a")
     assert other.states[1].valid is False
     assert other.states[1].observed is None
-    assert next(t for t in scene.tracks if t.track_id == "ego").is_sdc is True
+    focal = next(t for t in scene.tracks if t.track_id == "ego")
+    assert focal.is_focal is True
+    assert focal.is_sdc is False
+    av = next(t for t in scene.tracks if t.track_id == "AV")
+    assert av.is_sdc is True
+    assert av.is_focal is False
+    sample = build_scene_forecast_sample(scene)
+    assert sample.sdc_track_id == "AV"
+    assert {x.track_id for x in sample.agent_response_targets} == {"ego", "a"}
+    assert tuple(x.track_id for x in sample.ego_future_targets) == ("AV",)
     assert parsed.map_file == str(map_file)
     assert parsed.map_content_sha256
 
@@ -139,6 +157,7 @@ def test_localize_scene_and_center_to_rear_axle_math():
     ego_rear = next(t for t in rear.tracks if t.track_id == "ego")
     assert ego_rear.states[0].x == -1.0
     assert ego_rear.states[0].vx == 1.0
+    assert ego_rear.states[0].vy == -0.5
     assert rear.manifest.position_reference == "rear_axle_center"
 
 
@@ -171,6 +190,74 @@ def test_partial_center_to_rear_axle_velocity_is_not_certified_as_rear_axle():
     converted = convert_center_scene_to_rear_axle(
         scene, offset_body=(1.0, 0.0), yaw_rates={("ego", 0): 0.5},
     )
-    assert converted.manifest.metadata["velocity_reference"] == "center_unconverted"
+    assert converted.manifest.metadata["velocity_reference"] == "mixed_center_and_rear_axle"
     ego = next(track for track in converted.tracks if track.track_id == "ego")
-    assert ego.metadata["velocity_reference"] == "center_unconverted"
+    assert ego.metadata["velocity_reference"] == "mixed"
+
+
+def test_av2_observed_mask_rejects_truthy_strings_and_nan():
+    rows = _av2_rows()
+    rows[0]["observed"] = "False"
+    with pytest.raises(RecordParseError):
+        parse_av2_rows(rows)
+
+
+def test_in_memory_av2_rows_digest_is_not_mislabeled_as_source_file_hash():
+    parsed = parse_av2_rows(_av2_rows())
+    assert parsed.content_sha256
+    assert parsed.source_file_sha256 is None
+    rows = _av2_rows()
+    rows[0]["observed"] = float("nan")
+    with pytest.raises(RecordParseError):
+        parse_av2_rows(rows)
+
+
+def test_av2_row_timestamps_must_agree_with_scenario_axis():
+    rows = _av2_rows()
+    for row in rows:
+        row["timestamp_ns"] = 1_000_000_000 + row["timestep"] * 100_000_000
+    rows[-1]["timestamp_ns"] += 5_000_000
+    with pytest.raises(RecordParseError):
+        parse_av2_rows(rows)
+
+
+def test_center_to_rear_axle_refuses_mixed_position_reference_inside_a_track():
+    scene = parse_av2_rows(_av2_rows()).scene
+    tracks = list(scene.tracks)
+    focal = tracks[0]
+    states = list(focal.states)
+    states[0] = type(states[0])(
+        timestamp=states[0].timestamp, x=states[0].x, y=states[0].y,
+        heading=None, vx=states[0].vx, vy=states[0].vy, valid=True,
+        observed=states[0].observed,
+    )
+    tracks[0] = type(focal)(focal.track_id, focal.category, tuple(states),
+                            focal.is_sdc, focal.to_predict, focal.metadata, focal.is_focal)
+    malformed = type(scene)(scene.manifest, tuple(tracks), scene.map_ids, scene.map_metadata)
+    with pytest.raises(RecordParseError):
+        convert_center_scene_to_rear_axle(malformed, offset_body=(1.0, 0.0))
+
+
+def test_partial_track_reference_conversion_is_explicitly_mixed():
+    scene = parse_av2_rows(_av2_rows()).scene
+    converted = convert_center_scene_to_rear_axle(
+        scene, offset_body=(1.0, 0.0), track_ids=("ego",),
+        yaw_rates={("ego", 0): 0.5, ("ego", 1): 0.5},
+    )
+    assert converted.manifest.position_reference == "mixed_center_and_rear_axle"
+    assert converted.manifest.metadata["converted_track_ids"] == ["ego"]
+    other = next(track for track in converted.tracks if track.track_id == "a")
+    assert other.metadata.get("reference_conversion") is None
+
+
+def test_womd_source_shard_and_record_digests_are_separate():
+    shard = "a" * 64
+    record = "b" * 64
+    parsed = parse_womd_scenario_proto(
+        _womd(), source_file="validation.tfrecord-00000-of-00150",
+        content_sha256=shard, source_file_sha256=shard, record_sha256=record,
+    )
+    assert parsed.content_sha256 == shard
+    assert parsed.source_file_sha256 == shard
+    assert parsed.record_sha256 == record
+    assert parsed.scenario_content_sha256 != shard

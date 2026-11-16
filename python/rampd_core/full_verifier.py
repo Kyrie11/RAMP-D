@@ -16,7 +16,8 @@ import hashlib
 import json
 from typing import Callable, Mapping
 
-from .protocol import ProtocolAutomaton, ProtocolTransition, branch_temporal_status
+from .protocol import (ProtocolAutomaton, ProtocolTransition, branch_temporal_status,
+                       public_observation_window)
 from .observations import ObservationModel, ObservationBranch, PosteriorResult
 from .belief import SupportAtom, BeliefCell
 
@@ -25,31 +26,26 @@ def _public_observation_time(transition: ProtocolTransition):
     """Return the earliest time at which this observation is public.
 
     ``change`` is an environment clock; it is not automatically an ego
-    observation.  A message branch becomes public at receipt, and when the
-    contract also supplies a local-first-observation clock we conservatively
-    wait until that clock as well.  Silence uses the local clock when one is
-    declared.  A non-point availability window cannot be collapsed to its
+    observation. A message branch becomes public at receipt; a local-detection
+    or silence-with-local-observation branch becomes public at the local
+    clock. These channels are independent, so local detection may precede
+    message receipt. A non-point availability window cannot be collapsed to its
     lower endpoint without inventing a decision instant, so it is returned as
     unresolved by the caller.
     """
-    clocks = transition.clocks
     # The physical change is not an information event.  A public policy may
     # branch only after a received message or an explicitly declared local
     # observation.  In particular, silence with no local clock cannot be
     # routed at ``change`` merely because the environment transition is
     # known to the verifier.
-    windows = []
-    if transition.message is not None:
-        if clocks.receipt is None:
-            return None, "PUBLIC_OBSERVATION_RECEIPT_CLOCK_MISSING"
-        windows.append(clocks.receipt)
-    if clocks.local is not None:
-        windows.append(clocks.local)
-    if not windows:
+    if transition.message is not None and transition.clocks.receipt is None:
+        return None, "PUBLIC_OBSERVATION_RECEIPT_CLOCK_MISSING"
+    window = public_observation_window(transition)
+    if window is None:
         return None, "PUBLIC_OBSERVATION_CLOCK_MISSING"
-    if any(window.lo != window.hi for window in windows):
+    if window.lo != window.hi:
         return None, "PUBLIC_OBSERVATION_TIME_INTERVAL_REQUIRES_REFINEMENT"
-    return max(window.lo for window in windows), "PUBLIC_OBSERVATION_TIME_PROVED"
+    return window.lo, "PUBLIC_OBSERVATION_TIME_PROVED"
 
 
 class VerifyStatus:
@@ -299,9 +295,9 @@ class FullSupportVerifier:
                 child_state = next(iter(child_state_ids))
                 # The next public decision time is determined by the
                 # observation clocks, not by the physical change clock alone.
-                # Routing at change.lo would let an ego act on an event before
-                # its message receipt/local observation and violate
-                # nonanticipativity.
+                # Routing at change.lo would let an ego act before the
+                # branch's corresponding receipt/local-detection observation
+                # is available and would violate nonanticipativity.
                 public_times = []
                 for tr in matching:
                     public_time, public_reason = _public_observation_time(tr)
