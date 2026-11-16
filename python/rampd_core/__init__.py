@@ -51,6 +51,11 @@ from .cegar import (PHASE5_SCOPE, CEGAR_SCHEMA, CounterexampleKind, ReplayAssess
                     ResumableVerificationQueue, MasterProblem, update_backup_policy_graph,
                     RefinementLogEntry,
                     CegarResult, CegarEngine)
+from .safe_continuation import (SCContract, TerminalTailCertificate,
+                                TubeMarginCertificate, SCPolicyStep, SCResult,
+                                compute_sc_inner, replay_sc_inner, SCExecutionBudget,
+                                SCExecutionError, start_sc_execution,
+                                advance_sc_execution, replan_sc_execution)
 from .forecast import (ProposalStatus, PredictionProposal, ProposalSet,
                        ProposalAdapterResult, proposal_only,
                        hard_support_from_prediction)
@@ -81,5 +86,5 @@ from .phase6c import (
     SynchronizedFrameLedger, SensorDeliveryRecord, ActorIdentityRegistry,
 )
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 __all__ = [name for name in globals() if not name.startswith("_")]

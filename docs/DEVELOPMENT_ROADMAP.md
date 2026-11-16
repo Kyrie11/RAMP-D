@@ -14,7 +14,8 @@
 | 6A | Read-only AV2/WOMD manifest audit, unified scene contract, future-leakage guard | implemented and locally tested |
 | 6B | Validation record parsers, center/reference conversion, four-clock injection | parser audit/fixes local; WOMD server sample PASS, AV2 SKIP pending pyarrow |
 | 6C-A | History/future data split, joint-mode/observation proposals, RuleNet soft ranking, non-pruning branch order, simulator sync contracts | 47 dependency-free tests passed locally; no real data/simulator/native certification |
-| 6C-A2 | WOMD/AV2 unified vector-map geometry and dynamic-signal timeline | pending; current sample carries map IDs/digests only |
+| 6C-A2 | WOMD/AV2 unified vector-map geometry and dynamic-signal timeline | completed local data contracts; server WOMD 1 record PASS, AV2 SKIP |
+| 6C-A3 (math gate) | Phase 4/5 public API fix + finite task-winning inner family, completion rank, conditional margin lower bounds; server native gate pending | local finite Python proof-kernel tests; native pending |
 | 6C-B | CARLA/SUMO bridge, single tick owner, actor/TLS mapping, sensor and four-clock alignment | pending Phase 6B full PASS and mathematical verifier gate; requires user-started simulators |
 | 6C-C | Train/evaluate joint prediction and planning-guided model; closed-loop experiments | pending |
 

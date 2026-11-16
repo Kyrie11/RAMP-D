@@ -1,15 +1,26 @@
-# RAMP-D — Phase 6C-A2 local validation snapshot (0.9.1)
+# RAMP-D — Phase 6C-A3 finite SC/rank patch (0.9.2)
 
 This repository contains the current research implementation of RAMP-D. The mathematical specification of record is `AnonymousSubmission2027(1).tex`; implementation history and phase acceptance criteria are in `docs/`.
 
 ## Current status
 
-- **Phase 6B:** six newly uploaded 2026-11-16 log archives do **not** include real-data acceptance reports: four failed at test collection and two ran 25 pass / 1 failing parquet mock. An earlier project note claimed WOMD 3-record PASS and AV2 SKIP, but that claim was not independently replayed here. The missing lower-case validator has been restored, now with strict status + source SHA logging; both real datasets require a fresh server PASS.
+- **Current patch 6C-A3:** restores the broken Phase 4/5 `build_coverage_ledger` export; adds exact finite abstract reach--avoid / terminal-task inner family, non-resettable completion ranks, exact rational completion budgets and optional *conditionally verified* physical margin lower bounds. 13 synthetic mathematical tests pass in an isolated value-carrier environment; real native Phase 4/5 regression is pending the user MPFR build. See `docs/PHASE6C_A3_*.md`.
+- **Server Phase 6B report received:** WOMD one real validation record PASS (139 map primitives, no signal entries); AV2 SKIP due missing `pyarrow`. Both datasets have not yet passed together.
+
+- **Phase 6B:** the six earlier 2026-11-16 logs had four test-collection failures and two 25-pass/1-fail parquet-mock runs. The newly uploaded server report has **one WOMD real validation record PASS** and **AV2 SKIP** because the active Python environment lacks `pyarrow`. The missing lower-case validator has been restored, now with strict status + source SHA logging; both real datasets require a fresh server PASS.
 - **Phase 6C-A2:** preserves Phase 6C-A's history/future, joint-mode, soft-ranking and simulator-time contracts; adds WOMD/AV2 per-scenario map geometry, WOMD signal timestamps with strict online/label separation, common local coordinates, and versioned silence/deadline evidence. The dependency-free regression now reports **67 passed**. Real datasets/native ABI not tested locally.
 - **Cross-phase audit:** change-before-receipt remains hidden; message receipt and local detection remain separate. A bare `silence_exclusion_proved=True` no longer suffices to delete a hidden mode: a versioned deadline/mode evidence object is required. Trust in the external delivery guarantee remains an explicit assumption.
-- **Not complete:** native MPFR replay of this patch, user-server real-data pass, full Phase 2–5 mathematical audit, finite-horizon `W_H^SC`/rank/value/CCG, independent proof of communication guarantees, real CARLA/SUMO bridge, predictor training, and closed-loop experiments.
+- **Not complete:** native MPFR replay of this patch, user-server real-data dual pass, complete Phase 2–5 formal proof audit, full-horizon optimal `V_H^SC`/CCG, independent proof of communication guarantees, real CARLA/SUMO bridge, predictor training, and closed-loop experiments.
 
 No current report should be interpreted as `full_support_certified=true` or as a real-road safety guarantee.
+
+## Phase 6C-A3 acceptance (requires official MPFR development files)
+
+```bash
+PYTHON_BIN=python bash scripts/validate_phase6c_a3_sc.sh
+# Creates reports/RAMP-D_Phase6C_A3_server_report.zip; three native CTests
+# and Phase 4/5/SC Python regressions are mandatory.
+```
 
 ## Validation
 

@@ -401,6 +401,17 @@ class ProtocolAutomaton:
         return result
 
 
+def build_coverage_ledger(automaton: ProtocolAutomaton) -> CoverageLedger:
+    """Compatibility API: compute the structural ledger of a finite automaton.
+
+    This is NOT a proof that guards, time windows, or hidden-mode support
+    are exhaustive.  Only the full verifier can discharge those obligations.
+    """
+    if not isinstance(automaton, ProtocolAutomaton):
+        raise TypeError("build_coverage_ledger expects ProtocolAutomaton")
+    return automaton.coverage()
+
+
 def branch_temporal_status(branch: ProtocolTransition):
     """Return branch validity, never knowledge from a silence observation.
 
