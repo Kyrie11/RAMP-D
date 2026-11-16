@@ -253,21 +253,24 @@ def test_av2_parquet_reader_projects_used_columns_and_hashes_source_once(
     class FakeParquetFile:
         schema = Schema()
 
+    # This is a unit test of our adapter's column projection and call contract,
+    # not of pandas itself.  Use a minimal pandas stub so importing real pandas
+    # cannot inspect the intentionally incomplete fake pyarrow package (newer
+    # pandas releases read pyarrow.__version__ during pandas import).
+    def fake_read_parquet(path, *, columns, engine):
+        read_calls.append((tuple(columns), engine))
+        return rows
+
+    fake_pandas = types.ModuleType("pandas")
+    fake_pandas.read_parquet = fake_read_parquet
     fake_parquet = types.ModuleType("pyarrow.parquet")
     fake_parquet.ParquetFile = lambda path: FakeParquetFile()
     fake_pyarrow = types.ModuleType("pyarrow")
     fake_pyarrow.__path__ = []
     fake_pyarrow.parquet = fake_parquet
+    monkeypatch.setitem(sys.modules, "pandas", fake_pandas)
     monkeypatch.setitem(sys.modules, "pyarrow", fake_pyarrow)
     monkeypatch.setitem(sys.modules, "pyarrow.parquet", fake_parquet)
-
-    import pandas as pd
-
-    def fake_read_parquet(path, *, columns, engine):
-        read_calls.append((tuple(columns), engine))
-        return rows
-
-    monkeypatch.setattr(pd, "read_parquet", fake_read_parquet)
     digest = "a" * 64
 
     def counted_hash(path, **kwargs):
