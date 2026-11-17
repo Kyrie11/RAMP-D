@@ -34,10 +34,12 @@ def _nonempty(name: str, value: str) -> str:
 
 
 def _rat_nonnegative(name: str, value) -> Fraction:
-    # Fraction(float) treats that float as its exact binary64 number.  For
-    # decimal-valued guarantees callers should pass string or Fraction.
-    if isinstance(value, bool):
-        raise TypeError(f"{name}: bool is not a number")
+    # Proof-carrying times and lower bounds MUST have an explicit exact
+    # interpretation.  A Python float is not the decimal/rational quantity
+    # most callers think it denotes, and silently rounding a certified lower
+    # bound can overstate it. Pass Fraction or decimal/rational string.
+    if isinstance(value, (bool, float)):
+        raise TypeError(f"{name}: use Fraction, int or exact decimal string; not float/bool")
     result = Fraction(value)
     if result < 0:
         raise ValueError(f"{name} must be nonnegative")
@@ -157,8 +159,14 @@ class SCResult:
     completion_upper_pairs: tuple[tuple[str, Fraction], ...]
     margin_lower_pairs: tuple[tuple[str, Fraction], ...]
     reasons: tuple[tuple[str, str], ...]
+    support_digest_pairs: tuple[tuple[str, str], ...] = ()
+    step_s: Fraction = Fraction(0)
     status: str = "CONDITIONAL_FINITE_ABSTRACTION_ONLY"
     certified_full_support: bool = False
+
+    @property
+    def support_digests(self) -> dict[str, str]:
+        return dict(self.support_digest_pairs)
 
     @property
     def ranks(self) -> dict[str, int]:
@@ -188,6 +196,8 @@ class SCResult:
             "completion_upper_pairs": [[k, str(v)] for k, v in self.completion_upper_pairs],
             "margin_lower_pairs": [[k, str(v)] for k, v in self.margin_lower_pairs],
             "reasons": [list(x) for x in self.reasons],
+            "support_digest_pairs": [list(x) for x in self.support_digest_pairs],
+            "step_s": str(self.step_s),
             "status": self.status, "certified_full_support": self.certified_full_support,
         }
 
@@ -195,6 +205,26 @@ class SCResult:
 def _digest(payload) -> str:
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf8")
     return "sc-sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def sc_support_digest(cell: BeliefCell) -> str:
+    """Stable full physical/discrete support identity, not merely a cell label.
+
+    The digest deliberately includes exact binary64 interval endpoints (the
+    current abstract-game representation), every other-agent coordinate,
+    discrete modes, public policy-node ID, and atom identities. It is a
+    *version binding*, NOT proof of exact/complete concrete support.
+    """
+    return _digest({
+        "cell_id": cell.cell_id, "policy_node_id": cell.policy_node_id,
+        "atoms": [
+            {"id": a.atom_id,
+             "ego": [[v.lo.hex(), v.hi.hex()] for v in a.ego.as_tuple()],
+             "other": [[name, val.lo.hex(), val.hi.hex()] for name, val in a.other],
+             "mode": [list(pair) for pair in a.mode]}
+            for a in sorted(cell.atoms, key=lambda a: a.atom_id)
+        ],
+    })
 
 
 def compute_sc_inner(
@@ -362,7 +392,10 @@ def compute_sc_inner(
     return SCResult(contract.digest, tuple(families), tuple(sorted(rank.items())),
                     terminal_ids, tuple(selected[c] for c in sorted(selected)),
                     tuple(sorted(bound.items())), tuple(sorted(val_lower.items())),
-                    tuple(sorted(reasons.items())))
+                    tuple(sorted(reasons.items())),
+                    support_digest_pairs=tuple(sorted((cid, sc_support_digest(cell))
+                                                      for cid, cell in by_id.items())),
+                    step_s=contract.step_s)
 
 
 def replay_sc_inner(expected: SCResult, *args, **kwargs) -> bool:
@@ -389,19 +422,31 @@ class SCExecutionBudget:
     contract_digest: str
     cell_id: str
     remaining_rank: int
+    support_digest: str = ""
+    remaining_completion_s: Fraction | None = None
 
     def __post_init__(self):
         _nonempty("contract_digest", self.contract_digest)
         _nonempty("cell_id", self.cell_id)
         if type(self.remaining_rank) is not int or self.remaining_rank < 0:
             raise ValueError("remaining rank must be a nonnegative integer")
+        if self.remaining_completion_s is not None:
+            bound = _rat_nonnegative("remaining_completion_s", self.remaining_completion_s)
+            object.__setattr__(self, "remaining_completion_s", bound)
 
 
 def start_sc_execution(certificate: SCResult, cell_id: str) -> SCExecutionBudget:
     rank = certificate.ranks.get(cell_id)
     if rank is None:
         raise SCExecutionError("START_CELL_HAS_NO_REPLAYED_TASK_COMPLETION_POLICY")
-    return SCExecutionBudget(certificate.contract_digest, cell_id, rank)
+    support_digest = certificate.support_digests.get(cell_id)
+    if not support_digest:
+        raise SCExecutionError("START_SUPPORT_BINDING_MISSING")
+    bound = certificate.completion_upper_s.get(cell_id)
+    if bound is None or certificate.step_s <= 0:
+        raise SCExecutionError("START_COMPLETION_BINDING_MISSING")
+    return SCExecutionBudget(certificate.contract_digest, cell_id, rank,
+                             support_digest, bound)
 
 
 def advance_sc_execution(certificate: SCResult, budget: SCExecutionBudget,
@@ -414,8 +459,15 @@ def advance_sc_execution(certificate: SCResult, budget: SCExecutionBudget,
     """
     if certificate.contract_digest != budget.contract_digest:
         raise SCExecutionError("REPLAN_CONTEXT_CHANGED")
+    if budget.remaining_completion_s is None or certificate.step_s <= 0:
+        raise SCExecutionError("EXECUTION_COMPLETION_BUDGET_MISSING")
+    if certificate.completion_upper_s.get(budget.cell_id, Fraction(-1)) > budget.remaining_completion_s:
+        raise SCExecutionError("EXECUTION_COMPLETION_CERTIFICATE_EXCEEDS_BUDGET")
     if budget.remaining_rank == 0:
         raise SCExecutionError("TERMINAL_TAIL_REQUIRED_NO_FURTHER_PREFIX")
+    if (not budget.support_digest or
+            certificate.support_digests.get(budget.cell_id) != budget.support_digest):
+        raise SCExecutionError("EXECUTION_SUPPORT_CONTEXT_CHANGED")
     parent_rank = certificate.ranks.get(budget.cell_id)
     if parent_rank is None or parent_rank > budget.remaining_rank:
         raise SCExecutionError("PARENT_CERTIFICATE_EXCEEDS_INHERITED_BUDGET")
@@ -430,7 +482,15 @@ def advance_sc_execution(certificate: SCResult, budget: SCExecutionBudget,
     next_rank = certificate.ranks.get(next_cell_id)
     if next_rank is None or next_rank >= parent_rank or next_rank > budget.remaining_rank - 1:
         raise SCExecutionError("CHILD_RANK_NOT_STRICTLY_DECREASED")
-    return SCExecutionBudget(budget.contract_digest, next_cell_id, budget.remaining_rank - 1)
+    next_support = certificate.support_digests.get(next_cell_id)
+    if not next_support:
+        raise SCExecutionError("CHILD_SUPPORT_BINDING_MISSING")
+    remaining_time = budget.remaining_completion_s - certificate.step_s
+    child_time = certificate.completion_upper_s.get(next_cell_id)
+    if remaining_time < 0 or child_time is None or child_time > remaining_time:
+        raise SCExecutionError("CHILD_COMPLETION_EXCEEDS_INHERITED_TIME_BUDGET")
+    return SCExecutionBudget(budget.contract_digest, next_cell_id,
+                             budget.remaining_rank - 1, next_support, remaining_time)
 
 
 def replan_sc_execution(new_certificate: SCResult,
@@ -438,6 +498,14 @@ def replan_sc_execution(new_certificate: SCResult,
     """Require a newly computed policy for the SAME support/context within budget."""
     if inherited.contract_digest != new_certificate.contract_digest:
         raise SCExecutionError("REPLAN_CONTEXT_CHANGED")
+    if (not inherited.support_digest or
+            new_certificate.support_digests.get(inherited.cell_id) != inherited.support_digest):
+        raise SCExecutionError("REPLAN_INFORMATION_SUPPORT_CHANGED")
+    if (inherited.remaining_completion_s is None or
+            new_certificate.step_s <= 0 or
+            new_certificate.completion_upper_s.get(inherited.cell_id, Fraction(-1)) < 0 or
+            new_certificate.completion_upper_s[inherited.cell_id] > inherited.remaining_completion_s):
+        raise SCExecutionError("REPLAN_COMPLETION_BOUND_EXCEEDS_INHERITED_BUDGET")
     new_rank = new_certificate.ranks.get(inherited.cell_id)
     if new_rank is None or new_rank > inherited.remaining_rank:
         raise SCExecutionError("REPLAN_RESETS_OR_EXCEEDS_INHERITED_RANK")

@@ -55,7 +55,8 @@ from .safe_continuation import (SCContract, TerminalTailCertificate,
                                 TubeMarginCertificate, SCPolicyStep, SCResult,
                                 compute_sc_inner, replay_sc_inner, SCExecutionBudget,
                                 SCExecutionError, start_sc_execution,
-                                advance_sc_execution, replan_sc_execution)
+                                advance_sc_execution, replan_sc_execution,
+                                sc_support_digest)
 from .forecast import (ProposalStatus, PredictionProposal, ProposalSet,
                        ProposalAdapterResult, proposal_only,
                        hard_support_from_prediction)
@@ -91,6 +92,7 @@ from .phase6c_cv import (ForecastJob, constant_velocity_proposals,
                         stable_split_fingerprint, SoftPriority)
 from .clock_ledger import CoSimTick, CoSimLedger
 from .supervision_inventory import supervision_inventory
+from .sc_proof_audit import (SCProofAudit, audit_sc_proof)
 
-__version__ = "0.9.3"
+__version__ = "0.9.4-a4"
 __all__ = [name for name in globals() if not name.startswith("_")]

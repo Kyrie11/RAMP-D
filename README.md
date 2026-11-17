@@ -1,3 +1,7 @@
+## Phase6C-A4 mathematical proof gate (2026-11-17)
+
+Start with [README_A4.md](README_A4.md). This release repairs SC support/time-budget binding, adds an independent structural proof audit and exact finite-game cross-check, and hardens native CTest discovery. Real physical/protocol proof providers remain pending.
+
 ## Phase6C integrated repair (0.9.3-p1, 2026-11-16)
 
 This release **combines Phase6C-A3 SC/rank + A2 map/protocol with the earlier Phase6C offline CV/simulation diagnostics**. DO NOT overlay it on an older checkout: extract into a fresh directory and run `python scripts/verify_release.py`. Fixes, evidence scope and commands: [Phase6C integration repair](docs/PHASE6C_INTEGRATION_REPAIR_20261116.md). Supervision policy: [eight losses](docs/SUPERVISION_SOURCE_POLICY_20261116.md). Locally 84 synthetic data/protocol tests and 13 synthetic finite SC/rank tests pass; native/data/simulator gates are pending target server.
