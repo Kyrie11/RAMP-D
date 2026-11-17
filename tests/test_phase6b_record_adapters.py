@@ -254,13 +254,14 @@ def test_av2_parquet_reader_projects_used_columns_and_hashes_source_once(
         schema = Schema()
         def read(self, *, columns):
             read_calls.append(tuple(columns))
-            return types.SimpleNamespace(to_pylist=lambda: rows)
+            return types.SimpleNamespace(schema=tuple(types.SimpleNamespace(name=name,type="int") for name in columns),to_pylist=lambda: rows)
 
     fake_parquet = types.ModuleType("pyarrow.parquet")
     fake_parquet.ParquetFile = lambda path: FakeParquetFile()
     fake_pyarrow = types.ModuleType("pyarrow")
     fake_pyarrow.__path__ = []
     fake_pyarrow.parquet = fake_parquet
+    fake_pyarrow.types = types.SimpleNamespace(is_timestamp=lambda t: False,is_integer=lambda t: t=="int")
     monkeypatch.setitem(sys.modules, "pyarrow", fake_pyarrow)
     monkeypatch.setitem(sys.modules, "pyarrow.parquet", fake_parquet)
     digest = "a" * 64

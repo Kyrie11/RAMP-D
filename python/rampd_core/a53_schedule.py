@@ -62,6 +62,25 @@ class PermissionSchedule:
               [(e.resource_id,str(e.on),str(e.off),e.alpha,e.beta,e.direction,e.capacity,e.source_ref) for e in self.epochs]]
         return 'a53-schedule-sha256:'+hashlib.sha256(json.dumps(body,separators=(',',':')).encode()).hexdigest()
 
+    def permission_at(self, t):
+        """Right-continuous half-open rule semantics, including mission deadline."""
+        if not self.start <= exact(t) <= self.deadline:
+            raise ValueError('instant outside absolute mission')
+        return {e.resource_id:(e.alpha,e.beta,e.direction,e.capacity)
+                for e in self.epochs if e.on<=t<e.off}
+
+    def partition(self, start, end):
+        """Closed geometric slabs with interior rule, plus terminal point rule.
+
+        At an internal switch the old rule is conservatively checked at its
+        left-limit too. The new rule is ALWAYS checked at the switch instant.
+        The last zero-width slab prevents omission of a change exactly at end.
+        """
+        if not self.start<=exact(start)<exact(end)<=self.deadline:
+            raise ValueError('step outside absolute mission')
+        cuts=sorted({start,end}|{e.on for e in self.epochs if start<e.on<end})
+        return tuple((a,b,self.permission_at(a)) for a,b in zip(cuts,cuts[1:]))+((end,end,self.permission_at(end)),)
+
     def restrictions(self, start, end):
         """Meet of all permissions on CLOSED [start,end]; may be conservative.
 
@@ -110,3 +129,27 @@ def local_protocol(protocol: ProtocolAutomaton, modes, start: Fraction, end: Fra
             transitions.append(replace(t,clocks=replace(t.clocks,change=shift(t.clocks.change),local=shift(t.clocks.local))))
     return ProtocolAutomaton(protocol.states,protocol.initial_state_id,tuple(transitions),
         version=f'a53-local:{protocol.digest()}:{binding}:{start}:{end}')
+
+
+def partition_family(schedules, start, end):
+    """Conservative common-control permissions across all declared hidden branches.
+
+    A family of complete externally declared schedules; no guard inference,
+    no endogenous traffic-response or correlation proof. At each exact slab
+    use the intersection of admissible permissions, not their union.
+    """
+    schedules=tuple(schedules)
+    if not schedules or any(s.resource_ids!=schedules[0].resource_ids for s in schedules):
+        raise ValueError('incompatible or empty schedule family')
+    for s in schedules:
+        if not s.start<=exact(start)<exact(end)<=s.deadline:
+            raise ValueError('step outside schedule family')
+    cuts=sorted({start,end}|{e.on for s in schedules for e in s.epochs if start<e.on<end})
+    def common(t):
+        rows=[s.permission_at(t) for s in schedules]; out={}
+        for rid in schedules[0].resource_ids:
+            vals=[r[rid] for r in rows]; dirs={v[2] for v in vals}
+            out[rid]=(all(v[0] for v in vals),all(v[1] for v in vals),
+                      next(iter(dirs)) if len(dirs)==1 else 'NO_COMMON_DIRECTION',min(v[3] for v in vals))
+        return out
+    return tuple((a,b,common(a)) for a,b in zip(cuts,cuts[1:]))+((end,end,common(end)),)

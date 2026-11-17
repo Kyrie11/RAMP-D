@@ -856,6 +856,7 @@ def parse_av2_rows(
 
     if start_ns is not None and end_ns is not None:
         start, end = _integer_ns(start_ns, "start_timestamp"), _integer_ns(end_ns, "end_timestamp")
+        start_ns, end_ns = start, end
         if end < start or (n_steps > 1 and end == start):
             raise RecordParseError("AV2 end_timestamp must exceed start_timestamp")
         from fractions import Fraction
@@ -1052,6 +1053,44 @@ _AV2_READER_COLUMNS = (
 )
 
 
+def _timestamp_ticks_to_ns(ticks, unit):
+    """Arrow timestamp tick counts to integer nanoseconds; never use float."""
+    scale = {"s": 10**9, "ms": 10**6, "us": 10**3, "ns": 1}
+    if unit not in scale:
+        raise RecordParseError('unknown timestamp unit')
+    if any(x is not None and type(x) is not int for x in ticks):
+        raise RecordParseError('noninteger physical timestamp ticks')
+    values = [None if x is None else x*scale[unit] for x in ticks]
+    if any(x is not None and not -(2**63)<=x<2**63 for x in values):
+        raise RecordParseError('timestamp nanoseconds exceed int64')
+    return values
+
+
+def _normalize_av2_arrow_timestamps(table):
+    """Preserve the actual integer nanoseconds of Arrow temporal columns.
+
+    Do not call datetime.timestamp(), use pandas float or accept date/time
+    columns as timestamps. Integer columns are already in AV2's ns unit.
+    Cast to int64 BEFORE converting to Python to avoid loss below microseconds.
+    """
+    import pyarrow as pa
+    names = {"start_timestamp", "start_timestamp_ns", "end_timestamp",
+             "end_timestamp_ns", "timestamp_ns"}
+    for i, field in enumerate(table.schema):
+        if field.name not in names:
+            continue
+        if pa.types.is_timestamp(field.type):
+            # int64 extraction preserves the original physical ticks, even
+            # if the timestamp is outside Python datetime's range.
+            ticks = table.column(i).cast(pa.int64()).to_pylist()
+            values = _timestamp_ticks_to_ns(ticks,field.type.unit)
+            table = table.set_column(i, field.name, pa.array(values, type=pa.int64()))
+        elif not pa.types.is_integer(field.type):
+            # Reject ambiguous physical units / lossy floats at the file boundary.
+            raise RecordParseError(f"{field.name} unsupported Arrow type {field.type}; expected timestamp or integer ns")
+    return table
+
+
 def parse_av2_parquet(path: str | Path, *, split: str = "validation",
                       map_file: str | Path | None = None,
                       clocks: FourClockInjection | None = None,
@@ -1074,7 +1113,9 @@ def parse_av2_parquet(path: str | Path, *, split: str = "validation",
             raise RecordParseError(f"AV2 parquet has no recognized motion columns: {path}")
         # Read directly through Arrow: avoids pandas' version gate and preserves
         # nullable integer nanosecond columns instead of promoting them to float.
-        frame = parquet_file.read(columns=columns).to_pylist()
+        table = parquet_file.read(columns=columns)
+        table = _normalize_av2_arrow_timestamps(table)
+        frame = table.to_pylist()
     except ImportError as exc:
         raise OptionalDependencyError(f"AV2 Arrow reader dependency error: {exc}") from exc
     except RecordParseError:

@@ -76,7 +76,7 @@ class AABB:
 
 @dataclass(frozen=True)
 class SweptFootprint:
-    """Outer enclosure of the union of all footprints represented by a tube."""
+    """Outer enclosure of footprints over a closed interval (a point if equal times)."""
     state_tube: StateBounds
     geometry: VehicleGeometry
     start_time: Fraction
@@ -90,8 +90,8 @@ class SweptFootprint:
             raise TypeError("geometry must be VehicleGeometry")
         if not isinstance(self.start_time, Fraction) or not isinstance(self.end_time, Fraction):
             raise TypeError("times must be exact fractions")
-        if self.start_time < 0 or self.end_time <= self.start_time:
-            raise ValueError("swept footprint requires 0 <= start_time < end_time")
+        if self.start_time < 0 or self.end_time < self.start_time:
+            raise ValueError("footprint requires 0 <= start_time <= end_time")
         if not isinstance(self.vehicle_id, str) or not self.vehicle_id:
             raise ValueError("vehicle_id must be a nonempty string")
 

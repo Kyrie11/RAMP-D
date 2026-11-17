@@ -1,12 +1,11 @@
-"""A5/3a: absolute-time joint prefix/tail graph for a declared ego-only world.
+"""A5/3b: absolute-time joint prefix/tail graph for a declared ego-only world.
 
-Replays every edge with the most restrictive permission over its physical
-slab. This is an inner sufficient check, not an exact dynamic winning set.
-No moving actors, uncertain event schedules, pending messages or feedback.
+Replays each edge on exact event subslabs with common branch permissions. This is an inner sufficient check, not an exact dynamic winning set.
+No moving actors, continuously uncertain event schedules, pending messages or feedback.
 """
 from dataclasses import dataclass, replace
 from fractions import Fraction
-from .a53_schedule import PermissionSchedule, exact, local_protocol
+from .a53_schedule import PermissionSchedule, exact, local_protocol, partition_family
 from .a5_task_tail import A5TailResult, replay_a5_tail_edge
 from .a5_replay_bridge import a5_world_digest, a5_clock_digest, _canonical_hash
 from .safe_continuation import SCContract, sc_support_digest
@@ -21,20 +20,29 @@ class A53Mission:
     schedule: PermissionSchedule
     step: Fraction
     initial_support_digest: str
+    segmented_resources: bool = True
+    branch_schedules: tuple[tuple[str,PermissionSchedule], ...] = ()
 
     def __post_init__(self):
         w=self.world; s=self.schedule
+        bs=tuple((tid,sch) for tid,sch in self.branch_schedules)
+        object.__setattr__(self,'branch_schedules',bs)
+        if type(self.segmented_resources) is not bool or (bs and not self.segmented_resources):
+            raise ValueError('branch schedules require segmented mode')
+        if bs and (len({tid for tid,_ in bs})!=len(bs) or {tid for tid,_ in bs}!={t.transition_id for t in self.protocol.transitions} or
+                   any(not isinstance(sch,PermissionSchedule) or (sch.start,sch.deadline,sch.resource_ids)!=(s.start,s.deadline,s.resource_ids) for _,sch in bs)):
+            raise ValueError('complete independently declared schedule for every protocol transition required')
         if exact(self.step)<=0 or not self.initial_support_digest:
             raise ValueError('invalid step or root binding')
         if self.goal.deadline_s!=s.deadline-s.start:
             raise ValueError('goal duration and mission deadline disagree')
-        if (w.other_actors or not w.complete_actors_assumed or not w.complete_resources_assumed or
+        if (w.timed_resource_slices or w.other_actors or not w.complete_actors_assumed or not w.complete_resources_assumed or
             w.safe_domain is None or w.model_digest!=a5_world_digest(w)):
             raise ValueError('only independently declared complete ego-only world supported')
         r={x.resource_id:x for x in w.regions}; rs={x.resource_id:x for x in w.resource_states}
         if len(r)!=len(w.regions) or len(rs)!=len(w.resource_states) or set(r)!=set(s.resource_ids) or set(rs)!=set(r):
             raise ValueError('world/schedule resource mismatch')
-        if any(rs[k].capacity!=r[k].capacity for k in r) or any(e.capacity>r[e.resource_id].capacity for e in s.epochs):
+        if any(rs[k].capacity!=r[k].capacity for k in r) or any(e.capacity>r[e.resource_id].capacity for sch in (s,*(sch for _,sch in bs)) for e in sch.epochs):
             raise ValueError('schedule exceeds declared capacity')
         # All rule schedules are declared externally, independent of ego.
         # Formal controller/awareness changes require an extended model.
@@ -48,7 +56,7 @@ class A53Mission:
         return _canonical_hash('a53-mission-sha256:',{'world':self.world.model_digest,
             'protocol':self.protocol.digest(),'observations':self.observations.digest(),
             'goal':self.goal.digest,'schedule':self.schedule.digest,'step':str(self.step),
-            'initial_support':self.initial_support_digest})
+            'initial_support':self.initial_support_digest,'segmented_resources':self.segmented_resources,'branch_schedules':sorted((tid,sch.digest) for tid,sch in self.branch_schedules)})
 
     def edge_context(self, cell, depth):
         if type(depth) is not int or depth<0: raise ValueError('invalid depth')
@@ -57,9 +65,20 @@ class A53Mission:
         states=tuple(replace(s,alpha=restrictions[s.resource_id][0],beta=restrictions[s.resource_id][1],
             direction=restrictions[s.resource_id][2],capacity=restrictions[s.resource_id][3]) for s in self.world.resource_states)
         regions=tuple(replace(r,capacity=restrictions[r.resource_id][3]) for r in self.world.regions)
-        w=replace(self.world,regions=regions,resource_states=states,model_version=f'{self.world.model_version}:{self.digest}:{start}:{end}')
-        w=replace(w,model_digest=a5_world_digest(w))
         proto=local_protocol(self.protocol,(a.mode_dict.get('protocol_state') for a in cell.atoms),start,end,self.digest)
+        slices=()
+        if self.segmented_resources:
+            # Keep maximum capacities in geometry; per-slab capacities are
+            # verified from the independent schedule, not from the witness.
+            regions=self.world.regions; states=self.world.resource_states
+            family=dict(self.branch_schedules)
+            partition=(partition_family((family[t.transition_id] for t in proto.transitions),start,end)
+                       if family else self.schedule.partition(start,end))
+            slices=tuple((a-start,b-start,tuple(replace(s,alpha=r[s.resource_id][0],beta=r[s.resource_id][1],
+                direction=r[s.resource_id][2],capacity=r[s.resource_id][3]) for s in states))
+                for a,b,r in partition)
+        w=replace(self.world,regions=regions,resource_states=states,timed_resource_slices=slices,model_version=f'{self.world.model_version}:{self.digest}:{start}:{end}')
+        w=replace(w,model_digest=a5_world_digest(w))
         c=SCContract(proto.digest(),a5_clock_digest(proto,self.observations,self.step),w.model_digest,
                      self.goal.digest,self.step,int((self.schedule.deadline-self.schedule.start)//self.step))
         return c,w,proto

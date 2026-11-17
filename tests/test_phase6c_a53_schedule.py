@@ -68,3 +68,17 @@ def test_absolute_protocol_fails_closed_on_unmodelled_cases(kind):
         state=replace(p.states[0],**{field:(('msg',1),) if kind=='messages' else (('r','closed'),)})
         p=replace(p,states=(state,*p.states[1:]))
     with pytest.raises((ValueError,KeyError)): local_protocol(p,modes,start,end,'problem')
+
+
+def test_partition_checks_terminal_rule_and_all_hidden_branches():
+    from rampd_core.a53_schedule import partition_family
+    s=schedule(); a,b=s.epochs
+    alternative=replace(s,epochs=(replace(a,alpha=False),replace(b,direction='reverse')))
+    rows=s.partition(Q(10),Q(51,5))
+    assert [(x,y) for x,y,_ in rows]==[(Q(10),Q(101,10)),(Q(101,10),Q(51,5)),(Q(51,5),Q(51,5))]
+    assert rows[0][2]['lane']==(True,True,'forward',2)
+    assert rows[-1][2]['lane']==(False,True,'forward',1)
+    merged=partition_family((s,alternative),Q(10),Q(51,5))
+    assert merged[0][2]['lane']==(False,True,'forward',2)
+    assert merged[-1][2]['lane']==(False,True,'NO_COMMON_DIRECTION',1)
+    with pytest.raises(ValueError): partition_family((),Q(10),Q(51,5))

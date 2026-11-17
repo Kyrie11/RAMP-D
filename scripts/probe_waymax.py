@@ -32,11 +32,15 @@ def main():
         if valid.ndim!=2 or sdc.ndim!=1 or sdc.sum()!=1 or valid.shape[0]!=sdc.shape[0] or valid.shape[-1]!=91:
             raise ValueError('unexpected unbatched standard 91-knot WOMD state or SDC identity')
         if not bool(valid[sdc,10].all()): raise ValueError('invalid SDC at standard current knot')
+        raw_initial=int(np.asarray(state.timestep))
+        if raw_initial>10: raise ValueError('ingestion state later than standard current knot')
+        if raw_initial<10: state=datatypes.update_state_by_log(state,num_steps=10-raw_initial)
+        if int(np.asarray(state.timestep))!=10: raise ValueError('failed to align logged history to current knot')
         if int(np.asarray(state.remaining_timesteps))<1: raise ValueError('no future step to replay')
         nxt=datatypes.update_state_by_log(state,num_steps=1)
         if int(np.asarray(nxt.timestep))!=int(np.asarray(state.timestep))+1: raise ValueError('logged timestep did not advance')
         out.update(status='PASS',sdc_id=int(ids[sdc][0]),shape=list(valid.shape),valid_knots=int(valid.sum()),
-                   initial_timestep=int(np.asarray(state.timestep)),next_timestep=int(np.asarray(nxt.timestep)))
+                   raw_initial_timestep=raw_initial,initial_timestep=int(np.asarray(state.timestep)),next_timestep=int(np.asarray(nxt.timestep)))
         if a.plot:
             from waymax import visualization
             import matplotlib.image as mpimg
