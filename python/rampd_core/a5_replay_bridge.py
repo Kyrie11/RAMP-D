@@ -158,6 +158,13 @@ def _state_covered_by_atom(tube_state, atom):
 
 
 def exact_step_endpoint(tube: TubeResult, step_s: Fraction) -> StateBounds:
+    """Public entry: replay the complete witness before using its field."""
+    if not isinstance(tube,TubeResult) or not replay_certificate(tube_as_dict(tube)).ok:
+        raise ValueError('unverified tube for exact endpoint')
+    return _exact_step_endpoint_after_replay(tube,step_s)
+
+
+def _exact_step_endpoint_after_replay(tube: TubeResult, step_s: Fraction) -> StateBounds:
     """After native replay, enclose x(step_s), not x(round_up(step_s)).
 
     The complete witness goes to ceil64(step_s). For a non-dyadic time in
@@ -233,7 +240,7 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
             return False
         if not replay_certificate(tube_as_dict(tube)).ok:
             return False
-        exact_endpoint = exact_step_endpoint(tube, contract.step_s)
+        exact_endpoint = _exact_step_endpoint_after_replay(tube, contract.step_s)
         # Continuous constraint across every piece, not merely at endpoints.
         from dataclasses import replace
         for seg in tube.segments:
@@ -329,10 +336,10 @@ def audit_a5_protocol(cell: BeliefCell, action: ActionWitness, contract: SCContr
                 # guard-satisfiability proof can add precise exclusions.
                 if trans.guard_tag != 'always':
                     return False
-                # No mapping from resource-monitor labels to A5World states
+                # No mapping from mode/received-message/monitor labels to A5World states
                 # exists here. Even a constant nonempty monitor cannot be
                 # interpreted as a verified static permission assignment.
-                if any(s.resource_monitor for s in protocol.states
+                if any(s.mode or s.resource_monitor or s.received_messages for s in protocol.states
                        if s.state_id in (mode, trans.target_state_id)):
                     return False
                 status, _ = branch_temporal_status(trans)

@@ -252,23 +252,15 @@ def test_av2_parquet_reader_projects_used_columns_and_hashes_source_once(
 
     class FakeParquetFile:
         schema = Schema()
+        def read(self, *, columns):
+            read_calls.append(tuple(columns))
+            return types.SimpleNamespace(to_pylist=lambda: rows)
 
-    # This is a unit test of our adapter's column projection and call contract,
-    # not of pandas itself.  Use a minimal pandas stub so importing real pandas
-    # cannot inspect the intentionally incomplete fake pyarrow package (newer
-    # pandas releases read pyarrow.__version__ during pandas import).
-    def fake_read_parquet(path, *, columns, engine):
-        read_calls.append((tuple(columns), engine))
-        return rows
-
-    fake_pandas = types.ModuleType("pandas")
-    fake_pandas.read_parquet = fake_read_parquet
     fake_parquet = types.ModuleType("pyarrow.parquet")
     fake_parquet.ParquetFile = lambda path: FakeParquetFile()
     fake_pyarrow = types.ModuleType("pyarrow")
     fake_pyarrow.__path__ = []
     fake_pyarrow.parquet = fake_parquet
-    monkeypatch.setitem(sys.modules, "pandas", fake_pandas)
     monkeypatch.setitem(sys.modules, "pyarrow", fake_pyarrow)
     monkeypatch.setitem(sys.modules, "pyarrow.parquet", fake_parquet)
     digest = "a" * 64
@@ -289,8 +281,7 @@ def test_av2_parquet_reader_projects_used_columns_and_hashes_source_once(
     assert hash_calls == [str(source)]
     assert parsed.scenario_content_sha256 == fast_parsed.scenario_content_sha256
     assert len(read_calls) == 2
-    for projected, engine in read_calls:
-        assert engine == "pyarrow"
+    for projected in read_calls:
         assert set(projected) == set(available_columns)
         assert "unused_column_not_in_adapter" not in projected
 
@@ -399,3 +390,24 @@ def test_av2_scenario_digest_is_independent_of_map_archive_path(tmp_path: Path):
     parsed_b = parse_av2_rows(_av2_rows(), map_file=map_b)
     assert parsed_a.map_content_sha256 == parsed_b.map_content_sha256
     assert parsed_a.scenario_content_sha256 == parsed_b.scenario_content_sha256
+
+
+def test_integer_ns_precision_and_no_float_epoch():
+    import pytest
+    from rampd_core.record_adapters import _integer_ns, RecordParseError
+    epoch=1_700_000_000_000_000_001
+    assert _integer_ns(epoch,'ts')==epoch
+    with pytest.raises(RecordParseError): _integer_ns(float(epoch),'ts')
+    with pytest.raises(RecordParseError): _integer_ns(0.1,'ts')
+
+
+def test_womd_spread_shards_uses_multiple_files(tmp_path,monkeypatch):
+    from rampd_core import record_adapters as ra
+    d=tmp_path/'training';d.mkdir()
+    for i in range(5): (d/f'training.tfrecord-{i:05d}').touch()
+    calls=[]
+    def mock(path,max_records,**kwargs):
+        calls.append((path.name,max_records));yield from range(max_records)
+    monkeypatch.setattr(ra,'iter_womd_scenario_file',mock)
+    assert len(list(ra.iter_womd_split(tmp_path,split='training',max_records=8,max_files=3,spread_shards=True)))==8
+    assert calls==[('training.tfrecord-00000',3),('training.tfrecord-00002',3),('training.tfrecord-00004',2)]

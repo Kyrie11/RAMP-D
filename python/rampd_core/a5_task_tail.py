@@ -83,6 +83,31 @@ class A5TailResult:
         return self.status == 'DECLARED_STATIC_TASK_TAIL_PROVED'
 
 
+def replay_a5_tail_edge(n, contract, world, protocol, observations):
+    """Shared edge replay for relative and absolute mission adapters."""
+    def require(condition, reason):
+        if not condition: raise ValueError(reason)
+    tubes=0
+    action=next((a for a in n.cell.actions if a.action_id==n.action_id),None)
+    require(action is not None and audit_a5_protocol(n.cell,action,contract,protocol,observations,n.outcomes),
+            'PROTOCOL_REPLAY_UNPROVED')
+    obs_atoms={}; omap={o.source_atom_id:o for o in n.obligations}
+    require(len(omap)==len(n.obligations) and set(omap)=={a.atom_id for a in n.cell.atoms},
+            'PHYSICAL_OBLIGATIONS_INCOMPLETE')
+    sources={a.atom_id:a for a in n.cell.atoms}
+    for tr in action.transitions:
+        ctx=EvidenceContext(n.cell,sources[tr.source_atom_id],action,tr)
+        require(replay_a5_physical(ctx,contract,omap[tr.source_atom_id],world,world.safe_domain),
+                'PHYSICAL_REPLAY_UNPROVED')
+        tubes+=1
+        for branch in tr.branches:
+            merged=obs_atoms.setdefault(branch.observation,{})
+            for a in branch.atoms:
+                require(a.atom_id not in merged or merged[a.atom_id]==a, 'ATOM_ID_COLLISION')
+                merged[a.atom_id]=a
+    return obs_atoms,tubes
+
+
 def audit_a5_task_tail(root: BeliefCell, nodes: tuple[A5TailNode,...],
                        contract: SCContract, goal: A5TaskGoal, world: A5World,
                        protocol: ProtocolAutomaton, observations: ObservationModel,
@@ -137,23 +162,8 @@ def audit_a5_task_tail(root: BeliefCell, nodes: tuple[A5TailNode,...],
                         'TERMINAL_GOAL_NOT_PROVED')
                 leaves.append(n.depth*contract.step_s); continue
             require(n.depth*contract.step_s < goal.deadline_s, 'NONACCEPTING_AT_DEADLINE')
-            action=next((a for a in n.cell.actions if a.action_id==n.action_id),None)
-            require(action is not None and audit_a5_protocol(n.cell,action,contract,protocol,observations,n.outcomes),
-                    'PROTOCOL_REPLAY_UNPROVED')
-            obs_atoms={}; omap={o.source_atom_id:o for o in n.obligations}
-            require(len(omap)==len(n.obligations) and set(omap)=={a.atom_id for a in n.cell.atoms},
-                    'PHYSICAL_OBLIGATIONS_INCOMPLETE')
-            sources={a.atom_id:a for a in n.cell.atoms}
-            for tr in action.transitions:
-                ctx=EvidenceContext(n.cell,sources[tr.source_atom_id],action,tr)
-                require(replay_a5_physical(ctx,contract,omap[tr.source_atom_id],world,world.safe_domain),
-                        'PHYSICAL_REPLAY_UNPROVED')
-                tubes+=1
-                for branch in tr.branches:
-                    merged=obs_atoms.setdefault(branch.observation,{})
-                    for a in branch.atoms:
-                        require(a.atom_id not in merged or merged[a.atom_id]==a, 'ATOM_ID_COLLISION')
-                        merged[a.atom_id]=a
+            obs_atoms, count = replay_a5_tail_edge(n,contract,world,protocol,observations)
+            tubes+=count
             child=dict(n.children)
             require(len(child)==len(n.children) and set(child)==set(obs_atoms),'PUBLIC_BRANCH_COVER_MISMATCH')
             for label, dst in child.items():

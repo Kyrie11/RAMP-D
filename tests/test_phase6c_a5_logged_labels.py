@@ -63,3 +63,11 @@ def test_sampled_occupancy_masks_missing_geometry_boundary_and_reference():
     fut=tuple(replace(t,states=(replace(t.states[0],x=.8),t.states[1])) if t.track_id=='ego' else t for t in s.future_targets)
     rows=sampled_occupancy_labels(replace(s,future_targets=fut),(('ego','p'),),boundary_buffer_m=.01)
     assert rows[0].occupied is None and rows[1].transition is None
+
+
+def test_direct_forecast_sample_rejects_shifted_label_knots():
+    import pytest
+    from rampd_core.phase6c import Phase6CContractError
+    s=sample(); target=s.future_targets[0]
+    wrong=replace(target,states=(replace(target.states[0],timestamp=.201),*target.states[1:]))
+    with pytest.raises(Phase6CContractError): replace(s,future_targets=(wrong,*s.future_targets[1:]))

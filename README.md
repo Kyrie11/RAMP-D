@@ -105,3 +105,13 @@ Phase6B/6C sample data gates separately.
 ### A5/1 hotfix 1
 
 See [hotfix acceptance](docs/PHASE6C_A5_1_HOTFIX_ACCEPTANCE.md). This is an A5 release, not A6. A5World v2 requires explicitly declared ego parameters, derivative disturbance, control bounds and friction-enabled safe domain; regenerate model/evidence digests. Run `bash scripts/validate_phase6c_a5.sh` in a fresh directory.
+
+
+## Phase 6C-A5/3a (scoped release)
+
+See `docs/PHASE6C_A5_3_ACCEPTANCE.md` and `docs/PHASE6C_A5_3_SUPERVISION_PLAN.md`.
+Run `python scripts/verify_release.py` then `bash scripts/validate_phase6c_a5_3.sh`. The full gate requires native MPFR/GMP; no real-world full-support claim.
+
+`python scripts/validate_a5_logged_labels.py --womd-root /data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed/scenario --av2-root /data0/senzeyu2/dataset/Argoverse2/motion --max-records 60 --max-files 6 --prefix-steps 10 --output reports/a5_3_logged_labels.json`
+
+Optional Waymax in compatible environment: `python scripts/probe_waymax.py --tf-example-file /data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed/tf_example/validation/validation_tfexample.tfrecord-00000-of-00150 --output reports/waymax_probe.json --plot reports/waymax_logged.png`. Supply an actual local WOMD 1.3.1 TFExample shard; no counterfactual or safety certificate is generated.

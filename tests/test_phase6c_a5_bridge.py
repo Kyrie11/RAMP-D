@@ -208,3 +208,13 @@ def test_declared_clock_relations_and_change_within_step_required():
         p=replace(proto,transitions=(replace(proto.transitions[0],clocks=clock),))
         cc=replace(c,protocol_digest=p.digest(),clock_digest=a5_clock_digest(p,obs,step))
         assert not audit_a5_protocol(cell,action,cc,p,obs,(outcome,))
+
+
+def test_unmapped_protocol_mode_or_receipt_cannot_silently_change():
+    contract,proto,obs,cell,action,outcome,*_=fixture()
+    from rampd_core.a5_replay_bridge import a5_clock_digest
+    for state in (replace(proto.states[1],mode=(('lane','closed'),)),
+                  replace(proto.states[1],received_messages=(('m',1),))):
+        p=replace(proto,states=(proto.states[0],state))
+        c=replace(contract,protocol_digest=p.digest(),clock_digest=a5_clock_digest(p,obs,contract.step_s))
+        assert not audit_a5_protocol(cell,action,c,p,obs,(outcome,))

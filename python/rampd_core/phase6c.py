@@ -146,6 +146,13 @@ class SceneForecastSample:
             raise Phase6CContractError("history track lengths must match the history time axis")
         if any(len(x.states) != len(self.future_timestamps_s) for x in self.future_targets):
             raise Phase6CContractError("future target lengths must match the future time axis")
+        # Directly constructed samples must obey the same exact knot alignment
+        # as build_scene_forecast_sample's validated source scene.
+        for tracks,axis in ((self.history_tracks,self.history_timestamps_s),(self.future_targets,self.future_timestamps_s)):
+            if any(state.timestamp!=t for track in tracks for state,t in zip(track.states,axis)):
+                raise Phase6CContractError("track timestamp differs from sample axis")
+        if self.history_timestamps_s[-1]!=self.current_timestamp_s:
+            raise Phase6CContractError("current timestamp differs from exact sample knot")
 
     @property
     def benchmark_target_track_ids(self) -> tuple[str, ...]:

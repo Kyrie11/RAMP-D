@@ -586,7 +586,7 @@ def iter_womd_scenario_file(
 def iter_womd_split(
     root: str | Path, *, split: str, max_records: int = 10,
     max_files: int = 10, clocks: FourClockInjection | None = None,
-    hash_source_files: bool = False,
+    hash_source_files: bool = False, spread_shards: bool = False,
 ) -> Iterator[ParsedScene]:
     """Bounded Scenario split reader; forwards split into every parsed manifest.
 
@@ -604,13 +604,20 @@ def iter_womd_split(
     import heapq
     matches = (p for p in split_root.rglob("*") if p.is_file() and
                (p.name.endswith(".tfrecord") or ".tfrecord-" in p.name))
-    files = heapq.nsmallest(max_files, matches)
+    if spread_shards:
+        # Deterministic, evenly spaced shard selection, not a random population sample.
+        all_files=sorted(matches); k=min(len(all_files),max_files,max_records)
+        files=([all_files[(i*(len(all_files)-1))//(k-1)] for i in range(k)] if k>1 else all_files[:k])
+    else:
+        files = heapq.nsmallest(max_files, matches)
     if not files:
         raise FileNotFoundError(f"no WOMD TFRecord shards below {split_root}")
     emitted = 0
-    for path in files:
+    for index,path in enumerate(files):
+        quota=((max_records-emitted+len(files)-index-1)//(len(files)-index)
+               if spread_shards else max_records-emitted)
         for parsed in iter_womd_scenario_file(
-                path, max_records=max_records - emitted, clocks=clocks,
+                path, max_records=quota, clocks=clocks,
                 hash_source_file=hash_source_files, split=split):
             yield parsed
             emitted += 1
@@ -696,6 +703,7 @@ def _consistent_value(rows: Sequence[Mapping[str, Any]], name: str,
 
 
 def _integer_ns(value: Any, name: str) -> int:
+    from fractions import Fraction
     if isinstance(value, bool):
         raise RecordParseError(f"{name} must be an integer nanosecond timestamp")
     try:
@@ -703,7 +711,7 @@ def _integer_ns(value: Any, name: str) -> int:
     except (TypeError, ValueError, OverflowError) as exc:
         raise RecordParseError(f"{name} must be an integer nanosecond timestamp") from exc
     try:
-        if float(value) != float(result):
+        if (isinstance(value, float) and abs(value) > 2**53) or Fraction(str(value)) != result:
             raise RecordParseError(f"{name} must be an exact integer nanosecond timestamp")
     except (TypeError, ValueError, OverflowError) as exc:
         raise RecordParseError(f"{name} must be an integer nanosecond timestamp") from exc
@@ -855,7 +863,7 @@ def parse_av2_rows(
                                  1_000_000_000) for i in range(n_steps))
         time_source = "scenario_start_end_timestamp_ns"
         for index, ns in row_ts.items():
-            expected = start + ((end - start) * index / max(1, n_steps - 1))
+            expected = start + Fraction((end - start) * index, max(1, n_steps - 1))
             if abs(ns - expected) > 1_000:
                 raise RecordParseError(
                     f"AV2 row timestamp_ns at timestep {index} conflicts with scenario time axis"
@@ -1050,10 +1058,9 @@ def parse_av2_parquet(path: str | Path, *, split: str = "validation",
                       require_map: bool = True,
                       hash_source_file: bool = True) -> ParsedScene:
     try:
-        import pandas as pd  # type: ignore
         import pyarrow.parquet as pq  # type: ignore
     except ImportError as exc:
-        raise OptionalDependencyError("AV2 parsing requires pandas and pyarrow") from exc
+        raise OptionalDependencyError(f"AV2 parsing requires working pyarrow: {exc}") from exc
     path = Path(path)
 
     # Inspect the parquet schema, then read only fields used by the adapter.
@@ -1065,9 +1072,11 @@ def parse_av2_parquet(path: str | Path, *, split: str = "validation",
         columns = [name for name in _AV2_READER_COLUMNS if name in available]
         if not columns:
             raise RecordParseError(f"AV2 parquet has no recognized motion columns: {path}")
-        frame = pd.read_parquet(path, columns=columns, engine="pyarrow")
+        # Read directly through Arrow: avoids pandas' version gate and preserves
+        # nullable integer nanosecond columns instead of promoting them to float.
+        frame = parquet_file.read(columns=columns).to_pylist()
     except ImportError as exc:
-        raise OptionalDependencyError("AV2 parquet parsing requires pyarrow") from exc
+        raise OptionalDependencyError(f"AV2 Arrow reader dependency error: {exc}") from exc
     except RecordParseError:
         raise
     except Exception as exc:
