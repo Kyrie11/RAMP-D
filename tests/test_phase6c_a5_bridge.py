@@ -108,7 +108,7 @@ def test_static_forbidden_resource_is_not_proved_safe():
     state=ResourceState('closed',False,False,'forward',1)
     # Positive control: identical geometry but permitted occupancy.
     c,o,ctx,w = _rebind(contract,ob,e,replace(world,regions=(region,),
-        resource_states=(replace(state,alpha=True,beta=True),)))
+        resource_states=(replace(state,alpha=True,beta=True),),resource_forward_axes=(('closed',1.,0.),)))
     assert replay_a5_physical(ctx,c,o,w,safe)
     contract, ob, e, world = _rebind(contract, ob, e, replace(world, regions=(region,), resource_states=(state,)))
     assert not replay_a5_physical(e,contract,ob,world,safe)
@@ -177,7 +177,7 @@ def test_possible_occupancy_requires_entry_and_stay_permission():
     contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
     region=ResourceRegion('stay-closed', Interval(-5,5),Interval(-5,5),1)
     state=ResourceState('stay-closed',True,False,'forward',1)
-    c,o,ctx,w = _rebind(contract,ob,e,replace(world,regions=(region,),resource_states=(state,)))
+    c,o,ctx,w = _rebind(contract,ob,e,replace(world,regions=(region,),resource_states=(state,),resource_forward_axes=((region.resource_id,1.,0.),)))
     assert not replay_a5_physical(ctx,c,o,w,safe)
 
 
@@ -188,3 +188,23 @@ def test_unmapped_constant_resource_monitor_is_not_a_protocol_proof():
     c=replace(contract,protocol_digest=monitored.digest(),
               clock_digest=a5_clock_digest(monitored,obs,contract.step_s))
     assert not audit_a5_protocol(cell,action,c,monitored,obs,(outcome,))
+
+
+def test_resource_direction_is_world_velocity_not_speed_sign():
+    contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
+    region=ResourceRegion('lane',Interval(-5,5),Interval(-5,5),1)
+    state=ResourceState('lane',True,True,'forward',1)
+    for axes,expected in (((),False),((('lane',-1.,0.),),False),((('lane',1.,0.),),True)):
+        c,o,ctx,w=_rebind(contract,ob,e,replace(world,regions=(region,),resource_states=(state,),resource_forward_axes=axes))
+        assert replay_a5_physical(ctx,c,o,w,safe)==expected
+
+
+def test_declared_clock_relations_and_change_within_step_required():
+    c,proto,obs,cell,action,outcome,ob,e,world,safe=fixture()
+    from rampd_core.a5_replay_bridge import a5_clock_digest
+    step=c.step_s
+    for clock in (ClockTrace(TimeWindow(step*2,step*2),local=TimeWindow(step,step)),
+                  ClockTrace(TimeWindow(Q(0),Q(0)),local=TimeWindow(step,step),declared_relations=(('local','change'),))):
+        p=replace(proto,transitions=(replace(proto.transitions[0],clocks=clock),))
+        cc=replace(c,protocol_digest=p.digest(),clock_digest=a5_clock_digest(p,obs,step))
+        assert not audit_a5_protocol(cell,action,cc,p,obs,(outcome,))

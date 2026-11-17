@@ -21,8 +21,9 @@ from .protocol import (ProtocolAutomaton, branch_temporal_status,
                        public_observation_window)
 from .observations import ObservationModel
 from .safe_continuation import SCContract, sc_support_digest
-from .model import BicycleParameters, ControlBounds
+from .model import BicycleParameters, ControlBounds, StateBounds
 from .interval import Interval
+from .exact_time import binary64_bracket
 from .reachability import TubeResult, TubeStatus
 from .certificate import to_dict as tube_as_dict, replay_certificate
 from .footprint import VehicleGeometry, SweptFootprint, separate_tube_results, SeparationStatus
@@ -59,14 +60,28 @@ class A5World:
     complete_actors_assumed: bool
     complete_resources_assumed: bool
     conflicts: tuple[tuple[str, str], ...] = ()
-    model_version: str = 'a5-toy-v2'
+    model_version: str = 'a5-toy-v3'
     # Explicit problem assumptions, not inferred from the candidate tube.
     ego_params: BicycleParameters | None = None
     ego_disturbance: tuple[Interval, ...] | None = None
     ego_control_bounds: ControlBounds | None = None
     safe_domain: SafeDomain | None = None
+    # Independent forward axes in the same world frame as dx/dt, dy/dt.
+    resource_forward_axes: tuple[tuple[str, float, float], ...] = ()
 
     def __post_init__(self):
+        for name in ('other_actors', 'regions', 'resource_states', 'conflicts'):
+            value = getattr(self, name)
+            object.__setattr__(self, name, tuple(tuple(x) for x in value) if name in ('other_actors', 'conflicts') else tuple(value))
+        import math
+        axes = tuple((rid,float(x),float(y)) for rid,x,y in self.resource_forward_axes)
+        if len({rid for rid,_,_ in axes}) != len(axes) or any(
+            not rid or not math.isfinite(x) or not math.isfinite(y) or (x==0 and y==0)
+            for rid,x,y in axes):
+            raise ValueError('invalid or duplicate resource forward axes')
+        object.__setattr__(self,'resource_forward_axes',axes)
+        if self.ego_disturbance is not None:
+            object.__setattr__(self, 'ego_disturbance', tuple(self.ego_disturbance))
         if not self.model_version or len({item[0] for item in self.other_actors}) != len(self.other_actors):
             raise ValueError('valid model digest and unique actor ids required')
         if 'ego' in {item[0] for item in self.other_actors}:
@@ -109,7 +124,8 @@ def a5_world_digest(world: A5World) -> str:
                 [[v.lo, v.hi] for v in world.ego_disturbance],
             'ego_control_bounds': None if world.ego_control_bounds is None else
                 asdict(world.ego_control_bounds),
-            'safe_domain': None if world.safe_domain is None else asdict(world.safe_domain)}
+            'safe_domain': None if world.safe_domain is None else asdict(world.safe_domain),
+            'resource_forward_axes':sorted(world.resource_forward_axes)}
     return _canonical_hash('a5-world-sha256:',body)
 
 
@@ -139,6 +155,32 @@ def _physical_digest(cell_id, action_id, source_atom_id, tube, contract):
 
 def _state_covered_by_atom(tube_state, atom):
     return atom.ego.contains(tube_state)
+
+
+def exact_step_endpoint(tube: TubeResult, step_s: Fraction) -> StateBounds:
+    """After native replay, enclose x(step_s), not x(round_up(step_s)).
+
+    The complete witness goes to ceil64(step_s). For a non-dyadic time in
+    a substep, integrate the already verified derivative enclosure over an
+    outward binary64 bracket of the exact elapsed time. The caller must
+    replay the tube first. Static constraints are checked over the entire
+    (possibly slightly longer) tube; no protocol time is advanced by rounding.
+    """
+    if step_s <= 0 or tube.requested_horizon_s != binary64_bracket(step_s)[1]:
+        raise ValueError('wrong enclosing horizon')
+    for seg in tube.segments:
+        if seg.start_time <= step_s <= seg.end_time:
+            if step_s == seg.end_time:
+                return seg.witness.endpoint
+            if step_s == seg.start_time:
+                return seg.witness.initial
+            elapsed = Interval(*binary64_bracket(step_s - seg.start_time))
+            box = StateBounds(*(z + elapsed * f for z, f in zip(
+                seg.witness.initial.as_tuple(), seg.witness.field)))
+            # Both enclosures contain the exact-time state; intersect safely.
+            return StateBounds(*(Interval(max(a.lo,b.lo), min(a.hi,b.hi))
+                    for a,b in zip(box.as_tuple(), seg.witness.tube.as_tuple())))
+    raise ValueError('rational instant not covered')
 
 
 def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
@@ -174,8 +216,8 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
         if (not isinstance(tube, TubeResult) or tube.status is not TubeStatus.VALIDATED or
                 tube.endpoint is None or not tube.segments or
                 tube.initial != ctx.source_atom.ego or
-                Fraction.from_float(tube.requested_horizon_s) != contract.step_s or
-                tube.validated_until != contract.step_s or
+                tube.requested_horizon_s != binary64_bracket(contract.step_s)[1] or
+                tube.validated_until != Fraction.from_float(tube.requested_horizon_s) or
                 ctx.source_atom.other or tube.params != world.ego_params or
                 len(tube.disturbance) != 6 or
                 not all(witness.contains(declared) for witness, declared in
@@ -191,6 +233,7 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
             return False
         if not replay_certificate(tube_as_dict(tube)).ok:
             return False
+        exact_endpoint = exact_step_endpoint(tube, contract.step_s)
         # Continuous constraint across every piece, not merely at endpoints.
         from dataclasses import replace
         for seg in tube.segments:
@@ -204,7 +247,7 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
         if ctx.transition.verdict is not EvidenceVerdict.PROVED or not ctx.transition.branches:
             return False
         for branch in ctx.transition.branches:
-            if not all(_state_covered_by_atom(tube.endpoint, a) and not a.other
+            if not all(_state_covered_by_atom(exact_endpoint, a) and not a.other
                        and safe_domain.contains_atom(a)[0] for a in branch.atoms):
                 return False
         for actor_id, actor_tube, geometry in world.other_actors:
@@ -219,10 +262,8 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
         if world.other_actors and world.regions:
             return False
         for seg in tube.segments:
-            # The first bridge only models a fixed forward resource direction.
-            # A possible reverse velocity needs a more general direction guard.
-            if world.regions and seg.witness.tube.v.lo < 0:
-                return False
+            # A possible occupancy must satisfy a declared world-frame
+            # direction, not a direction inferred just from nonnegative speed.
             fp = ActorFootprint('ego', SweptFootprint.from_segment(
                 seg, world.ego_geometry, 'ego'), direction='forward')
             res = check_resources(world.resource_states, world.regions, (fp,), world.conflicts)
@@ -232,9 +273,16 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
             # possible occupancy must therefore also satisfy beta, not just
             # alpha (the default check for an actor with empty already_inside).
             states = {state.resource_id: state for state in world.resource_states}
-            if any(o.status is not OccupancyStatus.PROVED_FREE and
-                   not states[o.resource_id].beta for o in res.occupancies):
-                return False
+            axes = {rid:(x,y) for rid,x,y in world.resource_forward_axes}
+            for o in res.occupancies:
+                if o.status is OccupancyStatus.PROVED_FREE:
+                    continue
+                if not states[o.resource_id].beta or o.resource_id not in axes:
+                    return False
+                ax, ay = axes[o.resource_id]
+                velocity = seg.witness.field[0]*ax + seg.witness.field[1]*ay
+                if velocity.lo < 0:
+                    return False
         return True
     except (TypeError, ValueError, KeyError, RuntimeError, OverflowError, AttributeError):
         return False
@@ -290,7 +338,8 @@ def audit_a5_protocol(cell: BeliefCell, action: ActionWitness, contract: SCContr
                 status, _ = branch_temporal_status(trans)
                 window = public_observation_window(trans)
                 # Only exact, future public observation moments are supported.
-                if (status != 'PROVED' or window is None or window.lo != window.hi or
+                if (status != 'PROVED' or trans.clocks.change.hi > contract.step_s or
+                        any(not trans.clocks.relation_proved(a,b) for a,b in trans.clocks.declared_relations) or window is None or window.lo != window.hi or
                         window.hi != contract.step_s or trans.observation not in observations.allowed_labels):
                     return False
                 required.add((aid, trans.transition_id))
@@ -323,5 +372,5 @@ def audit_a5_protocol(cell: BeliefCell, action: ActionWitness, contract: SCContr
                         len(actual[obs]) != len(predicted)):
                     return False
         return set(edge_by_key) == required
-    except (ValueError, TypeError, AttributeError, KeyError):
+    except (ValueError, TypeError, AttributeError, KeyError, OverflowError):
         return False

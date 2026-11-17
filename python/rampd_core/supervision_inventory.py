@@ -7,6 +7,7 @@ rule activation/effectivity and a dataset `observed` bit from sensor awareness.
 from __future__ import annotations
 from .scene_schema import UnifiedScene
 from .phase6c import build_scene_forecast_sample
+from .a5_logged_labels import factual_joint_labels, sampled_signal_changes
 
 
 def supervision_inventory(scene: UnifiedScene) -> dict:
@@ -15,6 +16,8 @@ def supervision_inventory(scene: UnifiedScene) -> dict:
     logged = tuple(t.track_id for t in sample.future_targets if any(t.valid_future_mask))
     benchmark = tuple(t.track_id for t in sample.future_targets
                       if t.benchmark_target and any(t.valid_future_mask))
+    factual = factual_joint_labels(sample, 1)
+    signal_brackets = sampled_signal_changes(sample)
     future_signal_count = len(sample.future_signal_targets)
     ctx = scene.map_context
     polygons = (() if ctx is None else tuple(p for p in ctx.primitives
@@ -28,18 +31,21 @@ def supervision_inventory(scene: UnifiedScene) -> dict:
     geometry_candidates = tuple(sorted(actors_with_shapes.intersection(logged)))
     occupancy_ready = bool(has_complete_polygon_map and geometry_candidates)
     return {
-        'schema':'rampd.phase6c.supervision-inventory.v1',
+        'schema':'rampd.phase6c.supervision-inventory.v2',
         'dataset':sample.dataset, 'split':sample.split,
         'scenario_id':sample.scenario_id, 'future_available':sample.future_available,
         'labels':{
-            'L_joint':{'status':'LOGGED_ACTION_ONLY' if logged else 'UNAVAILABLE',
+            'L_joint':{'status':('LOGGED_EGO_PATH_SURROGATE' if factual.usable else
+                                 'LOGGED_TRAJECTORY_ONLY' if logged else 'UNAVAILABLE'),
+                       'conditioned_prefix_status':factual.status, 'prefix_probe_steps':1,
                        'target_track_ids':list(logged),
                        'benchmark_track_ids':list(benchmark),
                        'counterfactual_response':'UNAVAILABLE'},
             'L_event':{'status':'AUXILIARY_SIGNAL_STATE_ONLY' if future_signal_count else 'UNAVAILABLE',
                        'future_logged_signal_count':future_signal_count,
+                       'auxiliary_sampled_change_brackets':len(signal_brackets),
                        'exogenous_activation_and_effectivity':'UNAVAILABLE'},
-            'L_occupancy':{'status':'GEOMETRY_DERIVABLE_NOT_GENERATED' if occupancy_ready else 'NEEDS_GEOMETRY',
+            'L_occupancy':{'status':'CANDIDATE_GEOMETRY_REQUIRES_RESOURCE_AND_SURFACE_BINDING' if occupancy_ready else 'NEEDS_GEOMETRY',
                            'actors_with_box_dimensions':len(geometry_candidates),
                            'complete_map_with_polygons':has_complete_polygon_map,
                            'formal_permission_and_capacity':'UNAVAILABLE'},

@@ -7,7 +7,7 @@ version = "0.9.5"
 requires-python = ">=3.10"
 dependencies = []
 [project.optional-dependencies]
-test = ["pytest>=7,<10", "mpmath>=1.2,<1.4"]
+test = ["pytest>=7,<10", "mpmath>=1.2,<1.4", "shapely>=2.0,<3"]
 datasets = ["pandas>=1.5,<3", "pyarrow>=12"]
 [tool.setuptools]
 package-dir = {"" = "python"}

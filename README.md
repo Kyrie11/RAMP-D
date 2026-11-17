@@ -1,3 +1,9 @@
+# Phase 6C-A5/2 (current release)
+
+**Scoped only; native server validation pending.** A5/1 Hotfix1 server baseline 470 Python tests and 3 CTest tests passed. New rational-time endpoint and composed static finite-tail proof, resource direction and label provenance. See [A5/2 acceptance](docs/PHASE6C_A5_2_ACCEPTANCE.md) and [eight-loss plan](docs/PHASE6C_A5_2_SUPERVISION_PLAN.md). Extract to a fresh directory, `python -m pip install -r requirements-test.txt`, `python scripts/verify_release.py`, `bash scripts/validate_phase6c_a5_2.sh`. No simulator or real dataset needed for the math gate. Optional real-data smoke is separate.
+
+---
+
 ## CURRENT RELEASE: Phase 6C-A5/1 — model-relative evidence gate
 
 **Not a full-support certificate.** See `docs/PHASE6C_A5_1_DESIGN_AND_ACCEPTANCE.md` for the scoped implementation, native test gate and server commands. The sections below document previous releases and are retained for history.

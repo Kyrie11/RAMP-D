@@ -12,7 +12,8 @@ def test_logged_motion_is_available_but_every_unobserved_protocol_loss_masked():
                       'womd_global_xy','bounding_box_center',True,10),
         (SceneTrack('a','vehicle',states,to_predict=True),))
     inv=supervision_inventory(scene)['labels']
-    assert inv['L_joint']['status']=='LOGGED_ACTION_ONLY'
+    assert inv['L_joint']['status']=='LOGGED_TRAJECTORY_ONLY'
+    assert inv['L_joint']['conditioned_prefix_status']=='NO_EXPLICIT_EGO'
     assert inv['L_joint']['benchmark_track_ids']==['a']
     assert inv['L_event']['status']=='UNAVAILABLE'
     assert inv['L_observation']['status']=='UNAVAILABLE'

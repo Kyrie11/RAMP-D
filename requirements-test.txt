@@ -1,2 +1,5 @@
 pytest>=7,<10
 mpmath>=1.2,<1.4
+
+# Sampled geometry supervision tests (not used for mathematical certificates).
+shapely>=2.0,<3

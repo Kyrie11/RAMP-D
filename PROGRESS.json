@@ -3,7 +3,7 @@
   "concrete_safety_certified": false,
   "current_scene_verified": false,
   "full_support_certified": false,
-  "local_limit": "A5/1: 16 local Python tests passed (10 dedicated + 6 release integrity); full native MPFR bridge and all 0–6C tests require target-server build. Real WOMD/AV2 data and CARLA/SUMO not accessible here. Full-support certification remains false.",
+  "local_limit": "A5/1: 16 local Python tests passed (10 dedicated + 6 release integrity); full native MPFR bridge and all 0\u20136C tests require target-server build. Real WOMD/AV2 data and CARLA/SUMO not accessible here. Full-support certification remains false.",
   "manuscript_files_required": false,
   "next_gate": "A5/1 fresh CMake native+MPFR regression on user server; AV2 Parquet train/val dual PASS; A5/2 verified physical+protocol task-terminal tail",
   "phase": "6C-A5_1_MODEL_RELATIVE_EVIDENCE_GATE",
@@ -65,11 +65,44 @@
     "ctest_previous": "ERROR_ZERO_TESTS",
     "dependency_free_tests_passed": 10,
     "full_support_certified": false,
-    "native_server_a5_bridge": "PENDING",
+    "native_server_a5_bridge": "PASS_FROM_UPLOADED_HOTFIX1_REPORT",
     "real_task_tail": "MISSING",
     "status": "LOCAL_DEPENDENCY_FREE_PASS_NATIVE_PENDING",
     "timestamp": "2026-11-17",
     "womd_server": "BOUNDED_TRAIN_VAL_PASS_FROM_PREVIOUS_REPORT"
+  },
+  "phase6c_a5_1_hotfix1": {
+    "a6_source_available": false,
+    "ctest_gate_dummy_fixtures": 8,
+    "finite_task": 10,
+    "full_support_certified": false,
+    "native_physical_replay": "NOT_RUN_MISSING_MPFR_DEV",
+    "phase6_dependency_free": 84,
+    "release_integrity_fixtures": 6,
+    "sc_discrete_carrier": 13,
+    "server_report": {
+      "all_pytest": 470,
+      "finite_audit": 18,
+      "math_regression": 121,
+      "native": 3,
+      "skipped": 0
+    },
+    "status": "SERVER_SCOPED_GATE_PASS_20261117"
+  },
+  "phase6c_a5_2": {
+    "complete_8_loss_labels": false,
+    "composed_terminal_replay": true,
+    "dependency_free_regression": 99,
+    "exact_time": true,
+    "finite_and_gate_regression": 29,
+    "full_support_certified": false,
+    "native_tested": false,
+    "real_label_smoke": "NOT_RUN_DATA_UNAVAILABLE",
+    "sampled_occupancy": true,
+    "sc_carrier_regression": 13,
+    "status": "IMPLEMENTED_LOCAL_PURE_REGRESSION_PASS_NATIVE_PENDING",
+    "task_tail_scope": "STATIC_STEP_RELATIVE_SYNTHETIC",
+    "training_complete": false
   },
   "phase6c_a_tests": {
     "dependency_free_python_tests": 67,
@@ -92,7 +125,7 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
-  "release": "0.9.5-a5.1-hotfix1",
+  "release": "0.9.5-a5.2",
   "requires_carla": false,
   "requires_dataset": true,
   "requires_sumo": false,
@@ -101,16 +134,5 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
-  },
-  "phase6c_a5_1_hotfix1": {
-    "status": "PURE_REGRESSION_PASS_NATIVE_PENDING",
-    "phase6_dependency_free": 84,
-    "ctest_gate_dummy_fixtures": 8,
-    "finite_task": 10,
-    "release_integrity_fixtures": 6,
-    "sc_discrete_carrier": 13,
-    "native_physical_replay": "NOT_RUN_MISSING_MPFR_DEV",
-    "a6_source_available": false,
-    "full_support_certified": false
   }
 }

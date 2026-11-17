@@ -98,7 +98,13 @@ from .a5_finite_contract import (FiniteTaskEdge, FiniteTaskModel, FiniteTailPoli
                                  FiniteTailAudit, audit_finite_tail)
 from .a5_replay_bridge import (A5ProtocolOutcome, A5World, A5PhysicalObligation,
                                a5_world_digest, a5_clock_digest,
-                               replay_a5_physical, audit_a5_protocol)
+                               replay_a5_physical, audit_a5_protocol, exact_step_endpoint)
+from .exact_time import binary64_bracket
+from .a5_task_tail import (A5TaskGoal, A5TailNode, A5TailResult, audit_a5_task_tail,
+                            seal_a5_terminal, replay_a5_terminal)
+from .a5_logged_labels import (FactualJointLabels, SignalChangeBracket,
+                                factual_joint_labels, sampled_signal_changes)
+from .a5_sampled_occupancy import SampledOccupancy, sampled_occupancy_labels
 
-__version__ = "0.9.5-a5.1"
+__version__ = "0.9.5-a5.2"
 __all__ = [name for name in globals() if not name.startswith("_")]
