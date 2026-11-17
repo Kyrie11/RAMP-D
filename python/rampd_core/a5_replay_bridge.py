@@ -21,12 +21,12 @@ from .protocol import (ProtocolAutomaton, branch_temporal_status,
                        public_observation_window)
 from .observations import ObservationModel
 from .safe_continuation import SCContract, sc_support_digest
-from .model import ControlBounds
+from .model import BicycleParameters, ControlBounds
 from .interval import Interval
 from .reachability import TubeResult, TubeStatus
 from .certificate import to_dict as tube_as_dict, replay_certificate
 from .footprint import VehicleGeometry, SweptFootprint, separate_tube_results, SeparationStatus
-from .resources import ActorFootprint, ResourceState, ResourceRegion, check_resources, ResourceStatus
+from .resources import ActorFootprint, ResourceState, ResourceRegion, check_resources, ResourceStatus, OccupancyStatus
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,12 @@ class A5World:
     complete_actors_assumed: bool
     complete_resources_assumed: bool
     conflicts: tuple[tuple[str, str], ...] = ()
-    model_version: str = 'a5-toy-v1'
+    model_version: str = 'a5-toy-v2'
+    # Explicit problem assumptions, not inferred from the candidate tube.
+    ego_params: BicycleParameters | None = None
+    ego_disturbance: tuple[Interval, ...] | None = None
+    ego_control_bounds: ControlBounds | None = None
+    safe_domain: SafeDomain | None = None
 
     def __post_init__(self):
         if not self.model_version or len({item[0] for item in self.other_actors}) != len(self.other_actors):
@@ -98,7 +103,13 @@ def a5_world_digest(world: A5World) -> str:
             'resource_states':[asdict(s) for s in sorted(world.resource_states,key=lambda x:x.resource_id)],
             'conflicts':sorted(world.conflicts),
             'complete_actors_assumed':world.complete_actors_assumed,
-            'complete_resources_assumed':world.complete_resources_assumed}
+            'complete_resources_assumed':world.complete_resources_assumed,
+            'ego_params': None if world.ego_params is None else asdict(world.ego_params),
+            'ego_disturbance': None if world.ego_disturbance is None else
+                [[v.lo, v.hi] for v in world.ego_disturbance],
+            'ego_control_bounds': None if world.ego_control_bounds is None else
+                asdict(world.ego_control_bounds),
+            'safe_domain': None if world.safe_domain is None else asdict(world.safe_domain)}
     return _canonical_hash('a5-world-sha256:',body)
 
 
@@ -148,7 +159,16 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
                     obligation.source_atom_id, obligation.tube, contract) or
                 (ctx.cell.cell_id, ctx.action.action_id, ctx.source_atom.atom_id) !=
                 (obligation.cell_id, obligation.action_id, obligation.source_atom_id) or
-                ctx.action.controller_ref is not None):
+                ctx.action.controller_ref is not None or
+                ctx.source_atom not in ctx.cell.atoms or ctx.action not in ctx.cell.actions or
+                ctx.transition not in ctx.action.transitions or
+                ctx.transition.source_atom_id != ctx.source_atom.atom_id or
+                world.safe_domain is None or safe_domain != world.safe_domain or
+                not isinstance(world.ego_params, BicycleParameters) or
+                not isinstance(world.ego_control_bounds, ControlBounds) or
+                world.ego_disturbance is None or len(world.ego_disturbance) != 6 or
+                not all(isinstance(w, Interval) for w in world.ego_disturbance) or
+                safe_domain.friction != world.ego_params):
             return False
         tube = obligation.tube
         if (not isinstance(tube, TubeResult) or tube.status is not TubeStatus.VALIDATED or
@@ -156,12 +176,18 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
                 tube.initial != ctx.source_atom.ego or
                 Fraction.from_float(tube.requested_horizon_s) != contract.step_s or
                 tube.validated_until != contract.step_s or
-                ctx.source_atom.other):
+                ctx.source_atom.other or tube.params != world.ego_params or
+                len(tube.disturbance) != 6 or
+                not all(witness.contains(declared) for witness, declared in
+                        zip(tube.disturbance, world.ego_disturbance))):
             return False
         # EXACT held constant control. A wider control box might still be safe
         # physically but would not identify the prescribed public action.
         if tube.control != ControlBounds(Interval.point(ctx.action.control[0]),
                                          Interval.point(ctx.action.control[1])):
+            return False
+        if not all(bound.contains(value) for bound, value in
+                   zip(world.ego_control_bounds.as_tuple(), tube.control.as_tuple())):
             return False
         if not replay_certificate(tube_as_dict(tube)).ok:
             return False
@@ -171,14 +197,15 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
             test_atom = replace(ctx.source_atom, ego=seg.witness.tube)
             if not safe_domain.contains_atom(test_atom)[0]:
                 return False
-        # Every reported possible observation must have an abstract successor
-        # containing the entire physical endpoint box. Discrete alternatives
-        # and full protocol enumeration are checked in the separate gate.
+        # With no conditional physical propagator in A5/1, each declared
+        # successor must conservatively contain the entire endpoint. Checking
+        # just one atom per observation can silently lose another hidden mode.
+        # This sufficient condition deliberately rejects unproved partitions.
         if ctx.transition.verdict is not EvidenceVerdict.PROVED or not ctx.transition.branches:
             return False
         for branch in ctx.transition.branches:
-            if not any(_state_covered_by_atom(tube.endpoint, a) and not a.other
-                       for a in branch.atoms):
+            if not all(_state_covered_by_atom(tube.endpoint, a) and not a.other
+                       and safe_domain.contains_atom(a)[0] for a in branch.atoms):
                 return False
         for actor_id, actor_tube, geometry in world.other_actors:
             separation = separate_tube_results(tube, world.ego_geometry,
@@ -200,6 +227,13 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
                 seg, world.ego_geometry, 'ego'), direction='forward')
             res = check_resources(world.resource_states, world.regions, (fp,), world.conflicts)
             if res.status is not ResourceStatus.SAFE:
+                return False
+            # No entry-versus-stay classification is proved in A5. Any
+            # possible occupancy must therefore also satisfy beta, not just
+            # alpha (the default check for an actor with empty already_inside).
+            states = {state.resource_id: state for state in world.resource_states}
+            if any(o.status is not OccupancyStatus.PROVED_FREE and
+                   not states[o.resource_id].beta for o in res.occupancies):
                 return False
         return True
     except (TypeError, ValueError, KeyError, RuntimeError, OverflowError, AttributeError):
@@ -247,12 +281,11 @@ def audit_a5_protocol(cell: BeliefCell, action: ActionWitness, contract: SCContr
                 # guard-satisfiability proof can add precise exclusions.
                 if trans.guard_tag != 'always':
                     return False
-                # This A5/1 bridge supports only time-INVARIANT resource
-                # states: no state-dependent permission change mid-prefix.
-                if protocol.states and any(s.state_id == mode and s.resource_monitor !=
-                        next(st.resource_monitor for st in protocol.states
-                             if st.state_id == trans.target_state_id)
-                        for s in protocol.states):
+                # No mapping from resource-monitor labels to A5World states
+                # exists here. Even a constant nonempty monitor cannot be
+                # interpreted as a verified static permission assignment.
+                if any(s.resource_monitor for s in protocol.states
+                       if s.state_id in (mode, trans.target_state_id)):
                     return False
                 status, _ = branch_temporal_status(trans)
                 window = public_observation_window(trans)
@@ -265,7 +298,11 @@ def audit_a5_protocol(cell: BeliefCell, action: ActionWitness, contract: SCContr
                 if entry is None:
                     return False
                 for successor in entry.successors:
-                    if successor.mode_dict.get('protocol_state') != trans.target_state_id:
+                    # This narrow adapter has no propagator for additional
+                    # hidden coordinates: only the protocol state may change.
+                    expected_mode = dict(atom.mode_dict)
+                    expected_mode['protocol_state'] = trans.target_state_id
+                    if (successor.mode_dict != expected_mode or atom.other or successor.other):
                         return False
                 expected_by_obs.setdefault(trans.observation, []).extend(entry.successors)
             if not expected_by_obs:

@@ -20,8 +20,14 @@ class CarrierInterval:
     upper: float
     def __post_init__(self):
         if self.lower > self.upper: raise ValueError('reversed bounds')
+    @property
+    def lo(self):
+        return float(self.lower)
+    @property
+    def hi(self):
+        return float(self.upper)
     def contains(self, other):
-        return self.lower <= other.lower and other.upper <= self.upper
+        return self.lo <= other.lo and other.hi <= self.hi
 interval.Interval=CarrierInterval
 sys.modules['rampd_core.interval']=interval
 model=types.ModuleType('rampd_core.model')
@@ -34,6 +40,8 @@ class CarrierStateBounds:
     @classmethod
     def point(cls, values):
         return cls(*(CarrierInterval(v,v) for v in values))
+    def as_tuple(self):
+        return self.slots
     def contains(self, other):
         return all(x.contains(y) for x,y in zip(self.slots,other.slots))
 class NoFrictionProof:

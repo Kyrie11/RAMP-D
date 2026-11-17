@@ -7,6 +7,7 @@ an external traffic protocol is a separate, mandatory boundary.
 from __future__ import annotations
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import lru_cache
 import hashlib
 import json
 
@@ -96,10 +97,16 @@ class FiniteTailPolicy:
     def __post_init__(self):
         if not isinstance(self.model_digest, str) or not self.model_digest:
             raise ValueError('model_digest required')
-        if not self.start_states or len(set(self.start_states)) != len(self.start_states):
+        starts = tuple(self.start_states)
+        actions = tuple(tuple(pair) for pair in self.actions)
+        if (not starts or not all(isinstance(s, str) and s for s in starts)
+                or len(set(starts)) != len(starts)):
             raise ValueError('nonempty distinct initial task states required')
-        if len({s for s, _ in self.actions}) != len(self.actions):
-            raise ValueError('one public action per task state')
+        if (any(len(pair) != 2 or not all(isinstance(v, str) and v for v in pair)
+                for pair in actions) or len({s for s, _ in actions}) != len(actions)):
+            raise ValueError('one nonempty public action per task state')
+        object.__setattr__(self, 'start_states', starts)
+        object.__setattr__(self, 'actions', actions)
         if type(self.max_depth) is not int or self.max_depth < 0:
             raise ValueError('finite nonnegative integer maximum depth required')
         object.__setattr__(self, 'claimed_max_s', _fraction(self.claimed_max_s, 'claimed_max_s'))
@@ -131,6 +138,7 @@ def audit_finite_tail(model: FiniteTaskModel, policy: FiniteTailPolicy) -> Finit
     actions = dict(policy.actions)
     seen = 0
 
+    @lru_cache(maxsize=None)
     def visit(state: str, remaining: int):
         nonlocal seen
         seen += 1

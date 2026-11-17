@@ -26,13 +26,18 @@ def fixture():
     proto = ProtocolAutomaton((ProtocolState('start'),ProtocolState('end')),
                               'start', (tr,))
     from rampd_core.a5_replay_bridge import a5_world_digest, a5_clock_digest
-    world = A5World('unset',VehicleGeometry(4,2),(),(),(),True,True)
+    params = BicycleParameters(2.8,.9)
+    safe = SafeDomain(StateBounds(*(Interval(-8,8) for _ in range(6))), friction=params)
+    world = A5World('unset',VehicleGeometry(4,2),(),(),(),True,True,
+                    ego_params=params, ego_disturbance=(Interval.point(0),)*6,
+                    ego_control_bounds=ControlBounds(Interval(-2,2),Interval(-1,1)),
+                    safe_domain=safe)
     world = replace(world,model_digest=a5_world_digest(world))
     contract = SCContract(proto.digest(), a5_clock_digest(proto,ObservationModel(('silence',)),step),
                           world.model_digest, 'task:toy', step, 2)
-    x = StateBounds.point([0,0,0,0,0,0])
+    x = StateBounds.point([0,0,0,1,0,0])
     u = ControlBounds.point(0,0)
-    tube = integrate(x,u,BicycleParameters(2.8,.9), float(step))
+    tube = integrate(x,u,params, float(step))
     assert tube.status is TubeStatus.VALIDATED
     src = SupportAtom('start-atom',x,mode=(('protocol_state','start'),))
     succ = SupportAtom('end-atom',tube.endpoint,mode=(('protocol_state','end'),))
@@ -43,7 +48,6 @@ def fixture():
     cell = BeliefCell('start-cell',(src,),(witness,))
     e = EvidenceContext(cell,src,witness,witness.transitions[0])
     outcome = A5ProtocolOutcome(cell.cell_id,witness.action_id,src.atom_id,'move',(succ,))
-    safe = SafeDomain(StateBounds(*(Interval(-8,8) for _ in range(6))))
     return contract,proto,ObservationModel(('silence',)),cell,witness,outcome,obligation,e,world,safe
 
 
@@ -62,15 +66,29 @@ def test_missing_or_mutated_protocol_branch_rejected():
         ClockTrace(TimeWindow(Q(1,8),Q(1,8)),local=TimeWindow(Q(1,8),Q(1,8))),
         'silence', silence=True, guard_tag='always')
     new_proto = replace(proto,transitions=proto.transitions+(second,))
-    new_contract=replace(contract,protocol_digest=new_proto.digest())
-    assert not audit_a5_protocol(cell,action,new_contract,new_proto,obs,(outcome,))
+    from rampd_core.a5_replay_bridge import a5_clock_digest
+    new_contract=replace(contract,protocol_digest=new_proto.digest(),
+                         clock_digest=a5_clock_digest(new_proto,obs,contract.step_s))
+    second_outcome = replace(outcome, transition_id='alternative',
+                             successors=(replace(outcome.successors[0], atom_id='alternative-atom'),))
+    # With the correct union of outcomes, the protocol gate passes.
+    branches=(ObservationSuccessors('silence', outcome.successors+second_outcome.successors),)
+    tr=replace(action.transitions[0], branches=branches)
+    new_action=replace(action, transitions=(tr,))
+    new_cell=replace(cell, actions=(new_action,))
+    assert audit_a5_protocol(new_cell,new_action,new_contract,new_proto,obs,(outcome,second_outcome))
+    # Omission is now tested with a valid clock and otherwise consistent inputs.
+    assert not audit_a5_protocol(new_cell,new_action,new_contract,new_proto,obs,(outcome,))
 
 
 def test_no_early_hidden_event_observation():
     contract,proto,obs,cell,action,outcome,ob,e,world,safe=fixture()
     early=replace(proto.transitions[0],clocks=ClockTrace(TimeWindow(Q(0),Q(0)),local=TimeWindow(Q(0),Q(0))))
     new_proto=replace(proto,transitions=(early,))
-    assert not audit_a5_protocol(cell,action,replace(contract,protocol_digest=new_proto.digest()),new_proto,obs,(outcome,))
+    from rampd_core.a5_replay_bridge import a5_clock_digest
+    new_contract=replace(contract,protocol_digest=new_proto.digest(),
+                         clock_digest=a5_clock_digest(new_proto,obs,contract.step_s))
+    assert not audit_a5_protocol(cell,action,new_contract,new_proto,obs,(outcome,))
 
 
 def test_incomplete_world_unknown_and_tampered_evidence_rejected():
@@ -88,5 +106,85 @@ def test_static_forbidden_resource_is_not_proved_safe():
     # Fixed body at origin overlaps closed resource; enclosure must be unknown.
     region=ResourceRegion('closed', Interval(-5,5),Interval(-5,5),1)
     state=ResourceState('closed',False,False,'forward',1)
-    assert not replay_a5_physical(e,contract,ob,
-       replace(world,regions=(region,),resource_states=(state,)),safe)
+    # Positive control: identical geometry but permitted occupancy.
+    c,o,ctx,w = _rebind(contract,ob,e,replace(world,regions=(region,),
+        resource_states=(replace(state,alpha=True,beta=True),)))
+    assert replay_a5_physical(ctx,c,o,w,safe)
+    contract, ob, e, world = _rebind(contract, ob, e, replace(world, regions=(region,), resource_states=(state,)))
+    assert not replay_a5_physical(e,contract,ob,world,safe)
+
+
+def _rebind(contract, ob, e, world, tube=None, branches=None):
+    """Reseal entire consistent context so a rejection is NOT a stale hash."""
+    from rampd_core.a5_replay_bridge import a5_world_digest
+    world = replace(world, model_digest=a5_world_digest(world))
+    contract = replace(contract, model_digest=world.model_digest)
+    ob = A5PhysicalObligation.seal(e.cell.cell_id, e.action.action_id,
+                                   e.source_atom.atom_id, tube or ob.tube, contract)
+    tr = replace(e.transition, evidence_ref=ob.evidence_ref,
+                 branches=e.transition.branches if branches is None else branches)
+    action = replace(e.action, transitions=(tr,))
+    cell = replace(e.cell, actions=(action,))
+    return contract, ob, EvidenceContext(cell, e.source_atom, action, tr), world
+
+
+def test_resealed_world_requires_declared_model_and_disturbance():
+    contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
+    for modified in (replace(world, ego_params=BicycleParameters(3.1,.9)),
+                     replace(world, ego_disturbance=(Interval(-.1,.1),)*6),
+                     replace(world, ego_control_bounds=ControlBounds.point(1,0)),
+                     replace(world, ego_params=None)):
+        c, o, ctx, w = _rebind(contract, ob, e, modified)
+        assert not replay_a5_physical(ctx,c,o,w,safe)
+
+
+def test_resealed_wrong_hidden_successor_rejected():
+    contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
+    original = outcome.successors[0]
+    # Same observation, another hidden alternative whose state is disjoint
+    # from the true endpoint; a good first atom cannot justify this branch.
+    wrong = replace(original, atom_id='wrong', ego=StateBounds.point([3,0,0,0,0,0]),
+                    mode=(('protocol_state','other_end'),))
+    c,o,ctx,w = _rebind(contract,ob,e,world,
+        branches=(ObservationSuccessors('silence',(original,wrong)),))
+    assert not replay_a5_physical(ctx,c,o,w,safe)
+
+
+def test_context_membership_and_safe_domain_binding():
+    contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
+    assert not replay_a5_physical(replace(e,cell=replace(cell,actions=())),contract,ob,world,safe)
+    assert not replay_a5_physical(e,contract,ob,world,
+        SafeDomain(StateBounds(*(Interval(-100,100) for _ in range(6)))))
+
+
+def test_protocol_unmodelled_mode_mutation_rejected():
+    contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
+    successor = replace(outcome.successors[0], mode=(('protocol_state','end'),('extra','changed')))
+    tr = replace(e.transition, branches=(ObservationSuccessors('silence',(successor,)),))
+    witness = replace(action, transitions=(tr,))
+    current = replace(cell, actions=(witness,))
+    assert not audit_a5_protocol(current,witness,contract,proto,obs,(replace(outcome,successors=(successor,)),))
+
+
+def test_friction_domain_cannot_be_omitted():
+    contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
+    without_friction = replace(safe, friction=None)
+    c,o,ctx,w = _rebind(contract,ob,e,replace(world,safe_domain=without_friction))
+    assert not replay_a5_physical(ctx,c,o,w,without_friction)
+
+
+def test_possible_occupancy_requires_entry_and_stay_permission():
+    contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
+    region=ResourceRegion('stay-closed', Interval(-5,5),Interval(-5,5),1)
+    state=ResourceState('stay-closed',True,False,'forward',1)
+    c,o,ctx,w = _rebind(contract,ob,e,replace(world,regions=(region,),resource_states=(state,)))
+    assert not replay_a5_physical(ctx,c,o,w,safe)
+
+
+def test_unmapped_constant_resource_monitor_is_not_a_protocol_proof():
+    contract,proto,obs,cell,action,outcome,ob,e,world,safe = fixture()
+    from rampd_core.a5_replay_bridge import a5_clock_digest
+    monitored=replace(proto,states=tuple(replace(s,resource_monitor=(('lane','closed'),)) for s in proto.states))
+    c=replace(contract,protocol_digest=monitored.digest(),
+              clock_digest=a5_clock_digest(monitored,obs,contract.step_s))
+    assert not audit_a5_protocol(cell,action,c,monitored,obs,(outcome,))

@@ -95,3 +95,7 @@ run `python scripts/verify_release.py`, then
 MPFR core and runs mandatory tests. If AV2 Parquet remains SKIP, install
 `requirements-data.txt` into the active environment, then run the existing
 Phase6B/6C sample data gates separately.
+
+### A5/1 hotfix 1
+
+See [hotfix acceptance](docs/PHASE6C_A5_1_HOTFIX_ACCEPTANCE.md). This is an A5 release, not A6. A5World v2 requires explicitly declared ego parameters, derivative disturbance, control bounds and friction-enabled safe domain; regenerate model/evidence digests. Run `bash scripts/validate_phase6c_a5.sh` in a fresh directory.

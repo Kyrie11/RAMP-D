@@ -92,7 +92,7 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
-  "release": "0.9.5-a5.1",
+  "release": "0.9.5-a5.1-hotfix1",
   "requires_carla": false,
   "requires_dataset": true,
   "requires_sumo": false,
@@ -101,5 +101,16 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
+  },
+  "phase6c_a5_1_hotfix1": {
+    "status": "PURE_REGRESSION_PASS_NATIVE_PENDING",
+    "phase6_dependency_free": 84,
+    "ctest_gate_dummy_fixtures": 8,
+    "finite_task": 10,
+    "release_integrity_fixtures": 6,
+    "sc_discrete_carrier": 13,
+    "native_physical_replay": "NOT_RUN_MISSING_MPFR_DEV",
+    "a6_source_available": false,
+    "full_support_certified": false
   }
 }

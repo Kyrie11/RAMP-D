@@ -14,6 +14,8 @@ def test_native_ctest_requires_nonempty_discovery(tmp_path: Path):
     project = tmp_path / 'empty_build'
     project.mkdir()
     (project / 'CTestTestfile.cmake').write_text('# zero tests\n')
+    # Reach the discovery gate, rather than failing the earlier cache gate.
+    (project / 'CMakeCache.txt').write_text('RAMPD_BUILD_TESTS:BOOL=ON\n')
     log = tmp_path / 'native.log'
     check = Path(__file__).resolve().parents[1] / 'scripts/check_native_ctest.py'
     process = subprocess.run([sys.executable, str(check), str(project),

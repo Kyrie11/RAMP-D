@@ -83,3 +83,25 @@ def test_empty_or_unsafe_task_graph_fails():
         M(('pending',), frozenset({'ghost'}), (), Q(1,8), 'a')
     with pytest.raises(ValueError):
         M(('pending',), frozenset(), (E('pending','a','o','ghost'),), Q(1,8), 'a')
+
+
+def test_policy_inputs_are_immutable_after_creation():
+    model, policy = fixture()
+    starts = ['pending']
+    actions = [['pending','move'], ['continue','finish']]
+    frozen = P(model.digest, starts, actions, Q(1,4), 2)
+    starts.append('stuck')
+    actions[0][1] = 'bad'
+    assert mod.audit_finite_tail(model, frozen).ok
+
+
+def test_many_observation_histories_reusing_same_information_state():
+    n=24
+    states=tuple(f's{i}' for i in range(n+1))
+    edges=tuple(E(states[i],'move',obs,states[i+1])
+                for i in range(n) for obs in ('yes','no'))
+    model=M(states,frozenset({states[-1]}),edges,Q(1,8),'merged')
+    policy=P(model.digest,(states[0],),tuple((s,'move') for s in states[:-1]),Q(n,8),n)
+    result=mod.audit_finite_tail(model,policy)
+    assert result.ok and result.exact_worst_s == Q(n,8)
+    assert result.checked_states == n+1

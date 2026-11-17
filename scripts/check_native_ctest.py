@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Mandatory native regression discovery: ctest returning 0 with 0 tests is ERROR."""
+"""Fail-closed native test discovery and execution (including old CTest)."""
 from __future__ import annotations
 import argparse
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
+
+MANDATORY = {'interval_cpp', 'picard_cpp', 'abi_cpp'}
+DISCOVERY_ROW = re.compile(r'^\s*Test\s+#\d+:\s*(.*?)\s*$', re.M)
+EXECUTION_ROW = re.compile(r'^\s*\d+\s*/\s*\d+\s+Test\s+#\d+:\s*(\S+)\s+\.+\s+Passed\b', re.M)
 
 
 def main() -> int:
@@ -15,38 +20,52 @@ def main() -> int:
     args = p.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
     build_dir = args.build_dir.resolve()
+
+    def fail(reason, details=''):
+        args.log.write_text('ERROR: ' + reason + '\n' + details)
+        return 2
+
     if not (build_dir / 'CTestTestfile.cmake').is_file():
-        args.log.write_text('ERROR: CTestTestfile.cmake missing; native tests NOT run\n')
-        return 2
+        return fail('CTestTestfile.cmake missing; native tests NOT run')
     cache = build_dir / 'CMakeCache.txt'
-    if not cache.is_file() or 'RAMPD_BUILD_TESTS:BOOL=ON' not in cache.read_text(errors='replace'):
-        args.log.write_text('ERROR: no configured RAMPD_BUILD_TESTS=ON in build cache\n')
-        return 2
+    if not cache.is_file() or not re.search(
+            r'^RAMPD_BUILD_TESTS:BOOL=ON\s*$', cache.read_text(errors='replace'), re.M):
+        return fail('no configured RAMPD_BUILD_TESTS=ON in build cache')
+
     def run(*rest):
-        # CTest --test-dir was introduced only in CMake 3.20. Running within
-        # the build directory works on both old and new versions, and prevents
-        # accidentally scanning the repository root (Total Tests: 0).
+        # CTest --test-dir was introduced in CMake 3.20. Using cwd also
+        # prevents accidental discovery in the repository root.
         return subprocess.run(['ctest', *rest], cwd=build_dir,
+                              env={**os.environ, 'LC_ALL': 'C'},
                               capture_output=True, text=True, check=False)
-    disc = run('-N')
+    try:
+        disc = run('-N')
+    except OSError as exc:
+        return fail('CTest discovery could not start', str(exc))
     text = disc.stdout + disc.stderr
-    match = re.search(r'Total Tests:\s*(\d+)', text)
-    names = {'interval_cpp', 'picard_cpp', 'abi_cpp'}
-    okay = (disc.returncode == 0 and match is not None and int(match.group(1)) >= 3
-            and all(name in text for name in names))
-    if not okay:
-        args.log.write_text('ERROR: missing mandatory native tests\n' + text)
-        return 2
-    result = run('--output-on-failure')
+    matches = re.findall(r'^\s*Total Tests:\s*(\d+)\s*$', text, re.M)
+    names = DISCOVERY_ROW.findall(text)
+    if (disc.returncode != 0 or len(matches) != 1 or
+            int(matches[0]) != len(names) or len(names) != len(set(names)) or
+            not MANDATORY.issubset(names)):
+        return fail('missing mandatory native tests', text)
+    try:
+        result = run('--output-on-failure')
+    except OSError as exc:
+        return fail('CTest execution could not start', text + '\n' + str(exc))
     whole = text + '\n--- Execution ---\n' + result.stdout + result.stderr
-    args.log.write_text(whole)
     summary = re.search(r'(\d+)%\s+tests passed,\s*(\d+)\s+tests failed out of\s*(\d+)',
                         result.stdout)
+    passed = EXECUTION_ROW.findall(result.stdout)
+    # 100% alone is not sufficient: CTest can omit disabled/skipped tests.
+    # Require every discovered test to actually have a Passed record.
     if (result.returncode != 0 or summary is None or int(summary.group(1)) != 100
-            or int(summary.group(2)) != 0 or int(summary.group(3)) < 3):
-        return 2
-    print(json.dumps({'status':'PASS', 'native_tests': int(match.group(1)),
-                      'passed':int(summary.group(3)), 'log':str(args.log)}))
+            or int(summary.group(2)) != 0 or int(summary.group(3)) != len(names)
+            or len(passed) != len(names) or set(passed) != set(names)):
+        return fail('native test execution incomplete or failed', whole)
+    args.log.write_text(whole)
+    print(json.dumps({'status': 'PASS', 'native_tests': len(names),
+                      'passed': len(passed), 'log': str(args.log)}))
     return 0
 
 if __name__ == '__main__':
