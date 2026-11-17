@@ -14,11 +14,19 @@ def main() -> int:
     p.add_argument('--log', type=Path, required=True)
     args = p.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
-    if not (args.build_dir / 'CTestTestfile.cmake').is_file():
+    build_dir = args.build_dir.resolve()
+    if not (build_dir / 'CTestTestfile.cmake').is_file():
         args.log.write_text('ERROR: CTestTestfile.cmake missing; native tests NOT run\n')
         return 2
+    cache = build_dir / 'CMakeCache.txt'
+    if not cache.is_file() or 'RAMPD_BUILD_TESTS:BOOL=ON' not in cache.read_text(errors='replace'):
+        args.log.write_text('ERROR: no configured RAMPD_BUILD_TESTS=ON in build cache\n')
+        return 2
     def run(*rest):
-        return subprocess.run(['ctest', '--test-dir', str(args.build_dir), *rest],
+        # CTest --test-dir was introduced only in CMake 3.20. Running within
+        # the build directory works on both old and new versions, and prevents
+        # accidentally scanning the repository root (Total Tests: 0).
+        return subprocess.run(['ctest', *rest], cwd=build_dir,
                               capture_output=True, text=True, check=False)
     disc = run('-N')
     text = disc.stdout + disc.stderr

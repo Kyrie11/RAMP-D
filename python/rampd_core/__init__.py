@@ -94,5 +94,11 @@ from .clock_ledger import CoSimTick, CoSimLedger
 from .supervision_inventory import supervision_inventory
 from .sc_proof_audit import (SCProofAudit, audit_sc_proof)
 
-__version__ = "0.9.4-a4"
+from .a5_finite_contract import (FiniteTaskEdge, FiniteTaskModel, FiniteTailPolicy,
+                                 FiniteTailAudit, audit_finite_tail)
+from .a5_replay_bridge import (A5ProtocolOutcome, A5World, A5PhysicalObligation,
+                               a5_world_digest, a5_clock_digest,
+                               replay_a5_physical, audit_a5_protocol)
+
+__version__ = "0.9.5-a5.1"
 __all__ = [name for name in globals() if not name.startswith("_")]

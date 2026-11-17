@@ -1,12 +1,12 @@
 {
-  "assurance_scope": "PHASE6C_A2_MAP_SIGNAL_AND_SILENCE_CONTRACTS_LOCAL_ONLY",
+  "assurance_scope": "A5_1_DECLARED_SYNTHETIC_WORLD_ONLY",
   "concrete_safety_certified": false,
   "current_scene_verified": false,
   "full_support_certified": false,
-  "local_limit": "Local container lacks MPFR development headers and the user /data0 datasets: cannot verify real WOMD/AV2 record schema or run native proof backend. 67 pure Python contract tests pass; full-support certification remains false.",
+  "local_limit": "A5/1: 16 local Python tests passed (10 dedicated + 6 release integrity); full native MPFR bridge and all 0–6C tests require target-server build. Real WOMD/AV2 data and CARLA/SUMO not accessible here. Full-support certification remains false.",
   "manuscript_files_required": false,
-  "next_gate": "Server: official MPFR native + Phase4/5/SC regressions; install pyarrow and require WOMD+AV2 real-data dual PASS; then connect verified SC tails and CCG.",
-  "phase": "6C-A3_SC_GATE",
+  "next_gate": "A5/1 fresh CMake native+MPFR regression on user server; AV2 Parquet train/val dual PASS; A5/2 verified physical+protocol task-terminal tail",
+  "phase": "6C-A5_1_MODEL_RELATIVE_EVIDENCE_GATE",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
@@ -15,7 +15,7 @@
   "phase2_belief_support_and_invariant": "Uploaded target-server Phase2 baseline accepted: 3 native/129 Python; fixed-point semantics retained; context-bound evidence API and optional manuscript hashing repaired in Phase3.",
   "phase3_public_backup_controller": "Implemented and regression-tested in local physical scope; target server report available.",
   "phase4_5_clock_audit": "Corrected: hidden change-before-receipt branches remain in support until proved public observation; message branches use receipt, local-detection branches use local; receipt->local is not required.",
-  "phase4_5_open_audit": "Fixed missing build_coverage_ledger import API; SC finite inner/rank implemented only conditionally. Full protocol / tube / terminal replayer integration remains open.",
+  "phase4_5_open_audit": "Historical status superseded by Phase6C-A3/A4: finite SC/rank kernel and independent structural checker implemented; concrete full-support physical/protocol terminal replayers remain missing.",
   "phase4_protocol_full_support_verifier": "implemented first explicit synthetic-support verifier; corrected public observation timing and retained real-scene boundary",
   "phase5_cegar": "server regression passed: 10 Phase 5 tests, 23 Phase 4 protocol/full/adapter tests, 328 total Python tests; native CTest manifest must be present and its summary must be checked",
   "phase5_local_limit": "Local container lacks CMake and official MPFR development headers; local Python/Phase 5 smoke used a temporary declaration-only header with the system MPFR runtime.",
@@ -28,7 +28,7 @@
     "python_total_before_this_fix": 328,
     "python_total_current": 336
   },
-  "phase6_datasets_and_closed_loop_experiments": "Phase 6A accepted; Phase 6B parsers and contracts audited/fixed locally; WOMD server validation sample PASS, AV2 SKIP due missing pyarrow; overall Phase 6B not accepted. Phase 6C-A pure-Python contracts implemented and 47 dependency-free tests pass; 6C-B simulator bridge pending.",
+  "phase6_datasets_and_closed_loop_experiments": "A5/1 model-relative finite task and synthetic physical/protocol adapter implemented; native CTest server 0 tests, WOMD train/val bounded PASS, AV2 SKIP; RuleNet untrained, co-sim SKIP, closed-loop incomplete.",
   "phase6b": "local adapter implementation audited: AV2 focal is distinct from SDC; official track_id == \"AV\" convention identifies ego when present, strict observed mask parsing, official scenario timestamp reconstruction, mixed reference tracking, and shard/record/scenario digests. Server gate remains SKIP until pyarrow is installed and AV2 validation samples pass.",
   "phase6b_fixes": {
     "av2_focal_vs_sdc": "focal_track_id remains is_focal only; official AV2 track_id == \"AV\" convention maps to is_sdc when present and vehicle typed; WOMD uses sdc_track_index",
@@ -38,7 +38,7 @@
     "reference_conversion": "reject valid states without heading; track-selective conversion; mixed scene/velocity reference explicit",
     "validation_exit_codes": "PASS=0, SKIP=3, ERROR=4"
   },
-  "phase6b_server_status": "RECEIVED_SERVER_REPORT: WOMD PASS exactly one validation record, AV2 SKIP missing pyarrow; combined SKIP; no native MPFR results in this report.",
+  "phase6b_server_status": "LATEST RECEIVED Phase6C report: WOMD bounded train+validation PASS, AV2 train+val SKIP missing pyarrow; Phase6B earlier report had WOMD ERROR after 2 records, AV2 SKIP. Neither constitutes exhaustive dual-dataset acceptance.",
   "phase6c_a": "implemented locally: history/future separated SceneForecastSample, joint-mode plus observation-history schema, RuleNet-inspired soft risk scoring, non-pruning branch ordering, fixed-step CARLA/SUMO synchrony contract, actor ID registry, and sensor production/delivery records; 47 dependency-free tests passed. Map geometry and dynamic traffic-signal timelines are not yet exposed; current encoder input carries map IDs/digests only.",
   "phase6c_a2": "Locally validated 67 contract tests; server WOMD 1 scenario map PASS (0 signal records), AV2 SKIP; dual-real-data acceptance not yet complete",
   "phase6c_a3": {
@@ -59,6 +59,17 @@
     "full_support_certified": false,
     "note": "SC support/time inheritance and structural checker, native + real AV2 pending",
     "state": "implemented_local_tests_partial_native_pending"
+  },
+  "phase6c_a5_1": {
+    "av2_server": "SKIP_MISSING_PYARROW",
+    "ctest_previous": "ERROR_ZERO_TESTS",
+    "dependency_free_tests_passed": 10,
+    "full_support_certified": false,
+    "native_server_a5_bridge": "PENDING",
+    "real_task_tail": "MISSING",
+    "status": "LOCAL_DEPENDENCY_FREE_PASS_NATIVE_PENDING",
+    "timestamp": "2026-11-17",
+    "womd_server": "BOUNDED_TRAIN_VAL_PASS_FROM_PREVIOUS_REPORT"
   },
   "phase6c_a_tests": {
     "dependency_free_python_tests": 67,
@@ -81,7 +92,7 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
-  "release": "0.9.3",
+  "release": "0.9.5-a5.1",
   "requires_carla": false,
   "requires_dataset": true,
   "requires_sumo": false,

@@ -1,4 +1,7 @@
-# Mathematical and semantic traceability review — latest manuscript vs Phase 0–6C
+# Historical mathematical and semantic audit (pre-A3 snapshot) — latest manuscript vs Phase 0–6C
+
+> **Historical audit, not the current implementation status.** This document was written before Phase6C-A3/A4 added `safe_continuation.py` and `sc_proof_audit.py`. Its entries saying `W_h^SC`/rank are entirely MISSING have been superseded for the **finite conditional abstraction only**. Current status: `docs/PHASE6C_A4_MATH_GATE_20261117.md` and `docs/PHASE6C_A5_1_DESIGN_AND_ACCEPTANCE.md`. Physical all-history terminal-tail replay, genuine full-support proof and ICG remain missing.
+
 
 ## Method and epistemic boundary
 

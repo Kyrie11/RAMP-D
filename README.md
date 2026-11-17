@@ -1,3 +1,9 @@
+## CURRENT RELEASE: Phase 6C-A5/1 — model-relative evidence gate
+
+**Not a full-support certificate.** See `docs/PHASE6C_A5_1_DESIGN_AND_ACCEPTANCE.md` for the scoped implementation, native test gate and server commands. The sections below document previous releases and are retained for history.
+
+---
+
 ## Phase6C-A4 mathematical proof gate (2026-11-17)
 
 Start with [README_A4.md](README_A4.md). This release repairs SC support/time-budget binding, adds an independent structural proof audit and exact finite-game cross-check, and hardens native CTest discovery. Real physical/protocol proof providers remain pending.
@@ -73,3 +79,19 @@ The Phase 6B script returns exit code `0` for PASS, `3` for SKIP, and `4` for ER
 Use WOMD `scenario` protobufs as the canonical source for track identity, SDC identity, vector-map and dynamic-map semantics. In AV2 Motion, the official API convention `track_id == "AV"` identifies the ego vehicle; `focal_track_id` remains a separate prediction-target identity. The separate AV2 Map Change dataset is reserved for map-change robustness work.
 
 CARLA/SUMO have not been started by this repository snapshot. Phase 6C-B will require a single orchestrator tick owner, matched fixed time steps, one traffic-light authority, and separate sensor production/delivery timestamps. See the simulator policy before launching experiments.
+
+## Phase 6C-A5/1 incremental proof gates (current release)
+
+The latest TeX is already bundled verbatim under `manuscript/`.
+A5/1 adds **model-relative** finite task-tail AND/OR auditing, bounded
+synthetic physical/protocol replay adapters and a repaired native CTest gate.
+It does NOT complete A5 terminal-tail proof integration or enable real-world
+full-support certification. Read `docs/PHASE6C_A5_1_DESIGN_AND_ACCEPTANCE.md`
+and `docs/PHASE6C_A5_SUPERVISION_AND_SIM_RESEARCH.md`.
+
+On the target server, extract into an **empty** directory, install dependencies,
+run `python scripts/verify_release.py`, then
+`bash scripts/validate_phase6c_a5.sh`. The script builds a dedicated fresh native
+MPFR core and runs mandatory tests. If AV2 Parquet remains SKIP, install
+`requirements-data.txt` into the active environment, then run the existing
+Phase6B/6C sample data gates separately.
