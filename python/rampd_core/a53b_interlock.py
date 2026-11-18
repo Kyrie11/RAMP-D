@@ -17,12 +17,17 @@ class ClearanceObservation:
     complete: bool
     empty: bool
     source_ref: str
+    event_id: str = ""
+    version: int | None = None
+    resource_id: str = ""
 
     def __post_init__(self):
         if not exact(self.start)<exact(self.end) or not self.source_ref or type(self.complete) is not bool or type(self.empty) is not bool:
             raise ValueError('invalid interval measurement')
         if self.empty and not self.complete:
             raise ValueError('cannot assert empty without complete coverage')
+        if not self.event_id or not self.resource_id or type(self.version) is not int or self.version<0:
+            raise ValueError('clearance evidence requires event, version and resource identity')
 
 
 @dataclass(frozen=True)
@@ -102,6 +107,8 @@ def advance_interlock(report, state, observation, *, tick, clearance, ack=None):
     if (exact(tick)<=0 or exact(clearance)<=0 or observation.start!=state.last_tick or
             observation.end!=state.last_tick+tick):
         raise ValueError('nonconsecutive synchronized measurement')
+    if (observation.event_id,observation.version,observation.resource_id)!=(state.event_id,state.version,state.resource_id):
+        raise ValueError("clearance evidence scope mismatch")
     t=observation.end
     active=report.effective_on<=t<report.effective_off
     # The tick-based reference does not skip a complete sub-tick activation.

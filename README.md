@@ -1,3 +1,27 @@
+# RAMP-D 0.9.7 · Phase 6C-A5/3b-2
+
+基于用户已验收的 A5/3b 第一增量（550 Python + 3 native）。本轮新增 AV2 binary64 endpoint 兼容性审计、声明移动 actor 连续传播、计划施工 clearance 身份绑定、Incident/TIM 参考契约、WZDx CSV inventory。论文未修改。141 独立数据/协议测试、29 finite、13 SC 本地通过，原生新增测试与真实 AV2 仍须服务器验证。不要把本轮当作真实世界完备证书或训练标签生产完成。
+
+```bash
+python scripts/verify_release.py
+bash scripts/validate_phase6c_a5_3b2.sh
+```
+
+在同一 mfrp 环境运行真实数据 gate（先选单个真实 AV2 Parquet）：
+
+```bash
+AV2_ROOT=/data0/senzeyu2/dataset/Argoverse2/motion
+AV2_FILE="$(find "$AV2_ROOT" -type f -name 'scenario_*.parquet' -print -quit)"
+python scripts/validate_av2_arrow_timestamp.py --parquet "$AV2_FILE" --output reports/a5_3b2_av2_timestamp.json
+python scripts/validate_a5_logged_labels.py --womd-root /data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed/scenario --av2-root "$AV2_ROOT" --max-records 60 --max-files 6 --prefix-steps 10 --output reports/a5_3b2_logged_labels.json
+```
+
+WZDx `scripts/audit_wzdx_inputs.py --registry FILE --event-csv FILE --schema SOURCE_ZIP_OR_REPO_ROOT --output reports/a5_3b2_wzdx.json`；真实 CSV 已本地验收，不生成精确事件标签。详见 `docs/PHASE6C_A5_3B2_ACCEPTANCE.md` 和 `docs/PHASE6C_A5_3B2_SUPERVISION.md`。
+
+---
+
+历史说明如下（其阶段范围与当前版本不同）：
+
 # A5/3b first increment (current release)
 
 Run `bash scripts/validate_phase6c_a5_3b.sh`. See `docs/PHASE6C_A5_3B_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B_SUPERVISION.md`. Scoped declared ego-only proof; original full-support and real-policy guarantees are not completed. A5/3a server passed 528 Python and 3 native tests. This increment local 128 dependency-free, 29 finite, 13 SC; native and actual data server gates pending.

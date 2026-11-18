@@ -1,7 +1,8 @@
-"""A5/3b: absolute-time joint prefix/tail graph for a declared ego-only world.
+"""A5/3b-2: absolute-time joint prefix/tail graph for a declared world.
 
 Replays each edge on exact event subslabs with common branch permissions. This is an inner sufficient check, not an exact dynamic winning set.
-No moving actors, continuously uncertain event schedules, pending messages or feedback.
+Moving actors use bounded Cartesian response envelopes. Continuously uncertain
+event schedules, pending messages and feedback remain unsupported.
 """
 from dataclasses import dataclass, replace
 from fractions import Fraction
@@ -9,6 +10,7 @@ from .a53_schedule import PermissionSchedule, exact, local_protocol, partition_f
 from .a5_task_tail import A5TailResult, replay_a5_tail_edge
 from .a5_replay_bridge import a5_world_digest, a5_clock_digest, _canonical_hash
 from .safe_continuation import SCContract, sc_support_digest
+from .a53b_actor_envelope import actor_keys
 
 
 @dataclass(frozen=True)
@@ -38,7 +40,9 @@ class A53Mission:
             raise ValueError('goal duration and mission deadline disagree')
         if (w.timed_resource_slices or w.other_actors or not w.complete_actors_assumed or not w.complete_resources_assumed or
             w.safe_domain is None or w.model_digest!=a5_world_digest(w)):
-            raise ValueError('only independently declared complete ego-only world supported')
+            raise ValueError('only independently declared complete world supported')
+        if w.actor_models and not self.segmented_resources:
+            raise ValueError('moving actor envelopes require segmented mode')
         r={x.resource_id:x for x in w.regions}; rs={x.resource_id:x for x in w.resource_states}
         if len(r)!=len(w.regions) or len(rs)!=len(w.resource_states) or set(r)!=set(s.resource_ids) or set(rs)!=set(r):
             raise ValueError('world/schedule resource mismatch')
@@ -100,7 +104,7 @@ def audit_a53_mission(mission: A53Mission, root, nodes, claimed_finish: Fraction
         require(len(by_id)==len(ns) and len({n.cell.policy_node_id for n in ns})==len(ns),'DUPLICATE_NODE')
         require(sc_support_digest(root)==mission.initial_support_digest and root.cell_id in by_id and
                 sc_support_digest(by_id[root.cell_id].cell)==mission.initial_support_digest and by_id[root.cell_id].depth==0,'ROOT_MISMATCH')
-        require(not mission.goal.accepts(root),'ZERO_DURATION_ACCEPTANCE_UNSUPPORTED')
+        require(not mission.goal.accepts(root,allow_other_state=bool(mission.world.actor_models)),'ZERO_DURATION_ACCEPTANCE_UNSUPPORTED')
         seen=set(); todo=[root.cell_id]; leaves=[]
         while todo:
             cid=todo.pop()
@@ -108,9 +112,9 @@ def audit_a53_mission(mission: A53Mission, root, nodes, claimed_finish: Fraction
             seen.add(cid); n=by_id[cid]; checked+=1
             now=mission.schedule.start+n.depth*mission.step
             require(now<=mission.schedule.deadline,'ABSOLUTE_DEADLINE_EXCEEDED')
-            require(all(not a.other and mission.world.safe_domain.contains_atom(a)[0] for a in n.cell.atoms),'UNSAFE_NODE')
+            require(all(set(a.other_dict)==actor_keys(mission.world.actor_models) and mission.world.safe_domain.contains_atom(a)[0] for a in n.cell.atoms),'UNSAFE_NODE')
             if n.action_id is None:
-                require(not n.children and not n.outcomes and not n.obligations and mission.goal.accepts(n.cell),'TERMINAL_GOAL_NOT_PROVED')
+                require(not n.children and not n.outcomes and not n.obligations and mission.goal.accepts(n.cell,allow_other_state=bool(mission.world.actor_models)),'TERMINAL_GOAL_NOT_PROVED')
                 leaves.append(now); continue
             c,w,p=mission.edge_context(n.cell,n.depth)
             posterior,count=replay_a5_tail_edge(n,c,w,p,mission.observations); tubes+=count

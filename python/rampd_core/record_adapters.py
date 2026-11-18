@@ -28,7 +28,7 @@ from .map_context import MapContext, from_womd_scenario, from_av2_map_json
 
 PHASE6B_SCHEMA = "rampd.phase6b.record-adapter.v1"
 WOMD_PARSER_VERSION = "rampd-womd-scenario-v1.1"
-AV2_PARSER_VERSION = "rampd-av2-motion-v1.1"
+AV2_PARSER_VERSION = "rampd-av2-motion-v1.2"
 
 
 class OptionalDependencyError(RuntimeError):
@@ -718,6 +718,29 @@ def _integer_ns(value: Any, name: str) -> int:
     return result
 
 
+def _av2_endpoint_metadata(value, name):
+    """Decode official scenario endpoints, not arbitrary per-row clocks.
+
+    Old AV2 exports store ns in binary64. The exact stored number is a
+    representative, not necessarily the original integer nanosecond timestamp.
+    The rounding cell describes *conditional* prior round-to-nearest error,
+    not a guaranteed measurement-error bound or a protocol clock.
+    """
+    from fractions import Fraction
+    if isinstance(value, float):
+        if not math.isfinite(value) or not value.is_integer() or not 0 <= value < 2**63:
+            raise RecordParseError(f"{name} invalid binary64 nanosecond endpoint")
+        q = Fraction.from_float(value)
+        lo = (Fraction.from_float(math.nextafter(value, -math.inf)) + q) / 2
+        hi = (q + Fraction.from_float(math.nextafter(value, math.inf))) / 2
+        return int(q), {"storage": "binary64_ns", "original_ns_exact": False,
+                        "stored_hex": value.hex(), "round_to_nearest_cell_ns": [str(lo), str(hi)]}, (lo, hi)
+    q = _integer_ns(value, name)
+    if not 0 <= q < 2**63:
+        raise RecordParseError(f"{name} outside nonnegative int64 nanoseconds")
+    return q, {"storage": "integer_ns", "original_ns_exact": True}, (Fraction(q), Fraction(q))
+
+
 def _av2_map_metadata(map_file: str | Path | None, scenario_id: str) -> tuple[str | None, tuple[str, ...], dict[str, Any], MapContext | None]:
     if map_file is None:
         return None, (), {"map_status": "not_provided"}, None
@@ -854,15 +877,24 @@ def parse_av2_rows(
             raise RecordParseError(f"AV2 timestamp_ns differs across tracks at timestep {timestep}")
         row_ts[timestep] = ns
 
+    endpoint_metadata = None
+    if (start_ns is None) != (end_ns is None):
+        raise RecordParseError("AV2 scenario endpoint pair incomplete")
     if start_ns is not None and end_ns is not None:
-        start, end = _integer_ns(start_ns, "start_timestamp"), _integer_ns(end_ns, "end_timestamp")
+        start, smeta, sb = _av2_endpoint_metadata(start_ns, "start_timestamp")
+        end, emeta, eb = _av2_endpoint_metadata(end_ns, "end_timestamp")
+        endpoint_metadata = {"start": smeta, "end": emeta,
+                             "original_ns_exact": smeta["original_ns_exact"] and emeta["original_ns_exact"],
+                             "relative_duration_ns_rounding_cell": [str(eb[0]-sb[1]), str(eb[1]-sb[0])],
+                             "rounding_cell_assumption": "source rounded once to nearest, not a physical clock bound"}
         start_ns, end_ns = start, end
-        if end < start or (n_steps > 1 and end == start):
+        if end < start or (n_steps > 1 and end == start) or (n_steps == 1 and end != start):
             raise RecordParseError("AV2 end_timestamp must exceed start_timestamp")
         from fractions import Fraction
         timestamps = tuple(float(Fraction((end - start) * i, max(1, n_steps - 1)) /
                                  1_000_000_000) for i in range(n_steps))
-        time_source = "scenario_start_end_timestamp_ns"
+        time_source = ("scenario_start_end_timestamp_ns" if endpoint_metadata["original_ns_exact"]
+                       else "scenario_binary64_ns_relative_interpolation")
         for index, ns in row_ts.items():
             expected = start + Fraction((end - start) * index, max(1, n_steps - 1))
             if abs(ns - expected) > 1_000:
@@ -1011,6 +1043,7 @@ def parse_av2_rows(
         "timestamp_unit": "seconds_relative_to_first_timestamp",
         "source_timestamps_start_ns": start_ns,
         "source_timestamps_end_ns": end_ns,
+        "source_endpoint_precision": endpoint_metadata,
         "num_timestamps": n_steps,
         "focal_track_id": None if focal_id is None else str(focal_id),
         "sdc_track_id": "AV" if any(t.track_id == "AV" for t in tracks) else None,
@@ -1069,8 +1102,9 @@ def _timestamp_ticks_to_ns(ticks, unit):
 def _normalize_av2_arrow_timestamps(table):
     """Preserve the actual integer nanoseconds of Arrow temporal columns.
 
-    Do not call datetime.timestamp(), use pandas float or accept date/time
-    columns as timestamps. Integer columns are already in AV2's ns unit.
+    Do not call datetime.timestamp() or accept date/time columns as timestamps.
+    Integer columns are already in AV2's ns unit. Preserve double endpoints
+    and their loss-of-original-precision semantics.
     Cast to int64 BEFORE converting to Python to avoid loss below microseconds.
     """
     import pyarrow as pa
@@ -1086,8 +1120,14 @@ def _normalize_av2_arrow_timestamps(table):
             values = _timestamp_ticks_to_ns(ticks,field.type.unit)
             table = table.set_column(i, field.name, pa.array(values, type=pa.int64()))
         elif not pa.types.is_integer(field.type):
-            # Reject ambiguous physical units / lossy floats at the file boundary.
-            raise RecordParseError(f"{field.name} unsupported Arrow type {field.type}; expected timestamp or integer ns")
+            # Official legacy AV2 scenario endpoints may be binary64 ns.
+            # Keep them as floats so parse_av2_rows retains precision metadata.
+            # Never accept floats for an explicitly exact per-row timestamp.
+            is_double = getattr(pa.types, "is_float64", lambda _: False)(field.type)
+            if field.name not in {"start_timestamp", "end_timestamp"} or not is_double:
+                raise RecordParseError(f"{field.name} unsupported Arrow type {field.type}; expected timestamp or integer ns (binary64 only for official endpoints)")
+            for value in table.column(i).to_pylist():
+                _av2_endpoint_metadata(value, field.name)
     return table
 
 

@@ -6,7 +6,7 @@ from test_phase6c_a53_rule_models import ext
 
 
 def advance(s, e, *, empty=True, complete=True, ack=None):
-    return advance_interlock(e,s,ClearanceObservation(s.last_tick,s.last_tick+1,complete,empty,'fixture interval'),tick=Q(1),clearance=Q(2),ack=ack)
+    return advance_interlock(e,s,ClearanceObservation(s.last_tick,s.last_tick+1,complete,empty,'fixture interval',s.event_id,s.version,s.resource_id),tick=Q(1),clearance=Q(2),ack=ack)
 
 
 def pending():

@@ -47,8 +47,8 @@ class A5TaskGoal:
             'target':[[x.lo.hex(),x.hi.hex()] for x in self.target.as_tuple()],
             'accepting_modes':self.accepting_modes, 'deadline':str(self.deadline_s)})
 
-    def accepts(self, cell: BeliefCell):
-        return all(not a.other and self.target.contains(a.ego) and
+    def accepts(self, cell: BeliefCell, *, allow_other_state=False):
+        return all((allow_other_state or not a.other) and self.target.contains(a.ego) and
                    a.mode_dict.get('protocol_state') in self.accepting_modes for a in cell.atoms)
 
 
@@ -89,7 +89,7 @@ def replay_a5_tail_edge(n, contract, world, protocol, observations):
         if not condition: raise ValueError(reason)
     tubes=0
     action=next((a for a in n.cell.actions if a.action_id==n.action_id),None)
-    require(action is not None and audit_a5_protocol(n.cell,action,contract,protocol,observations,n.outcomes),
+    require(action is not None and audit_a5_protocol(n.cell,action,contract,protocol,observations,n.outcomes,allow_other_state=bool(world.actor_models)),
             'PROTOCOL_REPLAY_UNPROVED')
     obs_atoms={}; omap={o.source_atom_id:o for o in n.obligations}
     require(len(omap)==len(n.obligations) and set(omap)=={a.atom_id for a in n.cell.atoms},
@@ -132,7 +132,7 @@ def audit_a5_task_tail(root: BeliefCell, nodes: tuple[A5TailNode,...],
                 contract.protocol_digest == protocol.digest() and
                 contract.clock_digest == a5_clock_digest(protocol,observations,contract.step_s),
                 'CONTEXT_MISMATCH')
-        require(not world.other_actors, 'OTHER_ACTOR_ABSOLUTE_TIME_UNSUPPORTED')
+        require(not world.other_actors and not world.actor_models, 'OTHER_ACTOR_ABSOLUTE_TIME_UNSUPPORTED')
         # Only local step-relative symbolic observations; absolute message/effectivity
         # clocks cannot be restarted at each tail node. No resource monitor dynamics.
         require(all(t.message is None and t.clocks.issue is None and t.clocks.receipt is None
