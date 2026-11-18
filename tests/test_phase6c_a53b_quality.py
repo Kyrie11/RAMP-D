@@ -20,3 +20,12 @@ def test_detect_overlap_and_missing_group():
 
 def test_old_waymax_clock_not_accepted():
     assert mod.audit(fixture(),{'initial_timestep':0,'next_timestep':1})['status']=='NOT_PASSED'
+
+def test_aligned_but_failed_waymax_cannot_pass():
+    p={'status':'ERROR','scope':'WAYMAX_LOGGED_DATA_INGESTION_ONLY','initial_timestep':10,'next_timestep':11,'counterfactual_labels_generated':False,'safety_certified':False}
+    assert mod.audit(fixture(),p)['status']=='NOT_PASSED'
+    p['status']='PASS';assert mod.audit(fixture(),p)['status']=='BOUNDED_INVENTORY_PASS'
+
+def test_empty_factual_sample_rejected():
+    f=fixture();f['groups'][0]['records'][0].update(valid_actor_time_knots=0,joint_target_knots_with_box_dimensions=0)
+    assert mod.audit(f)['status']=='NOT_PASSED'

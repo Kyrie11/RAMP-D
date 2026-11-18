@@ -3,3 +3,9 @@ mpmath>=1.2,<1.4
 
 # Sampled geometry supervision tests (not used for mathematical certificates).
 shapely>=2.0,<3
+
+# ROADWork archive pixel-alignment fixture / visualization
+Pillow>=9
+
+# Numerical Waymax replay audit fixture
+numpy>=1.23

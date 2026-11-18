@@ -59,10 +59,11 @@ class WorkZoneInterlock:
     empty_since: Fraction | None = None
     command_id: str | None = None
     command_time: Fraction | None = None
+    report_signature: tuple = ()
 
     def __post_init__(self):
-        if not self.event_id or not self.resource_id or type(self.version) is not int or self.version<0:
-            raise ValueError('invalid work-zone identity')
+        if not self.event_id or not self.resource_id or type(self.version) is not int or self.version<0 or not self.report_signature:
+            raise ValueError('invalid work-zone identity or missing report signature')
         exact(self.last_tick)
         if self.phase not in ('OPEN','DRAIN','DEPLOY_PENDING','BLOCKED','REMOVE_PENDING'):
             raise ValueError('invalid interlock phase')
@@ -80,7 +81,7 @@ class WorkZoneInterlock:
     def initial(cls, report: ExternalReport, time: Fraction):
         if exact(time)>=report.effective_on:
             raise ValueError('initialize before enforceable closure or restore explicit checkpoint')
-        return cls(report.event_id,report.version,report.resource_id,'OPEN',time)
+        return cls(report.event_id,report.version,report.resource_id,'OPEN',time,report_signature=report.external_request_signature())
 
     @property
     def permissions(self):
@@ -102,7 +103,8 @@ def advance_interlock(report, state, observation, *, tick, clearance, ack=None):
     permission during deployment is intentional; physical absence is separate.
     A new report version is a new reconciliation problem, not silently applied.
     """
-    if (state.event_id,state.version,state.resource_id)!=(report.event_id,report.version,report.resource_id):
+    if ((state.event_id,state.version,state.resource_id)!=(report.event_id,report.version,report.resource_id) or
+            state.report_signature != report.external_request_signature()):
         raise ValueError('report reconciliation not supplied')
     if (exact(tick)<=0 or exact(clearance)<=0 or observation.start!=state.last_tick or
             observation.end!=state.last_tick+tick):
@@ -116,8 +118,8 @@ def advance_interlock(report, state, observation, *, tick, clearance, ack=None):
         raise ValueError('effectivity boundary requires split tick')
     def fresh(phase,command=None,empty=None):
         return WorkZoneInterlock(state.event_id,state.version,state.resource_id,phase,t,empty,
-                                 None if command is None else f'{state.event_id}:{state.version}:{command}:{t}',
-                                 None if command is None else t)
+                                 None if command is None else f'{state.event_id}:{state.version}:{state.resource_id}:{command}:{t}',
+                                 None if command is None else t,state.report_signature)
     def acknowledged(physical):
         return (ack is not None and isinstance(ack,BarrierAck) and ack.settled and
                 (ack.event_id,ack.version,ack.resource_id,ack.command_id)==

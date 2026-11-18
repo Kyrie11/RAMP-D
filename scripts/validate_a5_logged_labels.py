@@ -51,7 +51,7 @@ def probe(root, dataset, split, n, nfiles, prefix_steps):
             raise ValueError(f'expected {n} distinct records, got {len(ids)}')
         counts=Counter(r['status'] for r in out['records']);out['label_status_counts']=dict(counts)
         out['distinct_source_files']=len(set(r['source_file'] for r in out['records']))
-        out['status']='PASS' if counts['LOGGED_EGO_PATH_SURROGATE']>0 else 'NO_USABLE_LABELS'
+        out['status']='PASS' if counts['LOGGED_EGO_PATH_SURROGATE']==n else 'NO_USABLE_LABELS'
     except (FileNotFoundError,ImportError,ModuleNotFoundError,OptionalDependencyError) as exc:
         out.update(status='SKIP',reason=f'{type(exc).__name__}: {exc}')
     except Exception as exc:

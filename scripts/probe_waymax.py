@@ -9,6 +9,28 @@ from pathlib import Path
 from importlib.metadata import version, PackageNotFoundError
 
 
+def replay_numeric_check(state, upto):
+    """Compare simulated historical values to log, excluding invalid knots."""
+    import numpy as np
+    log=state.log_trajectory; sim=state.sim_trajectory
+    lv=np.asarray(log.valid,dtype=bool); sv=np.asarray(sim.valid,dtype=bool)
+    if lv.shape!=sv.shape or lv.ndim!=2 or not 0<=upto<lv.shape[-1]:
+        raise ValueError('incompatible simulated/log trajectory shape')
+    valid=lv[:,:upto+1]
+    if not np.array_equal(valid,sv[:,:upto+1]): raise ValueError('history validity mismatch')
+    errors={}
+    for field in ('x','y','yaw','vel_x','vel_y','length','width'):
+        a=np.asarray(getattr(log,field))[:,:upto+1][valid]
+        b=np.asarray(getattr(sim,field))[:,:upto+1][valid]
+        if not np.isfinite(a).all() or not np.isfinite(b).all() or not np.array_equal(a,b):
+            raise ValueError('logged replay field mismatch: '+field)
+        errors[field]=0.0
+    future_count=int(sv[:,upto+1:].sum())
+    if future_count: raise ValueError('simulated trajectory exposes valid future knots')
+    return {'current_valid_objects':int(lv[:,upto].sum()),'history_valid_knots':int(valid.sum()),
+            'simulated_future_valid_knots':future_count,'max_abs_errors':errors}
+
+
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--tf-example-file',type=Path,required=True)
     ap.add_argument('--output',type=Path,required=True); ap.add_argument('--plot',type=Path)
@@ -39,6 +61,11 @@ def main():
         if int(np.asarray(state.remaining_timesteps))<1: raise ValueError('no future step to replay')
         nxt=datatypes.update_state_by_log(state,num_steps=1)
         if int(np.asarray(nxt.timestep))!=int(np.asarray(state.timestep))+1: raise ValueError('logged timestep did not advance')
+        check10=replay_numeric_check(state,10); check11=replay_numeric_check(nxt,11)
+        out['replay_numeric_checks']={'current':check10,'next':check11}
+        out['object_cap']=128
+        out['object_universe_complete']=False
+        out['plot_scope']='LOGGED_TRAJECTORY_VISUALIZATION_NOT_RESPONSE'
         out.update(status='PASS',sdc_id=int(ids[sdc][0]),shape=list(valid.shape),valid_knots=int(valid.sum()),
                    raw_initial_timestep=raw_initial,initial_timestep=int(np.asarray(state.timestep)),next_timestep=int(np.asarray(nxt.timestep)))
         if a.plot:

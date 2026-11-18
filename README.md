@@ -1,3 +1,18 @@
+# RAMP-D 0.9.8 · Phase 6C-A5/3b-3
+
+A5/3b-2 已通过服务器限定验收（566 Python / 3 native）；WOMD+AV2 四个有界 split 全部通过。A5/3b-3 实现受限连续 incumbent/no-entry 证明、单次不确定事件时钟、声明有限消息分组、施工报告绑定、连续 clearance reference controller、MUTCD table guidance 和独立 ROADWork / Waymax audit。154 isolated、29 finite、13 SC 本地通过。新原生证明与真实 ROADWork/Waymax 待服务器。完整真实场景、消息协议、形式化 Teacher、模拟标签和训练尚未完成。
+
+```bash
+python -m pip install -r requirements-test.txt
+python scripts/verify_release.py
+bash scripts/validate_phase6c_a5_3b3.sh
+```
+
+见 `docs/PHASE6C_A5_3B3_ACCEPTANCE.md`（数学、失败分析、命令）和 `docs/PHASE6C_A5_3B3_SUPERVISION.md`（数据/时钟/后续方案）。在新目录解压。当前不要求 CARLA/SUMO 运行。
+
+---
+历史版本说明（以下 PASS 仅对应当时发布）：
+
 # RAMP-D 0.9.7 · Phase 6C-A5/3b-2
 
 基于用户已验收的 A5/3b 第一增量（550 Python + 3 native）。本轮新增 AV2 binary64 endpoint 兼容性审计、声明移动 actor 连续传播、计划施工 clearance 身份绑定、Incident/TIM 参考契约、WZDx CSV inventory。论文未修改。141 独立数据/协议测试、29 finite、13 SC 本地通过，原生新增测试与真实 AV2 仍须服务器验证。不要把本轮当作真实世界完备证书或训练标签生产完成。

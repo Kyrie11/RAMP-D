@@ -30,6 +30,7 @@ from .footprint import VehicleGeometry, SweptFootprint, SeparationStatus
 from .resources import ActorFootprint, ResourceState, ResourceRegion, check_resources, ResourceStatus, OccupancyStatus
 from .a53b_actor_envelope import ActorEnvelope, actor_keys, propagate_other
 from .footprint import separate_swept_footprints
+from .a53b_occupancy import no_new_entry_proved
 
 
 @dataclass(frozen=True)
@@ -225,7 +226,8 @@ def _check_timed_resources(tube, world, step, source_atom=None):
     """Joint continuous checks on common closed slabs, incl. switch instants.
 
     Every possibly occupying actor is charged capacity; all pairs must be
-    separated. Entry/stay not classified, so require both permissions.
+    separated. Alpha can be waived only with a continuous incumbent proof;
+    beta remains required on every possible occupancy slab.
     """
     from dataclasses import replace
     from itertools import combinations
@@ -252,13 +254,18 @@ def _check_timed_resources(tube, world, step, source_atom=None):
             box=_subslab_box(seg,lo,hi)
             fps={'ego':SweptFootprint(box,world.ego_geometry,lo,hi,'ego')}
             velocities={'ego':seg.witness.field[:2]}
+            starts={'ego':SweptFootprint(_subslab_box(seg,lo,lo),world.ego_geometry,lo,lo,'ego')}
+            yaw_rates={'ego':seg.witness.field[2]}
             if world.actor_models:
                 other=propagate_other(world.actor_models,source_atom,lo,hi)
+                other_start=propagate_other(world.actor_models,source_atom,lo,lo)
                 if not world.safe_domain.contains_atom(replace(source_atom,ego=box,other=tuple(other.items())))[0]:
                     return False
                 for m in world.actor_models:
                     fps[m.actor_id]=m.footprint(other,lo,hi)
                     velocities[m.actor_id]=(other[m.keys[2]],other[m.keys[3]])
+                    starts[m.actor_id]=m.footprint(other_start,lo,lo)
+                    yaw_rates[m.actor_id]=m.yaw_rate
                 if any(separate_swept_footprints(x,y).status is not SeparationStatus.SEPARATED for x,y in combinations(fps.values(),2)):
                     return False
             possible={}
@@ -268,7 +275,10 @@ def _check_timed_resources(tube, world, step, source_atom=None):
                 # Resource-specific direction proved from the actual velocity
                 # below; never trust the declared direction alone.
                 res=check_resources((st,),(replace(region,capacity=st.capacity),),
-                    tuple(ActorFootprint(i,fp,direction=st.direction) for i,fp in fps.items()))
+                    tuple(ActorFootprint(i,fp,direction=st.direction,
+                        already_inside=(st.resource_id,) if (not st.alpha and
+                            no_new_entry_proved(starts[i],fp,region,velocities[i],yaw_rates[i])) else ())
+                        for i,fp in fps.items()))
                 if res.status is not ResourceStatus.SAFE: return False
                 possible[st.resource_id]={o.actor_id for o in res.occupancies if o.status is not OccupancyStatus.PROVED_FREE}
                 if not possible[st.resource_id]: continue

@@ -36,7 +36,7 @@ class ResourceRegion:
     def __post_init__(self):
         if not self.resource_id or not isinstance(self.x, Interval) or not isinstance(self.y, Interval):
             raise TypeError("resource bounds must be Interval objects")
-        if int(self.capacity) < 0 or int(self.demand_unit) <= 0:
+        if type(self.capacity) is not int or type(self.demand_unit) is not int or self.capacity < 0 or self.demand_unit <= 0:
             raise ValueError("invalid resource region")
         object.__setattr__(self, "capacity", int(self.capacity))
         object.__setattr__(self, "demand_unit", int(self.demand_unit))
@@ -52,7 +52,7 @@ class ResourceState:
     controller_state: str = ""
 
     def __post_init__(self):
-        if not self.resource_id or not self.direction or int(self.capacity) < 0:
+        if not self.resource_id or not self.direction or type(self.capacity) is not int or self.capacity < 0:
             raise ValueError("invalid resource state")
         if not isinstance(self.alpha, bool) or not isinstance(self.beta, bool):
             raise TypeError("alpha and beta must be bool values")
@@ -73,7 +73,7 @@ class ActorFootprint:
     def __post_init__(self):
         if not self.actor_id or not isinstance(self.swept, SweptFootprint):
             raise TypeError("actor footprint requires a SweptFootprint")
-        if int(self.demand) <= 0 or int(self.demand_unit) <= 0:
+        if type(self.demand) is not int or type(self.demand_unit) is not int or self.demand <= 0 or self.demand_unit <= 0:
             raise ValueError("invalid actor footprint")
         object.__setattr__(self, "demand", int(self.demand))
         object.__setattr__(self, "demand_unit", int(self.demand_unit))
