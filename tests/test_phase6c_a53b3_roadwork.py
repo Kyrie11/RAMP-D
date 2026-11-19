@@ -137,3 +137,94 @@ def test_reject_image_present_only_in_wrong_split(tmp_path):
             dst.writestr('images/val/' + Path(name).name, raw)
     with pytest.raises(ValueError, match='missing train image'):
         mod.audit(tmp_path, 1)
+
+
+def _replace_val_bbox(tmp_path, bbox, *, annotation_id=17793, width=12, height=10):
+    """Inject an official-style val anomaly without changing the parser's inputs."""
+    path = tmp_path / 'annotations.zip'
+    with zipfile.ZipFile(path) as src:
+        rows = [(member.filename, src.read(member)) for member in src.infolist()]
+    with zipfile.ZipFile(path, 'w') as dst:
+        for name, raw in rows:
+            if name.endswith('instances_val_gps_split.json'):
+                data = json.loads(raw)
+                data['annotations'][0]['id'] = annotation_id
+                data['annotations'][0]['bbox'] = bbox
+                data['images'][0]['width'] = width
+                data['images'][0]['height'] = height
+                raw = json.dumps(data).encode()
+            dst.writestr(name, raw)
+    if (width, height) != (12, 10):
+        for fname, entry, mode, fmt in (
+            ('images.zip', 'images/val.jpg', 'RGB', 'JPEG'),
+            ('sem_seg_labels.zip', 'gtFine/val/val_labelIds.png', 'L', 'PNG')):
+            path = tmp_path / fname
+            with zipfile.ZipFile(path) as src:
+                rows = [(member.filename, src.read(member)) for member in src.infolist()]
+            with zipfile.ZipFile(path, 'w') as dst:
+                for name, raw in rows:
+                    if name == entry:
+                        stream = io.BytesIO()
+                        Image.new(mode, (width, height)).save(stream, format=fmt)
+                        raw = stream.getvalue()
+                    dst.writestr(name, raw)
+
+
+def test_zero_extent_at_exact_roadwork_boundary_does_not_fake_geometry(tmp_path):
+    make(tmp_path)
+    _replace_val_bbox(tmp_path, [1920.0, 502.85, 0.0, 0.2],
+                      width=1920, height=1080)
+    report = mod.audit(tmp_path, 1, tmp_path / 'audit.png')
+    val = next(s for s in report['splits'] if s['split'] == 'val')
+    assert report['status'] == 'BOUNDED_ROADWORK_ALIGNMENT_PASS'
+    assert report['data_quality_warnings']
+    assert val['annotations'] == 1 and val['category_instances'] == {'cone': 1}
+    assert val['bbox_zero_extent'] == 1 and val['bbox_outside_image'] == 0
+    assert val['bbox_geometry_usable'] == 0 and val['bbox_geometry_excluded'] == 1
+    assert val['median_relative_bbox_area'] == {}
+    assert val['decoded_samples'][0]['annotations'] == 1
+    assert val['bbox_zero_extent_examples'][0]['annotation_id'] == 17793
+    assert val['bbox_zero_extent_examples'][0]['bbox'] == [1920., 502.85, 0., .2]
+    assert val['bbox_zero_extent_examples'][0]['image_size'] == [1920, 1080]
+    assert (tmp_path / 'audit.png').is_file()
+
+
+def test_zero_height_is_quality_warning_not_geometry(tmp_path):
+    make(tmp_path)
+    _replace_val_bbox(tmp_path, [2.0, 10.0, 2.0, 0.0])
+    val = mod.audit(tmp_path, 1)['splits'][1]
+    assert val['bbox_zero_extent'] == 1
+    assert val['bbox_geometry_usable'] == 0
+    assert val['bbox_outside_image'] == 0
+
+
+def test_negative_bbox_remains_hard_error(tmp_path):
+    make(tmp_path)
+    _replace_val_bbox(tmp_path, [2., 2., -.1, 1.])
+    with pytest.raises(ValueError, match='negative bbox extent'):
+        mod.audit(tmp_path, 1)
+
+
+def test_zero_bbox_outside_image_not_promoted_to_alignment_pass(tmp_path):
+    make(tmp_path)
+    _replace_val_bbox(tmp_path, [13., 3., 0., 1.])
+    result = mod.audit(tmp_path, 1)
+    assert result['status'] == 'REVIEW_REQUIRED_BBOX_EXTENTS'
+    assert result['splits'][1]['bbox_zero_extent'] == 1
+    assert result['splits'][1]['bbox_outside_image'] == 1
+
+
+def test_positive_extent_outside_image_still_requires_review(tmp_path):
+    make(tmp_path)
+    _replace_val_bbox(tmp_path, [11., 2., 2., 1.])
+    result = mod.audit(tmp_path, 1)
+    assert result['status'] == 'REVIEW_REQUIRED_BBOX_EXTENTS'
+    assert result['splits'][1]['bbox_zero_extent'] == 0
+    assert result['splits'][1]['bbox_geometry_usable'] == 0
+
+
+def test_nonfinite_bbox_remains_hard_error(tmp_path):
+    make(tmp_path)
+    _replace_val_bbox(tmp_path, [2., 2., float('nan'), 2.])
+    with pytest.raises(ValueError, match='invalid bbox'):
+        mod.audit(tmp_path, 1)

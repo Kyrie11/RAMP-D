@@ -1,3 +1,7 @@
+# ROADWork real-data audit: zero-extent bbox compatibility update (2026-11-19)
+
+The updated `scripts/audit_roadwork.py` reports boundary/zero-area COCO bbox records as data-quality warnings without fabricating positive obstacle geometry. Negative/nonfinite/out-of-image data still fails or requires review. The unchanged ROADWork CLI and extracted dataset layout are supported; see `docs/ROADWORK_ZERO_EXTENT_BBOX_20261119.md`. For this **new** release, `python scripts/verify_release.py` checks the corresponding updated manifest. The real server ROADWork run is still pending.
+
 # Latest increment: Phase 6C-A5/3b-4 (0.9.9)
 
 See `docs/PHASE6C_A5_3B4_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B4_SUPERVISION.md`. Run `bash scripts/validate_phase6c_a5_3b4.sh` in a fresh checkout. Previous 3b-3 server report failed before tests; no native success implied.

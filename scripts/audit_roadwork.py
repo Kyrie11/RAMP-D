@@ -3,8 +3,10 @@
 
 Supports the unchanged extracted layout (annotations/, images/, gtFine/) and
 official ZIP layout, with no pathway mixing. All image/mask members are checked
-for existence, and a bounded deterministic sample is decoded. This is a visual
-alignment/inventory audit, *not* a formal traffic-rule or safety-label generator.
+for existence, and a bounded deterministic sample is decoded. Zero-extent
+COCO boxes remain present as source annotations, but are excluded from usable
+bbox geometry and recorded as warnings. This is a visual alignment/inventory
+audit, *not* a formal traffic-rule or safety-label generator.
 """
 import argparse
 from collections import Counter, defaultdict
@@ -217,6 +219,8 @@ def audit(root: Path, sample_per_split=6, plot=None):
             byimage = defaultdict(list)
             segtypes = Counter()
             pairs = Counter()
+            degenerate_bbox_examples = []
+            usable_bbox_geometry_count = 0
             for image_id, image_record in images.items():
                 if not positive_int(image_record['width']) or not positive_int(image_record['height']):
                     raise ValueError(f'invalid {split} image size {image_id}')
@@ -243,14 +247,38 @@ def audit(root: Path, sample_per_split=6, plot=None):
                                or not math.isfinite(x) for x in box)):
                     raise ValueError(f'{split} annotation id={ann["id"]}: invalid bbox {box!r}')
                 x, y, w, h = box
-                if min(w, h) <= 0:
-                    raise ValueError(f'{split} annotation id={ann["id"]}: nonpositive bbox extent {box}')
-                if x < 0 or y < 0 or x + w > image_record['width'] + 1e-6 or y + h > image_record['height'] + 1e-6:
+                # Zero-width or zero-height annotations can occur at cropped image
+                # boundaries. They have no bbox geometry, and MUST NOT be silently
+                # expanded into obstacles or silently removed from source counts.
+                # Negative extents remain malformed metadata and are rejected.
+                if w < 0 or h < 0:
+                    raise ValueError(f'{split} annotation id={ann["id"]}: negative bbox extent {box}')
+                degenerate = (w == 0 or h == 0)
+                outside = (x < 0 or y < 0 or
+                           x + w > image_record['width'] + 1e-6 or
+                           y + h > image_record['height'] + 1e-6)
+                if outside:
                     pairs['bbox_outside_image'] += 1
+                if degenerate:
+                    pairs['bbox_zero_extent'] += 1
+                    if len(degenerate_bbox_examples) < 50:
+                        degenerate_bbox_examples.append({
+                            'annotation_id': ann['id'], 'image_id': image_id,
+                            'file_name': image_record['file_name'],
+                            'category_id': category_id, 'category': category,
+                            'bbox': list(box),
+                            'image_size': [image_record['width'], image_record['height']],
+                            'source_area': ann.get('area'),
+                            'outside_image': outside,
+                        })
+                # Source instance counts and co-occurrences preserve *all* original
+                # annotations, including malformed geometry (for transparency).
                 percat[category] += 1
                 imagecats[image_id].add(category)
-                sizes[category].append(w * h / (image_record['width'] * image_record['height']))
                 byimage[image_id].append(ann)
+                if not degenerate and not outside:
+                    usable_bbox_geometry_count += 1
+                    sizes[category].append(w * h / (image_record['width'] * image_record['height']))
                 anfields.update(ann.keys())
                 seg = ann.get('segmentation')
                 segtypes['polygon' if isinstance(seg, list) and seg else 'rle'
@@ -292,6 +320,8 @@ def audit(root: Path, sample_per_split=6, plot=None):
                     draw = ImageDraw.Draw(image)
                     for ann in byimage[image_record['id']]:
                         x, y, w, h = ann['bbox']
+                        if w == 0 or h == 0:  # no spatial support; don't draw a fake 1px obstacle
+                            continue
                         draw.rectangle((x * scale_x, y * scale_y, (x+w) * scale_x,
                                         (y+h) * scale_y), outline='yellow', width=1)
                         draw.text((max(0, x * scale_x), max(0, y * scale_y - 11)),
@@ -309,6 +339,11 @@ def audit(root: Path, sample_per_split=6, plot=None):
                 'cooccurrence_image_counts': [{'categories': list(k), 'images': v} for k, v
                                                in sorted((k, v) for k, v in pairs.items() if isinstance(k, tuple))],
                 'bbox_outside_image': pairs['bbox_outside_image'],
+                'bbox_zero_extent': pairs['bbox_zero_extent'],
+                'bbox_zero_extent_examples': degenerate_bbox_examples,
+                'bbox_zero_extent_examples_truncated': max(0, pairs['bbox_zero_extent'] - len(degenerate_bbox_examples)),
+                'bbox_geometry_usable': usable_bbox_geometry_count,
+                'bbox_geometry_excluded': len(anns) - usable_bbox_geometry_count,
                 'image_fields': dict(imfields), 'annotation_fields': dict(anfields),
                 'segmentation_types': dict(segtypes), 'decoded_samples': samples,
             })
@@ -316,6 +351,16 @@ def audit(root: Path, sample_per_split=6, plot=None):
         out['exact_filename_overlap'] = overlap
         if overlap:
             raise ValueError('GPS split exact filename overlap')
+        out['data_quality_warnings'] = [
+            f'{s["split"]}: {s["bbox_zero_extent"]} source annotations have zero-width or '
+            'zero-height bbox; retained in instance counts, excluded from geometric '
+            'area statistics and box overlays. Do not promote to obstacles.'
+            for s in out['splits'] if s['bbox_zero_extent']
+        ]
+        # The PASS status certifies the narrow image/mask metadata alignment
+        # audit, NOT complete validity of every individual COCO bounding box.
+        # Positive-extent boxes outside an image, or zero-extent boxes with
+        # coordinates outside it, still require a separate review.
         out['status'] = ('REVIEW_REQUIRED_BBOX_EXTENTS' if any(s['bbox_outside_image'] for s in out['splits'])
                          else 'BOUNDED_ROADWORK_ALIGNMENT_PASS')
     if plot is not None:
@@ -348,6 +393,8 @@ def main():
                'source_discovery_hint': ('Expected annotations/, images/, gtFine/ extracted from '
                                          'annotations.zip, images.zip, sem_seg_labels.zip.')}
         print(f"ROADWORK ERROR: {out['reason']}; details: {args.output}", file=sys.stderr)
+    for warning in out.get('data_quality_warnings', []):
+        print(f'ROADWORK DATA QUALITY WARNING: {warning}', file=sys.stderr)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(out, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     print(out['status'])
