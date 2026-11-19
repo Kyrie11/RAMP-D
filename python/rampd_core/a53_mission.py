@@ -38,7 +38,7 @@ class A53Mission:
             raise ValueError('invalid step or root binding')
         if self.goal.deadline_s!=s.deadline-s.start:
             raise ValueError('goal duration and mission deadline disagree')
-        if (w.timed_resource_slices or w.other_actors or not w.complete_actors_assumed or not w.complete_resources_assumed or
+        if (w.timed_resource_slices or w.timed_slices_by_mode or w.other_actors or not w.complete_actors_assumed or not w.complete_resources_assumed or
             w.safe_domain is None or w.model_digest!=a5_world_digest(w)):
             raise ValueError('only independently declared complete world supported')
         if w.actor_models and not self.segmented_resources:
@@ -70,7 +70,7 @@ class A53Mission:
             direction=restrictions[s.resource_id][2],capacity=restrictions[s.resource_id][3]) for s in self.world.resource_states)
         regions=tuple(replace(r,capacity=restrictions[r.resource_id][3]) for r in self.world.regions)
         proto=local_protocol(self.protocol,(a.mode_dict.get('protocol_state') for a in cell.atoms),start,end,self.digest)
-        slices=()
+        slices=(); by_mode=()
         if self.segmented_resources:
             # Keep maximum capacities in geometry; per-slab capacities are
             # verified from the independent schedule, not from the witness.
@@ -78,10 +78,14 @@ class A53Mission:
             family=dict(self.branch_schedules)
             partition=(partition_family((family[t.transition_id] for t in proto.transitions),start,end)
                        if family else self.schedule.partition(start,end))
-            slices=tuple((a-start,b-start,tuple(replace(s,alpha=r[s.resource_id][0],beta=r[s.resource_id][1],
-                direction=r[s.resource_id][2],capacity=r[s.resource_id][3]) for s in states))
-                for a,b,r in partition)
-        w=replace(self.world,regions=regions,resource_states=states,timed_resource_slices=slices,model_version=f'{self.world.model_version}:{self.digest}:{start}:{end}')
+            def local_rows(part):
+                return tuple((a-start,b-start,tuple(replace(s,alpha=r[s.resource_id][0],beta=r[s.resource_id][1],
+                    direction=r[s.resource_id][2],capacity=r[s.resource_id][3]) for s in states)) for a,b,r in part)
+            slices=local_rows(partition)
+            if family:
+                by_mode=tuple((mode,local_rows(partition_family((family[t.transition_id] for t in proto.outgoing(mode)),start,end)))
+                    for mode in sorted({a.mode_dict['protocol_state'] for a in cell.atoms}))
+        w=replace(self.world,regions=regions,resource_states=states,timed_resource_slices=slices,timed_slices_by_mode=by_mode,model_version=f'{self.world.model_version}:{self.digest}:{start}:{end}')
         w=replace(w,model_digest=a5_world_digest(w))
         c=SCContract(proto.digest(),a5_clock_digest(proto,self.observations,self.step),w.model_digest,
                      self.goal.digest,self.step,int((self.schedule.deadline-self.schedule.start)//self.step))

@@ -1,3 +1,7 @@
+# Latest increment: Phase 6C-A5/3b-4 (0.9.9)
+
+See `docs/PHASE6C_A5_3B4_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B4_SUPERVISION.md`. Run `bash scripts/validate_phase6c_a5_3b4.sh` in a fresh checkout. Previous 3b-3 server report failed before tests; no native success implied.
+
 # RAMP-D 0.9.8 · Phase 6C-A5/3b-3
 
 A5/3b-2 已通过服务器限定验收（566 Python / 3 native）；WOMD+AV2 四个有界 split 全部通过。A5/3b-3 实现受限连续 incumbent/no-entry 证明、单次不确定事件时钟、声明有限消息分组、施工报告绑定、连续 clearance reference controller、MUTCD table guidance 和独立 ROADWork / Waymax audit。154 isolated、29 finite、13 SC 本地通过。新原生证明与真实 ROADWork/Waymax 待服务器。完整真实场景、消息协议、形式化 Teacher、模拟标签和训练尚未完成。

@@ -47,6 +47,7 @@ class IncidentTimeline:
     last_responder_left: Fraction | None = None
     normal_flow: Fraction | None = None
     evidence_ref: str = ''
+    response_profile: str = 'VERIFY_THEN_DISPATCH'
     def __post_init__(self):
         exact(self.cutoff)
         if not self.evidence_ref or self.cutoff<self.incident.trigger: raise ValueError('timeline evidence/cutoff required')
@@ -60,7 +61,12 @@ class IncidentTimeline:
         # Awareness could precede physical lane blockage (e.g. a reported
         # developing breakdown); local ego awareness is not in this timeline.
         from itertools import combinations
-        for a,b in combinations(('first_authority_awareness','verification','dispatch','responder_arrival'),2): ordered(a,b)
+        if self.response_profile=='VERIFY_THEN_DISPATCH':
+            for a,b in combinations(('first_authority_awareness','verification','dispatch','responder_arrival'),2): ordered(a,b)
+        elif self.response_profile=='PARALLEL_DISPATCH':
+            for k in ('verification','dispatch','responder_arrival'): ordered('first_authority_awareness',k)
+            ordered('dispatch','responder_arrival')
+        else: raise ValueError('unknown response profile')
         ordered('hazard_on','blocked_lane_physically_clear')
         ordered('blocked_lane_physically_clear','lanes_available')
         ordered('first_authority_awareness','lanes_available')
@@ -91,14 +97,17 @@ class IncidentRuleRecord:
     alpha: bool
     beta: bool
     source_ref: str
+    publication: Fraction | None = None
     def __post_init__(self):
         exact(self.effective_on)
         if not all((self.incident_id,self.resource_id,self.authority,self.jurisdiction,self.source_ref)) or type(self.version) is not int or self.version<0 or type(self.alpha) is not bool or type(self.beta) is not bool:
             raise ValueError('explicit authority, scope and permissions required')
-        for t in (self.effective_off,self.issue,self.receipt,self.local_detection):
+        for t in (self.effective_off,self.issue,self.receipt,self.local_detection,self.publication):
             if t is not None: exact(t)
         if self.effective_off is not None and self.effective_off<=self.effective_on: raise ValueError('invalid rule interval')
         if self.receipt is not None and (self.issue is None or self.receipt<self.issue): raise ValueError('receipt without preceding issue')
+        if self.publication is not None and (self.issue is None or self.publication<self.issue or (self.receipt is not None and self.receipt<self.publication)):
+            raise ValueError('publication clock inconsistent with issue/receipt')
     def audit(self,timeline):
         if self.incident_id!=timeline.incident.incident_id or self.resource_id not in timeline.incident.resource_ids:
             raise ValueError('incident and rule scope mismatch')
@@ -108,5 +117,5 @@ class IncidentRuleRecord:
         if timeline.first_authority_awareness is None: raise ValueError('authority awareness not recorded')
         if self.effective_on<timeline.first_authority_awareness or (self.issue is not None and self.issue<timeline.first_authority_awareness): raise ValueError('rule precedes authority awareness')
         if self.local_detection is not None and self.local_detection<timeline.incident.trigger: raise ValueError('local incident detection precedes trigger')
-        if any(t is not None and t>timeline.cutoff for t in (self.receipt,self.local_detection)): raise ValueError('recorded observation after cutoff')
+        if any(t is not None and t>timeline.cutoff for t in (self.issue,self.publication,self.receipt,self.local_detection)): raise ValueError('recorded observation after cutoff')
         return True

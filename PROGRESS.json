@@ -1,12 +1,12 @@
 {
-  "assurance_scope": "DECLARED_BOUNDED_ACTORS_RECTANGULAR_RESOURCE_INCUMBENT_AND_CLOCK_FIXTURES_ONLY",
+  "assurance_scope": "FINITE_DECLARED_HISTORIES_RECTANGULAR_GEOMETRY_REFERENCE_SIGNAL",
   "concrete_safety_certified": false,
   "current_scene_verified": false,
   "full_support_certified": false,
-  "local_limit": "154 isolated,29 finite,13 SC passed; native new MPFR replay pending (official dev files missing), real ROADWork and new Waymax checks pending",
+  "local_limit": "166 dependency-free,29 finite,13 SC PASS; native/real ROADWork/Waymax dynamics pending",
   "manuscript_files_required": false,
-  "next_gate": "native 3b3 + ROADWork archive + numerical Waymax probe; physical clearance evidence provider and message/guard full integration next",
-  "phase": "6C-A5_3B3_SCOPED_INCUMBENT_AND_CLOCK_PRECONDITIONS",
+  "next_gate": "server 3b4 native replay, extracted ROADWork, Waymax dynamics parity",
+  "phase": "6C-A5_3B4_DECLARED_HISTORY_SIGNAL",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
@@ -232,6 +232,19 @@
     "real_scene_full_support_certified": false,
     "real_task_terminal_tail_verified": false,
     "environment_completeness": false,
+    "training_complete": false
+  },
+  "phase6c_a5_3b4": {
+    "server_3b3": "ERROR_BEFORE_TEST_LOGS",
+    "server_3b2": "LAST_ACCEPTED_566_PYTHON_3_CTEST",
+    "local_dependency_free": 166,
+    "local_finite": 29,
+    "local_sc": 13,
+    "native": "NOT_RUN",
+    "real_roadwork": "PENDING",
+    "waymax_log_replay": "PASS_UPLOADED_3B3",
+    "waymax_dynamics": "PENDING",
+    "full_support_certified": false,
     "training_complete": false
   }
 }

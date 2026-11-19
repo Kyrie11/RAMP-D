@@ -11,7 +11,7 @@ export PYTEST_ADDOPTS=""
 trap 'rc=$?; if [ "$rc" -ne 0 ]; then printf "{\"phase\":\"6C-A5/3b-3\",\"status\":\"ERROR\",\"returncode\":%s}\n" "$rc" > "$REPORT_DIR/phase6c_a5_3b3_acceptance_summary.json"; fi' EXIT
 export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD="${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-1}"
-"$PYTHON_BIN" "$ROOT/scripts/verify_release.py" | tee "$REPORT_DIR/release_integrity.log"
+"$PYTHON_BIN" "$ROOT/scripts/verify_release.py" 2>&1 | tee "$REPORT_DIR/release_integrity.log"
 "$PYTHON_BIN" -m pytest -q "$ROOT/tests/test_a5_native_discovery.py" \
   "$ROOT/tests/test_phase6c_a5_finite.py" "$ROOT/tests/test_a5_exact_time.py" \
   --junitxml="$REPORT_DIR/finite_audit.xml" | tee "$REPORT_DIR/finite_audit.log"

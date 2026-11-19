@@ -25,3 +25,20 @@ def test_roadwork_consistent_archives_and_plot(tmp_path):
 def test_reject_bad_archive_pairs(tmp_path,kwargs,match):
     make(tmp_path,**kwargs)
     with pytest.raises(ValueError,match=match):mod.audit(tmp_path,1)
+
+def test_extracted_layout_and_identical_stats(tmp_path):
+    make(tmp_path); expected=mod.audit(tmp_path,1)
+    for p in list(tmp_path.glob('*.zip')):
+        with zipfile.ZipFile(p) as z: z.extractall(tmp_path)
+        p.unlink()
+    result=mod.audit(tmp_path,1,tmp_path/'preview.png')
+    assert result['status']=='BOUNDED_ROADWORK_ALIGNMENT_PASS'
+    assert all(x['storage']=='directory' for x in result['archives'].values())
+    assert [{k:v for k,v in g.items() if k!='annotation_member'} for g in result['splits']]==[{k:v for k,v in g.items() if k!='annotation_member'} for g in expected['splits']]
+
+
+def test_missing_mask_outside_sample_rejected(tmp_path):
+    make(tmp_path)
+    with zipfile.ZipFile(tmp_path/'sem_seg_labels.zip') as z: z.extractall(tmp_path)
+    (tmp_path/'gtFine/val/val_labelIds.png').unlink()
+    with pytest.raises(ValueError,match='unique archive member'): mod.audit(tmp_path,1)

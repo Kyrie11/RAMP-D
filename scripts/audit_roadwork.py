@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Independent ROADWork GPS-split inventory and bounded pixel alignment audit.
 
-Reads the official archives without extraction. Counts all COCO-like metadata
+Reads official extracted directories or archives without extraction. Counts all COCO-like metadata
 for one official split family only. Does not infer metric resource geometry,
 formal rule state, incident timing, or real traffic-flow probabilities.
 """
@@ -23,6 +23,33 @@ def archive(root, names):
             p=folder/name
             if p.is_file(): return p
     raise FileNotFoundError('missing archive: '+', '.join(names))
+
+
+class DirectoryMember:
+    def __init__(self, path, root):
+        self.path=path
+        self.filename=path.relative_to(root).as_posix()
+    def is_dir(self): return False
+
+class DirectoryReader:
+    def __init__(self, root): self.root=root
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+    def infolist(self):
+        return [DirectoryMember(p,self.root) for p in sorted(self.root.rglob('*')) if p.is_file()]
+    def read(self, member): return member.path.read_bytes()
+
+
+def locate(root, dirs, archives):
+    # Prefer explicitly extracted scene tree; do not recurse into pathways.
+    for name in dirs:
+        p=root/name
+        if p.is_dir(): return p
+    return archive(root, archives)
+
+
+def reader(path):
+    return DirectoryReader(path) if path.is_dir() else zipfile.ZipFile(path)
 
 
 def index(z):
@@ -53,15 +80,16 @@ def positive_int(x): return type(x) is int and x>0
 def audit(root: Path, sample_per_split=6, plot=None):
     from PIL import Image, ImageDraw
     if type(sample_per_split) is not int or sample_per_split<=0: raise ValueError('positive sample required')
-    files={'annotations':archive(root,('annotations.zip',)), 'images':archive(root,('images.zip',)),
-           'semantic':archive(root,('sem_seg_labels.zip','sem_seg_lables.zip'))}
+    files={'annotations':locate(root,('annotations','scene/annotations'),('annotations.zip',)),
+           'images':locate(root,('images','scene/images'),('images.zip',)),
+           'semantic':locate(root,('gtFine','scene/gtFine','scene/sem_seg/gtFine','sem_seg/gtFine'),('sem_seg_labels.zip','sem_seg_lables.zip'))}
     out={'status':'ERROR','scope':'GPS_SPLIT_METADATA_AND_BOUNDED_PIXEL_ALIGNMENT_ONLY',
-         'archives':{k:{'path':str(p),'bytes':p.stat().st_size} for k,p in files.items()},
+         'archives':{k:{'path':str(p),'bytes':p.stat().st_size if p.is_file() else None,'storage':'directory' if p.is_dir() else 'zip'} for k,p in files.items()},
          'splits':[], 'formal_rule_labels_generated':False,'metric_resource_geometry_generated':False,
          'traffic_flow_labels_generated':False,'event_time_labels_generated':False,'full_geographic_leakage_checked':False}
     panels=[]; sets={}; all_names={}; all_keys={};
     with ExitStack() as ctx:
-        za,zi,zs=(ctx.enter_context(zipfile.ZipFile(files[k])) for k in ('annotations','images','semantic'))
+        za,zi,zs=(ctx.enter_context(reader(files[k])) for k in ('annotations','images','semantic'))
         ia,ii,iss=map(index,(za,zi,zs))
         for split in ('train','val'):
             member=unique(ia,f'instances_{split}_gps_split.json'); raw=za.read(member); data=json.loads(raw)
@@ -72,7 +100,7 @@ def audit(root: Path, sample_per_split=6, plot=None):
                 if not positive_int(r['width']) or not positive_int(r['height']): raise ValueError(f'invalid image size {i}')
                 name=PurePosixPath(r['file_name']).name
                 if name in names: raise ValueError('duplicate filename '+name)
-                names[name]=i; unique(ii,name);imfields.update(r.keys())
+                names[name]=i; unique(ii,name); unique(iss,PurePosixPath(name).stem+'_labelIds.png');imfields.update(r.keys())
             for a in anns.values():
                 i,c=a['image_id'],a['category_id']; r=images[i]; cat=categories[c]['name']
                 box=a['bbox']
@@ -97,8 +125,10 @@ def audit(root: Path, sample_per_split=6, plot=None):
                 stem=PurePosixPath(name).stem; mask_info=unique(iss,stem+'_labelIds.png')
                 with Image.open(io.BytesIO(zs.read(mask_info))) as src:
                     src.load(); mask_size=src.size; mask_mode=src.mode; extrema=src.getextrema()
+                    if mask_mode not in ('L','P','I','I;16','I;16B','I;16L'): raise ValueError('labelIds must be scalar or palette indices: '+name)
+                    hist=Counter(src.get_flattened_data() if hasattr(src,'get_flattened_data') else src.getdata())
                 if mask_size!=image.size: raise ValueError('image / labelIds size mismatch: '+name)
-                samples.append({'image':name,'size':list(image.size),'mask_mode':mask_mode,'mask_extrema':extrema,'annotations':len(byimage[r['id']])})
+                samples.append({'image':name,'size':list(image.size),'mask_mode':mask_mode,'mask_extrema':extrema,'mask_pixel_counts':dict(hist),'annotations':len(byimage[r['id']])})
                 if plot is not None:
                     draw=ImageDraw.Draw(image)
                     for a in byimage[r['id']]:

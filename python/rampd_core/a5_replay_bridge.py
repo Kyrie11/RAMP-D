@@ -79,6 +79,10 @@ class A5World:
     timed_resource_slices: tuple = ()
     # Declared per-atom continuous response models (no globally reused tubes).
     actor_models: tuple[ActorEnvelope, ...] = ()
+    # Optional mode-conditioned independently declared schedule slabs. The
+    # same public control is still checked for every atom, but impossible
+    # cross-world rule/state combinations are not introduced.
+    timed_slices_by_mode: tuple = ()
 
     def __post_init__(self):
         models=tuple(self.actor_models); actor_keys(models)
@@ -87,6 +91,10 @@ class A5World:
             raise ValueError("cannot mix legacy external tubes with per-atom actor models")
         rows=tuple((a,b,tuple(ss)) for a,b,ss in self.timed_resource_slices)
         object.__setattr__(self,'timed_resource_slices',rows)
+        by_mode=tuple((m,tuple((a,b,tuple(ss)) for a,b,ss in rr)) for m,rr in self.timed_slices_by_mode)
+        if by_mode and (not rows or len({m for m,_ in by_mode})!=len(by_mode) or any(not isinstance(m,str) or not m or not rr for m,rr in by_mode)):
+            raise ValueError('invalid mode-conditioned physical schedules')
+        object.__setattr__(self,'timed_slices_by_mode',tuple(sorted(by_mode,key=lambda r:r[0])))
         for name in ('other_actors', 'regions', 'resource_states', 'conflicts'):
             value = getattr(self, name)
             object.__setattr__(self, name, tuple(tuple(x) for x in value) if name in ('other_actors', 'conflicts') else tuple(value))
@@ -147,6 +155,8 @@ def a5_world_digest(world: A5World) -> str:
         body['actor_models']=[asdict(m) for m in sorted(world.actor_models,key=lambda m:m.actor_id)]
     if world.timed_resource_slices:
         body['timed_resource_slices']=[(str(a),str(b),[asdict(s) for s in ss]) for a,b,ss in world.timed_resource_slices]
+    if world.timed_slices_by_mode:
+        body['timed_slices_by_mode']=[(m,[(str(a),str(b),[asdict(s) for s in ss]) for a,b,ss in rr]) for m,rr in world.timed_slices_by_mode]
     return _canonical_hash('a5-world-sha256:',body)
 
 
@@ -232,6 +242,9 @@ def _check_timed_resources(tube, world, step, source_atom=None):
     from dataclasses import replace
     from itertools import combinations
     rows=world.timed_resource_slices
+    if world.timed_slices_by_mode:
+        if source_atom is None: return False
+        rows=dict(world.timed_slices_by_mode).get(source_atom.mode_dict.get('protocol_state'),())
     if not rows or world.other_actors or rows[0][0]!=0 or rows[-1][:2]!=(step,step):
         return False
     if (any(type(a) is not Fraction or type(b) is not Fraction or not 0<=a<=b<=step
@@ -321,6 +334,8 @@ def replay_a5_physical(ctx: EvidenceContext, contract: SCContract,
                 world.ego_disturbance is None or len(world.ego_disturbance) != 6 or
                 not all(isinstance(w, Interval) for w in world.ego_disturbance) or
                 safe_domain.friction != world.ego_params):
+            return False
+        if world.timed_slices_by_mode and {m for m,_ in world.timed_slices_by_mode}!={a.mode_dict.get('protocol_state') for a in ctx.cell.atoms}:
             return False
         tube = obligation.tube
         if (not isinstance(tube, TubeResult) or tube.status is not TubeStatus.VALIDATED or

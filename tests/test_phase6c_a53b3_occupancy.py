@@ -19,7 +19,9 @@ def test_strict_interior_and_monotone_exit_no_reentry():
     assert no_new_entry_proved(start,end,r,(Interval(0,5),z),z)
     assert not no_new_entry_proved(start,end,r,(Interval(-1,5),z),z)
     assert not no_new_entry_proved(start,end,r,(Interval(0,5),z),Interval(-1,1))
-    assert not no_new_entry_proved(fp(Interval.point(1)),end,r,(Interval(0,5),z),z) # boundary touch
+    assert no_new_entry_proved(fp(Interval.point(1)),end,r,(Interval(0,5),z),z) # center strictly inside; fixed-heading Minkowski proof
+    assert no_new_entry_proved(fp(Interval.point(2.5)),fp(Interval(2.5,4),Q(0),Q(1)),r,(Interval(0,5),z),z) # partial overlap with center outside
+    assert not no_new_entry_proved(fp(Interval.point(3)),end,r,(Interval(0,5),z),z) # mere boundary contact
     assert no_new_entry_proved(start,fp(Interval(-.1,.1),Q(0),Q(1)),r,(Interval(-1,1),z),Interval(-1,1))
 
 def test_drain_incumbent_accepted_entering_or_stay_closed_rejected():

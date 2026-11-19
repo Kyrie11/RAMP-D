@@ -60,11 +60,13 @@ class WorkZoneInterlock:
     command_id: str | None = None
     command_time: Fraction | None = None
     report_signature: tuple = ()
+    clearance_required: Fraction | None = None
 
     def __post_init__(self):
         if not self.event_id or not self.resource_id or type(self.version) is not int or self.version<0 or not self.report_signature:
             raise ValueError('invalid work-zone identity or missing report signature')
         exact(self.last_tick)
+        if self.clearance_required is not None and exact(self.clearance_required)<=0: raise ValueError("invalid clearance requirement")
         if self.phase not in ('OPEN','DRAIN','DEPLOY_PENDING','BLOCKED','REMOVE_PENDING'):
             raise ValueError('invalid interlock phase')
         if self.empty_since is not None and (self.phase!='DRAIN' or exact(self.empty_since)>self.last_tick):
@@ -111,6 +113,9 @@ def advance_interlock(report, state, observation, *, tick, clearance, ack=None):
         raise ValueError('nonconsecutive synchronized measurement')
     if (observation.event_id,observation.version,observation.resource_id)!=(state.event_id,state.version,state.resource_id):
         raise ValueError("clearance evidence scope mismatch")
+    if state.clearance_required is not None and state.clearance_required!=clearance:
+        raise ValueError("clearance timing plan changed without reconciliation")
+    state=replace(state,clearance_required=clearance)
     t=observation.end
     active=report.effective_on<=t<report.effective_off
     # The tick-based reference does not skip a complete sub-tick activation.
@@ -119,7 +124,7 @@ def advance_interlock(report, state, observation, *, tick, clearance, ack=None):
     def fresh(phase,command=None,empty=None):
         return WorkZoneInterlock(state.event_id,state.version,state.resource_id,phase,t,empty,
                                  None if command is None else f'{state.event_id}:{state.version}:{state.resource_id}:{command}:{t}',
-                                 None if command is None else t,state.report_signature)
+                                 None if command is None else t,state.report_signature,state.clearance_required)
     def acknowledged(physical):
         return (ack is not None and isinstance(ack,BarrierAck) and ack.settled and
                 (ack.event_id,ack.version,ack.resource_id,ack.command_id)==

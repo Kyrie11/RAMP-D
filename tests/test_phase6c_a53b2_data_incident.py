@@ -64,3 +64,18 @@ def test_taper_units_and_table_gap():
     assert merging_taper_m(Q('3.6'),Q(30))==54
     assert merging_taper_m(Q('3.6'),Q(45))==162
     with pytest.raises(ValueError): merging_taper_m(Q('3.6'),Q(42))
+
+
+def test_parallel_dispatch_not_universal_order():
+    t=timeline()
+    with pytest.raises(ValueError): replace(t,verification=Q(9))
+    assert replace(t,verification=Q(9),response_profile='PARALLEL_DISPATCH').duration('lanes_available')==10
+    with pytest.raises(ValueError): replace(t,dispatch=Q(11),response_profile='PARALLEL_DISPATCH')
+
+
+def test_publication_separate_from_issue_and_effectivity():
+    r=IncidentRuleRecord('incident','lane','DOT','test area',1,Q(5),Q(14),Q(4),Q(8),Q(3),False,True,'fixture',publication=Q(6))
+    assert r.audit(timeline())
+    with pytest.raises(ValueError): replace(r,publication=Q(9))
+    with pytest.raises(ValueError): replace(r,publication=Q(3))
+    with pytest.raises(ValueError): replace(r,receipt=None,publication=Q(21)).audit(timeline())
