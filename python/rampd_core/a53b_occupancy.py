@@ -5,7 +5,7 @@ is an incumbent relative to the current planning horizon. All later boundary
 instants inherit continuous state. No sampled endpoint transition is a proof.
 """
 from .footprint import SweptFootprint
-from .resources import ResourceRegion
+from .resources import ResourceRegion, strict_rectangular_overlap
 from .interval import Interval, sin, cos
 
 
@@ -25,22 +25,23 @@ def no_new_entry_proved(start: SweptFootprint, swept: SweptFootprint,
     are prefix intervals, so is their intersection. The union over material
     points is also a prefix interval. Thus an exit cannot be followed by entry.
     For partial initial overlap the four configuration-space facet projections
-    must instead be monotone and a fixed material point strictly inside.
+    must instead be monotone and strict overlap for every possible initial pose.
     The caller must bind all inputs to the same verified continuous trajectory.
     """
     if (start.start_time != start.end_time or start.start_time != swept.start_time
         or start.geometry != swept.geometry or start.vehicle_id != swept.vehicle_id):
         return False
     initial_inside = strictly_inside(start, region)
-    if initial_inside and strictly_inside(swept, region):
+    # Every pose in the slab overlaps strictly, even with changing heading.
+    if (initial_inside and strictly_inside(swept, region)) or (
+            strict_rectangular_overlap(start,region) and strict_rectangular_overlap(swept,region)):
         return True
     if yaw_rate.lo != 0 or yaw_rate.hi != 0 or len(velocity)!=2:
         return False
     monotone=lambda v: v.lo>=0 or v.hi<=0
     if not all(monotone(v) for v in velocity): return False
     if initial_inside: return True
-    # More general: prove strict initial overlap using a fixed material point
-    # (center or corner). For a fixed heading, the set of reference positions
+    # More general: prove strict initial overlap using interval SAT. For a fixed heading, the set of reference positions
     # whose body intersects the rectangular resource is a convex Minkowski sum.
     # Its facet normals are the two world axes and the two body axes. If each
     # of the four projected velocities has fixed sign, every defining slab
@@ -49,11 +50,4 @@ def no_new_entry_proved(start: SweptFootprint, swept: SweptFootprint,
     psi=start.state_tube.psi; c,s=cos(psi),sin(psi)
     vx,vy=velocity
     if not monotone(c*vx+s*vy) or not monotone(-s*vx+c*vy): return False
-    g=start.geometry; px,py=start.state_tube.px,start.state_tube.py
-    hl,hw=g.half_length_interval,g.half_width_interval
-    ox,oy=Interval.point(g.center_offset_x_m),Interval.point(g.center_offset_y_m)
-    for i,j in ((0,0),(-1,-1),(-1,1),(1,-1),(1,1)):
-        bx=ox+i*hl; by=oy+j*hw
-        x=px+c*bx-s*by; y=py+s*bx+c*by
-        if region.x.lo<x.lo<=x.hi<region.x.hi and region.y.lo<y.lo<=y.hi<region.y.hi: return True
-    return False
+    return strict_rectangular_overlap(start,region)

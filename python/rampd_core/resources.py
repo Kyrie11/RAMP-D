@@ -2,7 +2,7 @@
 
 Resource occupancy is evaluated from swept full-body AABBs.  Overlap means
 ``MAYBE_OCCUPIED`` and is charged to capacity; only a proved separating AABB
-returns ``PROVED_FREE``.  This deliberately prefers ``UNKNOWN`` to silently
+or a uniformly separating interval SAT inequality returns ``PROVED_FREE``.  This deliberately prefers ``UNKNOWN`` to silently
 under-counting a vehicle or treating an entry gate as a collision-free point.
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from .footprint import SweptFootprint
-from .interval import Interval
+from .interval import Interval, sin, cos
 
 
 class OccupancyStatus(str, Enum):
@@ -102,8 +102,49 @@ def _aabb_separated(aabb, region: ResourceRegion):
             aabb.y.hi < region.y.lo or aabb.y.lo > region.y.hi)
 
 
+def _abs_interval(x: Interval) -> Interval:
+    """Outward absolute value: endpoint magnitudes are exact binary64 values."""
+    return Interval(0.0 if x.lo <= 0 <= x.hi else min(abs(x.lo),abs(x.hi)),
+                    max(abs(x.lo),abs(x.hi)))
+
+
+def rectangular_sat_bounds(fp: SweptFootprint, region: ResourceRegion):
+    """Four exact SAT axis formulas enclosed for *every* pose in the tube.
+
+    The body axes vary with heading; the formulas are evaluated with directed
+    interval arithmetic, not midpoint axes or two overlapping outer boxes.
+    Return (absolute center separation, combined support radius) per axis.
+    """
+    px,py,psi=fp.state_tube.px,fp.state_tube.py,fp.state_tube.psi
+    c,s=cos(psi),sin(psi); ac,ass=_abs_interval(c),_abs_interval(s)
+    g=fp.geometry; hx,hy=g.half_length_interval,g.half_width_interval
+    ox,oy=Interval.point(g.center_offset_x_m),Interval.point(g.center_offset_y_m)
+    xl,xh=Interval.point(region.x.lo),Interval.point(region.x.hi)
+    yl,yh=Interval.point(region.y.lo),Interval.point(region.y.hi)
+    rx,ry=(xh-xl)/2,(yh-yl)/2
+    dx=px-(xl+xh)/2;dy=py-(yl+yh)/2
+    # Body projections of the reference displacement plus the body offsets.
+    # Do not numerically apply R^T R to those offsets: the rotation is exact.
+    return (( _abs_interval(dx+c*ox-s*oy),rx+hx*ac+hy*ass),
+            ( _abs_interval(dy+s*ox+c*oy),ry+hx*ass+hy*ac),
+            ( _abs_interval(c*dx+s*dy+ox),hx+rx*ac+ry*ass),
+            ( _abs_interval(-s*dx+c*dy+oy),hy+rx*ass+ry*ac))
+
+
+def strict_rectangular_overlap(fp: SweptFootprint, region: ResourceRegion) -> bool:
+    """Every enclosed pose has positive-area intersection (no touch-only)."""
+    return (region.x.lo < region.x.hi and region.y.lo < region.y.hi and
+            all(d.hi < r.lo for d,r in rectangular_sat_bounds(fp,region)))
+
+
+def rectangular_separated(fp: SweptFootprint, region: ResourceRegion) -> bool:
+    """A separating inequality holds uniformly; contact is not separation."""
+    return any(d.lo > r.hi for d,r in rectangular_sat_bounds(fp,region))
+
+
 def occupancy(actor: ActorFootprint, region: ResourceRegion) -> Occupancy:
-    if _aabb_separated(actor.swept.aabb, region):
+    aabb_free = _aabb_separated(actor.swept.aabb, region)
+    if aabb_free or rectangular_separated(actor.swept, region):
         # ``already_inside`` is part of the resource contract.  A declared
         # in-resource actor cannot be silently discharged by a geometrically
         # disjoint swept outer approximation; the two pieces of evidence are
@@ -113,7 +154,7 @@ def occupancy(actor: ActorFootprint, region: ResourceRegion) -> Occupancy:
                              OccupancyStatus.MAYBE_OCCUPIED, actor.demand,
                              "DECLARED_INSIDE_BUT_FOOTPRINT_SEPARATED")
         return Occupancy(actor.actor_id, region.resource_id, OccupancyStatus.PROVED_FREE, 0,
-                         "FULL_FOOTPRINT_AABB_SEPARATED")
+                         "FULL_FOOTPRINT_AABB_SEPARATED" if aabb_free else "FULL_FOOTPRINT_INTERVAL_SAT_SEPARATED")
     # The AABB overlap proves only possibility; it is intentionally charged
     # against capacity instead of being interpreted as no occupancy.
     if actor.demand_unit != region.demand_unit or actor.demand % actor.demand_unit:
@@ -165,7 +206,7 @@ def check_resources(states: tuple[ResourceState, ...], regions: tuple[ResourceRe
                     unresolved.append(f"DIRECTION_NOT_ALLOWED_POSSIBLE:{actor.actor_id}:{rid}")
                 if rid not in actor.already_inside and not state.alpha:
                     unresolved.append(f"ENTRY_CLOSED_POSSIBLE:{actor.actor_id}:{rid}")
-                if rid in actor.already_inside and not state.beta:
+                if not state.beta:  # possible swept occupancy can persist after entry
                     unresolved.append(f"STAY_CLOSED_POSSIBLE:{actor.actor_id}:{rid}")
         load = sum(item.load for _, item in current)
         if load > state.capacity:

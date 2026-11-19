@@ -166,3 +166,7 @@ Run `python scripts/verify_release.py` then `bash scripts/validate_phase6c_a5_3.
 `python scripts/validate_a5_logged_labels.py --womd-root /data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed/scenario --av2-root /data0/senzeyu2/dataset/Argoverse2/motion --max-records 60 --max-files 6 --prefix-steps 10 --output reports/a5_3_logged_labels.json`
 
 Optional Waymax in compatible environment: `python scripts/probe_waymax.py --tf-example-file /data0/senzeyu2/dataset/waymo_open_dataset_motion_v_1_3_1/uncompressed/tf_example/validation/validation_tfexample.tfrecord-00000-of-00150 --output reports/waymax_probe.json --plot reports/waymax_logged.png`. Supply an actual local WOMD 1.3.1 TFExample shard; no counterfactual or safety certificate is generated.
+
+
+## Phase 6C-A5/3b-5 current entry point
+Use a new empty checkout; `python scripts/verify_release.py`, then `bash scripts/validate_phase6c_a5_3b5.sh`. See `docs/PHASE6C_A5_3B5_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B5_ROADMAP.md`. Optional independent runtime gates: `scripts/probe_waymax_response.py --help`, `scripts/probe_sumo_alternating.py --help`, `scripts/audit_511ny.py --help`. The math gate never implies those runtime gates passed. No production counterfactual/proof labels or concrete full-support certificate claimed. The SUMO experiment requires SUMO/netconvert + TraCI, not CARLA yet.

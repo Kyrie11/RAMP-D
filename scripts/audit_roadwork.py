@@ -103,15 +103,21 @@ def member_for_image(idx, file_name, split):
     in that case a basename alone is not enough to establish alignment.
     """
     parts = _parts(file_name)
+    if any(q in parts[:-1] for q in ('train','val') if q != split):
+        raise ValueError(f'COCO filename points to contrary split: {file_name}')
     rows = idx.get(parts[-1], [])
     if len(rows) == 1:
         member = rows[0]
         dirs = PurePosixPath(member.filename).parts[:-1]
-        if any(s in dirs for s in ('train', 'val')) and split not in dirs:
+        if any(s in dirs for s in ('train', 'val') if s != split):
             raise ValueError(f'missing {split} image: {file_name}; exists only in {member.filename}')
         return member
     if not rows:
         raise ValueError(f'missing image for {split}: {file_name}')
+    # Reject contrary split before any suffix resolution.
+    rows = [r for r in rows if not any(q in PurePosixPath(r.filename).parts[:-1] for q in ('train','val') if q != split)]
+    if not rows:
+        raise ValueError(f'missing {split} image: {file_name}')
     # If full/relative COCO path is available, prefer an exact suffix match.
     if len(parts) > 1:
         path_matches = [r for r in rows if tuple(PurePosixPath(r.filename).parts[-len(parts):]) == parts]
@@ -133,7 +139,7 @@ def member_for_mask(idx, name, split):
     collide; conversely, it rejected otherwise unambiguous split-local files.
     """
     rows = idx.get(name, [])
-    split_rows = [r for r in rows if split in PurePosixPath(r.filename).parts[:-1]]
+    split_rows = [r for r in rows if split in PurePosixPath(r.filename).parts[:-1] and not any(s in PurePosixPath(r.filename).parts[:-1] for s in ('train','val') if s != split)]
     other_rows = [r for r in rows if any(s in PurePosixPath(r.filename).parts[:-1]
                                       for s in ('train', 'val') if s != split)]
     if len(split_rows) == 1:
@@ -192,6 +198,7 @@ def audit(root: Path, sample_per_split=6, plot=None):
                          'storage': 'directory' if p.is_dir() else 'zip'} for k, p in files.items()},
         'splits': [], 'formal_rule_labels_generated': False,
         'metric_resource_geometry_generated': False, 'traffic_flow_labels_generated': False,
+        'semantic_class_mapping_verified': False,
         'event_time_labels_generated': False, 'full_geographic_leakage_checked': False,
     }
     panels = []
@@ -215,6 +222,8 @@ def audit(root: Path, sample_per_split=6, plot=None):
             anfields = Counter()
             percat = Counter()
             imagecats = defaultdict(set)
+            usable_cats = defaultdict(set)
+            usable_percat = Counter()
             sizes = defaultdict(list)
             byimage = defaultdict(list)
             segtypes = Counter()
@@ -278,6 +287,8 @@ def audit(root: Path, sample_per_split=6, plot=None):
                 byimage[image_id].append(ann)
                 if not degenerate and not outside:
                     usable_bbox_geometry_count += 1
+                    usable_cats[image_id].add(category)
+                    usable_percat[category] += 1
                     sizes[category].append(w * h / (image_record['width'] * image_record['height']))
                 anfields.update(ann.keys())
                 seg = ann.get('segmentation')
@@ -288,6 +299,9 @@ def audit(root: Path, sample_per_split=6, plot=None):
                 for j, left in enumerate(cats):
                     for right in cats[j + 1:]:
                         pairs[(left, right)] += 1
+            usable_pairs = Counter(pair for values in usable_cats.values()
+                                   for i,left in enumerate(sorted(values))
+                                   for pair in ((left,right) for right in sorted(values)[i+1:]))
             keys = sorted(names)
             count = min(sample_per_split, len(keys))
             selected = [keys[i * len(keys) // count] for i in range(count)]
@@ -306,11 +320,14 @@ def audit(root: Path, sample_per_split=6, plot=None):
                     if mask_mode not in ('L', 'P', 'I', 'I;16', 'I;16B', 'I;16L'):
                         raise ValueError(f'{split} labelIds must be scalar or palette indices: {name} ({mask_mode})')
                     hist = _pixel_counts(src)
+                    if sum(hist.values()) != mask_size[0]*mask_size[1] or any(type(k) is not int or not 0 <= k <= 65535 for k in hist):
+                        raise ValueError(f'{split} invalid scalar labelIds histogram: {name}')
                 if mask_size != image.size:
                     raise ValueError(f'{split} image / labelIds size mismatch: {name} '
                                      f'{image.size} vs {mask_size}')
                 samples.append({'image': name, 'size': list(image.size), 'mask_mode': mask_mode,
                                 'mask_extrema': extrema, 'mask_pixel_counts': hist,
+                                'mask_ids_outside_uint8': sorted(k for k in hist if k > 255),
                                 'annotations': len(byimage[image_record['id']])})
                 if plot is not None:
                     # Draw after resizing so boxes remain visible and memory use stays bounded.
@@ -320,7 +337,7 @@ def audit(root: Path, sample_per_split=6, plot=None):
                     draw = ImageDraw.Draw(image)
                     for ann in byimage[image_record['id']]:
                         x, y, w, h = ann['bbox']
-                        if w == 0 or h == 0:  # no spatial support; don't draw a fake 1px obstacle
+                        if w == 0 or h == 0 or x < 0 or y < 0 or x+w > full_w+1e-6 or y+h > full_h+1e-6:  # no usable geometry
                             continue
                         draw.rectangle((x * scale_x, y * scale_y, (x+w) * scale_x,
                                         (y+h) * scale_y), outline='yellow', width=1)
@@ -334,6 +351,9 @@ def audit(root: Path, sample_per_split=6, plot=None):
                 'images': len(images), 'annotations': len(anns),
                 'categories': sorted(set(c['name'] for c in categories.values())),
                 'category_instances': dict(percat),
+                'geometry_usable_category_instances': dict(usable_percat),
+                'geometry_usable_cooccurrence_image_counts': [{'categories': list(k), 'images': v} for k,v in sorted(usable_pairs.items())],
+                'geometry_usable_category_image_counts': dict(Counter(c for v in usable_cats.values() for c in v)),
                 'category_image_counts': dict(Counter(c for v in imagecats.values() for c in v)),
                 'median_relative_bbox_area': {k: statistics.median(v) for k, v in sizes.items()},
                 'cooccurrence_image_counts': [{'categories': list(k), 'images': v} for k, v
