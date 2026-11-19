@@ -1,3 +1,9 @@
+# A5/3b-6 (0.9.11)
+
+A55 server: 625 Python, 3 native tests. This increment adds declared joint guard propagation, smooth-stop/IDM diagnostics, logical traffic comfort/drain checks, raw visual semantics, and 511 report histogram validation. Not integrated real-scene SC, physical simulator certification or training label production. See `docs/PHASE6C_A5_3B6_ACCEPTANCE.md`. Validate: `bash scripts/validate_phase6c_a5_3b6.sh`.
+
+---
+
 # ROADWork real-data audit: zero-extent bbox compatibility update (2026-11-19)
 
 The updated `scripts/audit_roadwork.py` reports boundary/zero-area COCO bbox records as data-quality warnings without fabricating positive obstacle geometry. Negative/nonfinite/out-of-image data still fails or requires review. The unchanged ROADWork CLI and extracted dataset layout are supported; see `docs/ROADWORK_ZERO_EXTENT_BBOX_20261119.md`. For this **new** release, `python scripts/verify_release.py` checks the corresponding updated manifest. The real server ROADWork run is still pending.

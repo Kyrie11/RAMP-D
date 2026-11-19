@@ -51,7 +51,10 @@ class ExternalReport:
 
 @dataclass(frozen=True)
 class FlowSnapshot:
-    """Counts at START of a tick, exact simulator time. No ego action input."""
+    """Counts at a decision boundary; timestamp is the state observation time.
+    An advance() from the preceding boundary controls the *next* interval.
+    No direct ego action input; dependence flows through physical state.
+    """
     time: Fraction
     queue_a: int
     queue_b: int

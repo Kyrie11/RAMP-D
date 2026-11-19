@@ -48,10 +48,11 @@ class IncidentTimeline:
     normal_flow: Fraction | None = None
     evidence_ref: str = ''
     response_profile: str = 'VERIFY_THEN_DISPATCH'
+    incident_occurrence: Fraction | None = None  # FHWA T0, not assumed equal to trigger
     def __post_init__(self):
         exact(self.cutoff)
         if not self.evidence_ref or self.cutoff<self.incident.trigger: raise ValueError('timeline evidence/cutoff required')
-        names=('hazard_on','first_authority_awareness','verification','dispatch','responder_arrival','blocked_lane_physically_clear','lanes_available','last_responder_left','normal_flow')
+        names=('incident_occurrence','hazard_on','first_authority_awareness','verification','dispatch','responder_arrival','blocked_lane_physically_clear','lanes_available','last_responder_left','normal_flow')
         for k in names:
             t=getattr(self,k)
             if t is not None and not self.incident.trigger<=exact(t)<=self.cutoff: raise ValueError(f'{k} outside observation window')
@@ -67,6 +68,10 @@ class IncidentTimeline:
             for k in ('verification','dispatch','responder_arrival'): ordered('first_authority_awareness',k)
             ordered('dispatch','responder_arrival')
         else: raise ValueError('unknown response profile')
+        ordered('incident_occurrence','first_authority_awareness')
+        ordered('incident_occurrence','normal_flow')
+        ordered('hazard_on','normal_flow')
+        ordered('blocked_lane_physically_clear','normal_flow')
         ordered('hazard_on','blocked_lane_physically_clear')
         ordered('blocked_lane_physically_clear','lanes_available')
         ordered('first_authority_awareness','lanes_available')
@@ -77,7 +82,9 @@ class IncidentTimeline:
             raise ValueError('lane reopening requires observed physical blocker clearance in this mechanism')
     def duration(self, endpoint):
         if endpoint not in ('lanes_available','last_responder_left','normal_flow'): raise ValueError('unrecognized TIM endpoint')
-        start=self.first_authority_awareness; end=getattr(self,endpoint)
+        # T5-T1 and T6-T1 are RCT/ICT. T7-T0 is time to return to normal flow.
+        start=self.incident_occurrence if endpoint=='normal_flow' else self.first_authority_awareness
+        end=getattr(self,endpoint)
         # Missing log is unknown, not necessarily right-censored. No
         # assumption of continuous logging/monitoring is made here.
         return None if start is None or end is None else end-start

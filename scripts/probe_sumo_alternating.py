@@ -59,8 +59,22 @@ def swept_occupants(before,after,bounds,departed,arrived):
     return occupied,entries
 
 
+
+def comfortable_switch_ready(vehicles,bounds,direction,*,reaction_s=.1,decel_mps2=4.,buffer_m=.0):
+    """Experimental stop-feasibility screen, NOT a proof of actual behavior.
+    Only the terminating movement, upstream fronts, fixed planning parameters.
+    """
+    if direction not in ROUTES or not all(math.isfinite(x) for x in (reaction_s,decel_mps2,buffer_m)) or reaction_s<0 or decel_mps2<=0 or buffer_m<0:raise ValueError('invalid comfort assumptions')
+    bad=[];line=bounds[direction][0]
+    for vid,v in vehicles.items():
+        if v.route!=direction or not v.front<line or v.speed==0:continue
+        d=line-v.front;stop=v.speed*reaction_s+v.speed*v.speed/(2*decel_mps2)+buffer_m
+        if d<stop:bad.append((vid,d,stop))
+    return not bad,tuple(sorted(bad))
+
 def run(a):
     from rampd_core.a54_signal import SignalPlan,SignalController
+    from rampd_core.a56_guard import GuardCase,GuardParent,advance_support
     from rampd_core.a53_rule_models import FlowSnapshot
     from rampd_core.a53b_interlock import ClearanceObservation
     import traci
@@ -68,7 +82,7 @@ def run(a):
     netconvert=shutil.which(a.netconvert);sumo=shutil.which(a.sumo)
     if not netconvert or not sumo:raise RuntimeError('sumo and netconvert executables required; check eclipse-sumo installation and PATH')
     network(work,netconvert)
-    traci.start([sumo,'-n',str(work/'network.xml'),'-r',str(work/'routes.xml'),'--step-length','0.1','--seed',str(a.seed),'--time-to-teleport','-1','--collision.action','warn','--collision.check-junctions','true','--no-step-log','true','--log',str(work/'sumo.log')])
+    traci.start([sumo,'-n',str(work/'network.xml'),'-r',str(work/'routes.xml'),'--step-length','0.1','--step-method.ballistic','false','--seed',str(a.seed),'--time-to-teleport','-1','--collision.action','warn','--collision.check-junctions','true','--no-step-log','true','--log',str(work/'sumo.log')])
     try:
         lengths={e:traci.lane.getLength(e+'_0') for r in ROUTES.values() for e in r};bounds={d:(lengths[r[0]],lengths[r[0]]+lengths[r[1]]) for d,r in ROUTES.items()}
         links={};
@@ -98,30 +112,46 @@ def run(a):
                 if not all(math.isfinite(v) for v in (front,length,speed)) or speed<0 or length<=0:raise ValueError('bad vehicle state')
                 rows[vid]=Vehicle(d,front,length,speed)
             return rows
-        p=SignalPlan(Q(1,10),Q(12),Q(25),Q(3),Q(10),Q(1),1,'MUTCD 4O demonstration timings, not field design')
+        p=SignalPlan(Q(1,10),Q(12),Q(25),Q(3),Q(10),Q(1),1,'MUTCD 4O demonstration timings, not field design',Q(a.max_green_extension_s) if a.comfort_guard else Q(0))
         c=SignalController.initial('sumo-demo',1,'logical-corridor',p);before=snapshot()
         if before:raise ValueError('fixture must initialize empty')
-        apply(c);rows=[];violations=[];through=CounterLike();transitions=[];vehicle_trace=[]
+        apply(c);rows=[];violations=[];through=CounterLike();transitions=[];vehicle_trace=[];roster=[];braking=[];switch_blocks=[];guard_exhausted=False
         for k in range(1,a.steps+1):
             old_phase=c.phase;old_displays=c.displays;traci.simulationStep();t=Q(k,10)
             if abs(traci.simulation.getTime()-float(t))>1e-6:raise ValueError('SUMO time mismatch')
             if traci.simulation.getStartingTeleportIDList() or traci.simulation.getEndingTeleportIDList():raise ValueError('teleport invalidates route sweep')
-            after=snapshot();occ,entries=swept_occupants(before,after,bounds,traci.simulation.getDepartedIDList(),traci.simulation.getArrivedIDList())
+            after=snapshot();departed=tuple(traci.simulation.getDepartedIDList());arrived=tuple(traci.simulation.getArrivedIDList());occ,entries=swept_occupants(before,after,bounds,departed,arrived)
+            roster.append(dict(time_s=float(t),departed=departed,arrived=arrived))
+            for vid in before.keys()&after.keys():
+                dec=(before[vid].speed-after[vid].speed)/.1
+                if dec>4.01:braking.append(dict(time_s=float(t),id=vid,deceleration_mps2=dec,phase=old_phase))
             if occ['A'] and occ['B']:violations.append([str(t),'opposing_swept_occupancy'])
             for d,disp in zip('AB',old_displays):
                 if disp=='RED' and entries[d]:violations.append([str(t),'red_entry',d,sorted(entries[d])])
                 through[d]+=len(entries[d])
             if traci.simulation.getCollidingVehiclesIDList():violations.append([str(t),'sumo_collision'])
-            queues={d:sum(v.route==d and v.front<bounds[d][0] and v.speed<.1 for v in after.values()) for d in 'AB'}
+            queues={d:sum(v.route==d and bounds[d][0]-a.detector_range_m<=v.front<bounds[d][0] and v.speed<.1 for v in after.values()) for d in 'AB'}
             current=sum(v.front>=bounds[v.route][0] and v.front-v.length<=bounds[v.route][1] for v in after.values())
             evidence=ClearanceObservation(c.last_tick,t,True,not any(occ.values()),'SUMO monotone route sweep fixture',c.controller_id,c.version,c.resource_id)
-            c=c.advance(FlowSnapshot(t,queues['A'],queues['B'],current),evidence);apply(c)
+            flow=FlowSnapshot(t,queues['A'],queues['B'],current)
+            ready,blocking=comfortable_switch_ready(after,bounds,old_phase[0]) if a.comfort_guard and old_phase.endswith('GREEN') else (True,())
+            if blocking:switch_blocks.append(dict(time_s=float(t),phase=old_phase,vehicles=blocking))
+            try:
+                _,post=advance_support((GuardParent('runtime',c,(GuardCase('tick',flow,evidence,switch_ready=ready),)),))
+                c=post['silence'][0].controller
+            except RuntimeError as exc:
+                guard_exhausted=True;violations.append([str(t),'comfort_gate_exhausted',str(exc)])
+            if not guard_exhausted:apply(c)
             if c.phase!=old_phase:transitions.append(dict(time_s=float(t),from_phase=old_phase,to_phase=c.phase,queue_a=queues['A'],queue_b=queues['B'],sweep_empty=evidence.empty))
-            rows.append(dict(time_s=float(t),phase=old_phase,next_phase=c.phase,queue_a=queues['A'],queue_b=queues['B'],swept_a=len(occ['A']),swept_b=len(occ['B']),entries_a=len(entries['A']),entries_b=len(entries['B'])))
+            rows.append(dict(time_s=float(t),phase=old_phase,next_phase=c.phase,queue_a=queues['A'],queue_b=queues['B'],swept_a=len(occ['A']),swept_b=len(occ['B']),entries_a=len(entries['A']),entries_b=len(entries['B']),switch_ready=ready))
             for vid,v in after.items():vehicle_trace.append(dict(time_s=float(t),id=vid,direction=v.route,front_m=v.front,speed_mps=v.speed,length_m=v.length))
             before=after
-        trace=work/'vehicle_trace.jsonl';trace.write_text(''.join(json.dumps(r)+'\n' for r in vehicle_trace));good=not violations and through['A']>0 and through['B']>0 and any(r['to_phase']=='B_GREEN' for r in transitions) and any(r['to_phase']=='A_GREEN' for r in transitions)
-        return dict(status='SUMO_LOGICAL_CORRIDOR_PASS' if good else 'REVIEW_REQUIRED',scope='TRAFFIC_ACTUATED_LOGICAL_CORRIDOR_NOT_PHYSICAL_SINGLE_LANE',sumo_version=traci.getVersion(),dt_s=.1,seed=a.seed,resource_bounds_m=bounds,entries=through,transitions=transitions,violations=violations,steps=rows,trace=str(trace),physical_clearance_certified=False,training_labels_generated=False)
+            if guard_exhausted:break
+        trace=work/'vehicle_trace.jsonl';trace.write_text(''.join(json.dumps(r)+'\n' for r in vehicle_trace));(work/'roster_trace.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in roster));good=not violations and through['A']>0 and through['B']>0 and any(r['to_phase']=='B_GREEN' for r in transitions) and any(r['to_phase']=='A_GREEN' for r in transitions)
+        remaining=len(before);pending=traci.simulation.getMinExpectedNumber();drained=remaining==0 and pending==0
+        if a.require_drain and not drained:good=False
+        if a.require_comfort and braking:good=False
+        return dict(status='SUMO_LOGICAL_CORRIDOR_PASS' if good else 'REVIEW_REQUIRED',scope='TRAFFIC_ACTUATED_LOGICAL_CORRIDOR_NOT_PHYSICAL_SINGLE_LANE',sumo_version=traci.getVersion(),dt_s=.1,seed=a.seed,resource_bounds_m=bounds,entries=through,transitions=transitions,violations=violations,steps=rows,trace=str(trace),roster_trace=str(work/'roster_trace.jsonl'),comfort_guard=a.comfort_guard,detector_range_m=a.detector_range_m,max_green_extension_s=a.max_green_extension_s if a.comfort_guard else 0,comfort_review_required=bool(braking or guard_exhausted),brake_steps=braking,comfort_block_records=switch_blocks,remaining_vehicles=remaining,min_expected_number=pending,drained_at_cutoff=drained,physical_clearance_certified=False,training_labels_generated=False)
     finally:traci.close()
 
 
@@ -129,9 +159,9 @@ def CounterLike():return {'A':0,'B':0}
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--work',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);p.add_argument('--sumo',default='sumo');p.add_argument('--netconvert',default='netconvert');p.add_argument('--seed',type=int,default=17);p.add_argument('--steps',type=int,default=1800);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--work',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);p.add_argument('--sumo',default='sumo');p.add_argument('--netconvert',default='netconvert');p.add_argument('--seed',type=int,default=17);p.add_argument('--steps',type=int,default=1800);p.add_argument('--comfort-guard',action='store_true');p.add_argument('--max-green-extension-s',type=int,default=20);p.add_argument('--detector-range-m',type=float,default=200.);p.add_argument('--require-drain',action='store_true');p.add_argument('--require-comfort',action='store_true');a=p.parse_args()
     try:
-        if not 1<=a.steps<=10000:raise ValueError('invalid bounded step count')
+        if not 1<=a.steps<=10000 or not 0<=a.max_green_extension_s<=120 or not math.isfinite(a.detector_range_m) or not 0<a.detector_range_m<=200:raise ValueError('invalid bounded experiment config')
         out=run(a)
         if a.plot:
             import matplotlib;matplotlib.use('Agg')

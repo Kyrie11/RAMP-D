@@ -10,8 +10,10 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"python"))
 
 
-def run(path,steps):
+def run(path,steps,profile="constant"):
     from rampd_core.a55_motion import forward_arc
+    from rampd_core.a56_motion import smooth_stop_profile,idm_net_gap
+    smooth=smooth_stop_profile(steps) if profile=="smooth-stop" else None
     import dataclasses
     import numpy as np
     import jax.numpy as jnp
@@ -55,7 +57,10 @@ def run(path,steps):
             return a
         rows.append(snapshot().tolist())
         for k in range(steps):
-            old=snapshot();x,y,psi,vx,vy=old[0];ego_next=forward_arc(x,y,psi,math.hypot(vx,vy),acc,0.,.1)
+            old=snapshot();x,y,psi,vx,vy=old[0]
+            if smooth is not None and acc<0:
+                target_x,target_v,_=smooth[k+1];ego_next=(25.+float(target_x),0.,0.,float(target_v),0.)
+            else:ego_next=forward_arc(x,y,psi,math.hypot(vx,vy),acc,0.,.1)
             # Both decisions use the same pre-step state. No updated ego leakage.
             u=policy.update_trajectory(state).as_action()
             if not bool(np.asarray(u.valid)[follower,0]):raise ValueError('invalid IDM response')
@@ -71,16 +76,24 @@ def run(path,steps):
     # Check direction of causal response, consecutive state integration, and collisions as separate outcomes.
     min_gap=min(float(np.min(r[:,0,0]-r[:,1,0]-4.5)) for r in (a,b))
     max_residual=max(float(np.max(np.abs(np.diff(r[:,:,0],axis=0)-.05*(r[1:,:,3]+r[:-1,:,3])))) for r in (a,b))
+    # Trapezoid is exact for constant acceleration, not nonzero jerk. Compare
+    # the smooth ego path against its exact reference and keep follower separate.
+    ego_smooth_error=None
+    if smooth is not None:
+        expect=np.array([[25.+float(x),float(v)] for x,v,_ in smooth]);ego_smooth_error=float(np.max(np.abs(b[:,0,:][:,[0,3]]-expect)))
+    follower_residual=max(float(np.max(np.abs(np.diff(r[:,1,0])-.05*(r[1:,1,3]+r[:-1,1,3])))) for r in (a,b))
+    initial_gap=10.5; initial_ref=idm_net_gap(10.,10.,initial_gap)
+    initial_measured=float((a[1,1,3]-a[0,1,3])/.1)
     first_step_equal=bool(np.allclose(a[1,1],b[1,1],atol=1e-5,rtol=0))
-    good=diff<=1e-5 and ego_diff>0.1 and follower_diff>0.05 and b[-1,1,3]<a[-1,1,3] and first_step_equal and min_gap>=0 and max_residual<.02
-    return dict(status='SYNTHETIC_IDM_RESPONSE_PASS' if good else 'REVIEW_REQUIRED',scope='SYNTHETIC_TWO_VEHICLE_STRAIGHT_ROUTE_ONLY',waymax=version('waymo-waymax'),idm_source_sha256=hashlib.sha256(inspect.getsource(agents.IDMRoutePolicy).encode()).hexdigest(),dt_s=.1,steps=steps,aa_max_state_difference=diff,ab_max_ego_position_difference_m=ego_diff,ab_max_follower_speed_difference_mps=follower_diff,first_step_follower_equal=first_step_equal,min_signed_bumper_gap_m=min_gap,max_trapezoid_position_residual_m=max_residual,actor_order=['ego','follower'],state_order=['x','y','yaw','vx','vy'],rollouts={'A':a.tolist(),'AA':aa.tolist(),'B':b.tolist()},counterfactual_training_labels_generated=False,real_scene_used=False,safety_certified=False)
+    good=diff<=1e-5 and ego_diff>0.1 and follower_diff>0.05 and b[-1,1,3]<a[-1,1,3] and first_step_equal and min_gap>0 and max_residual<.02 and (ego_smooth_error is None or ego_smooth_error<2e-5)
+    return dict(status='SYNTHETIC_IDM_RESPONSE_PASS' if good else 'REVIEW_REQUIRED',scope='SYNTHETIC_TWO_VEHICLE_STRAIGHT_ROUTE_ONLY',waymax=version('waymo-waymax'),idm_source_sha256=hashlib.sha256(inspect.getsource(agents.IDMRoutePolicy).encode()).hexdigest(),dt_s=.1,steps=steps,ego_control_profile=profile,initial_geometric_gap_m=initial_gap,initial_net_gap_idm_accel_mps2=initial_ref,initial_measured_idm_accel_mps2=initial_measured,smooth_ego_reference_max_abs_error=ego_smooth_error,follower_trapezoid_residual_m=follower_residual,continuous_jerk_certificate=False,aa_max_state_difference=diff,ab_max_ego_position_difference_m=ego_diff,ab_max_follower_speed_difference_mps=follower_diff,first_step_follower_equal=first_step_equal,min_signed_bumper_gap_m=min_gap,max_trapezoid_position_residual_m=max_residual,actor_order=['ego','follower'],state_order=['x','y','yaw','vx','vy'],rollouts={'A':a.tolist(),'AA':aa.tolist(),'B':b.tolist()},counterfactual_training_labels_generated=False,real_scene_used=False,safety_certified=False)
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--tf-example-file',type=Path,required=True);p.add_argument('--steps',type=int,default=25);p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--tf-example-file',type=Path,required=True);p.add_argument('--steps',type=int,default=25);p.add_argument('--profile',choices=('constant','smooth-stop'),default='constant');p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);a=p.parse_args()
     try:
-        if not 10<=a.steps<=30:raise ValueError('fixture requires 10..30 steps')
-        out=run(a.tf_example_file,a.steps)
+        if (a.profile=='constant' and not 10<=a.steps<=30) or (a.profile=='smooth-stop' and not 50<=a.steps<=70):raise ValueError('constant fixture requires 10..30 steps; smooth-stop 50..70')
+        out=run(a.tf_example_file,a.steps,a.profile)
         if a.plot:
             import matplotlib;matplotlib.use('Agg')
             import matplotlib.pyplot as plt
