@@ -176,3 +176,7 @@ Optional Waymax in compatible environment: `python scripts/probe_waymax.py --tf-
 
 ## Phase 6C-A5/3b-5 current entry point
 Use a new empty checkout; `python scripts/verify_release.py`, then `bash scripts/validate_phase6c_a5_3b5.sh`. See `docs/PHASE6C_A5_3B5_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B5_ROADMAP.md`. Optional independent runtime gates: `scripts/probe_waymax_response.py --help`, `scripts/probe_sumo_alternating.py --help`, `scripts/audit_511ny.py --help`. The math gate never implies those runtime gates passed. No production counterfactual/proof labels or concrete full-support certificate claimed. The SUMO experiment requires SUMO/netconvert + TraCI, not CARLA yet.
+
+
+## A5/3b-7
+See `docs/PHASE6C_A5_3B7_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B7_ROADMAP.md`. Local reference tests passed; new native and simulator acceptance are pending.

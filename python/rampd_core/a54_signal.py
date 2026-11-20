@@ -41,6 +41,7 @@ class SignalController:
     empty_since: Q|None=None
     def __post_init__(self):
         if not self.controller_id or not self.resource_id or type(self.version) is not int or self.version<0 or not isinstance(self.plan,SignalPlan) or self.phase not in {d+'_'+p for d in 'AB' for p in ('GREEN','YELLOW','RED_CLEAR')} or not exact(self.since)<=exact(self.last_tick): raise ValueError('invalid controller state')
+        if (self.last_tick-self.since)/self.plan.tick % 1: raise ValueError('phase clock must be on the decision grid')
         if self.empty_since is not None and (not self.phase.endswith('RED_CLEAR') or not self.since<=exact(self.empty_since)<=self.last_tick): raise ValueError('invalid continuous clearance state')
     @classmethod
     def initial(cls,controller_id,version,resource_id,plan,time=Q(0),direction='A'):

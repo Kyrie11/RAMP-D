@@ -49,6 +49,7 @@ class IncidentTimeline:
     evidence_ref: str = ''
     response_profile: str = 'VERIFY_THEN_DISPATCH'
     incident_occurrence: Fraction | None = None  # FHWA T0, not assumed equal to trigger
+    tim_sequential_clearance_profile: bool = False  # optional reference mechanism, not universal
     def __post_init__(self):
         exact(self.cutoff)
         if not self.evidence_ref or self.cutoff<self.incident.trigger: raise ValueError('timeline evidence/cutoff required')
@@ -68,6 +69,10 @@ class IncidentTimeline:
             for k in ('verification','dispatch','responder_arrival'): ordered('first_authority_awareness',k)
             ordered('dispatch','responder_arrival')
         else: raise ValueError('unknown response profile')
+        if type(self.tim_sequential_clearance_profile) is not bool: raise ValueError('explicit reference profile required')
+        if self.tim_sequential_clearance_profile:
+            ordered('incident_occurrence','hazard_on')
+            ordered('last_responder_left','normal_flow')
         ordered('incident_occurrence','first_authority_awareness')
         ordered('incident_occurrence','normal_flow')
         ordered('hazard_on','normal_flow')

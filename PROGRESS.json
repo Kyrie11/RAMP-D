@@ -1,12 +1,12 @@
 {
-  "assurance_scope": "DECLARED_FINITE_JOINT_GUARD_AND_SIMULATOR_PREFLIGHT",
+  "assurance_scope": "LOCAL_REFERENCE_REGRESSION_PASS_NATIVE_RUNTIME_PENDING",
   "concrete_safety_certified": false,
   "current_scene_verified": false,
   "full_support_certified": false,
-  "local_limit": "A55 server 625 passed; A56 runtime probes pending; native gate pending",
+  "local_limit": "216 dependency-free + 29 finite passed; native CMake missing MPFR/GMP dev files; new simulators and 511 CSV pending",
   "manuscript_files_required": false,
-  "next_gate": "A56 full native gate; smooth-stop IDM; SUMO baseline vs comfort guard; ROADWork raw semantic extraction",
-  "phase": "6C-A5_3B6_DECLARED_JOINT_GUARD",
+  "next_gate": "A57 native full gate; official IDM internal audit resolution; SUMO stop reserve; 511 quality audit; integration of physical Post to SC",
+  "phase": "6C-A5_3B7_DECLARED_PHYSICAL_POST_GUARD",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
@@ -263,5 +263,20 @@
     "simulator_labels_generated": false,
     "full_support_certified": false,
     "training_complete": false
+  },
+  "phase6c_a5_3b7": {
+    "old_server_python": 634,
+    "old_server_native": 3,
+    "local_dependency_free_pass": 216,
+    "local_finite_pass": 29,
+    "native_tests_pending": 2,
+    "a56_runtime_reaudit": true,
+    "roadwork_annotation_audit": true,
+    "a57_native_runtime_verified": false,
+    "a57_waymax_runtime_verified": false,
+    "a57_sumo_runtime_verified": false,
+    "full_support_certified": false,
+    "physical_post_sc_integrated": false,
+    "training_labels_generated": false
   }
 }
