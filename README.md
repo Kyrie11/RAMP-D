@@ -1,3 +1,9 @@
+# RAMP-D Phase 6C-A5/3b-8 (v0.9.13)
+
+This increment independently audits uploaded A57 simulator evidence, adds exact nominal jerk-stop references, model-relative per-slab MPFR safety screening, barrier actor frame evidence, SUMO stress profiles, ROADWork visual templates, and CARLA/SUMO read-only preflight. **Not SC / task-tail / physical co-simulation certification.** See `docs/PHASE6C_A5_3B8_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B8_RUNBOOK.md`. Local 19 pure reference tests pass; 6 new native tests need user server with MPFR/GMP. Run `bash scripts/validate_phase6c_a5_3b8.sh`.
+
+---
+
 # A5/3b-6 (0.9.11)
 
 A55 server: 625 Python, 3 native tests. This increment adds declared joint guard propagation, smooth-stop/IDM diagnostics, logical traffic comfort/drain checks, raw visual semantics, and 511 report histogram validation. Not integrated real-scene SC, physical simulator certification or training label production. See `docs/PHASE6C_A5_3B6_ACCEPTANCE.md`. Validate: `bash scripts/validate_phase6c_a5_3b6.sh`.

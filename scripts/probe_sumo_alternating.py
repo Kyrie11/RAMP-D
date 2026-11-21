@@ -14,7 +14,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'python'))
 ROUTES={'A':('inA','midA','outA'),'B':('inB','midB','outB')}
 
 
-def network(work,netconvert):
+def network(work,netconvert,traffic=None):
     nodes={'a0':(-200,0),'A':(0,0),'B':(60,0),'b0':(260,0)}
     ns=ET.Element('nodes')
     for id,(x,y) in nodes.items():ET.SubElement(ns,'node',id=id,x=str(x),y=str(y),type='traffic_light' if id in ('A','B') else 'priority')
@@ -29,10 +29,17 @@ def network(work,netconvert):
     result=subprocess.run(cmd,capture_output=True,text=True)
     (work/'netconvert.log').write_text(result.stdout+"\n"+result.stderr)
     result.check_returncode()
-    r=ET.Element('routes');ET.SubElement(r,'vType',id='car',length='4.5',minGap='2',maxSpeed='8',accel='2',decel='4',emergencyDecel='8',sigma='0',carFollowModel='IDM',tau='1.5',speedFactor='1',speedDev='0')
+    if traffic is None:
+        from rampd_core.a58_sumo_profiles import get_profile
+        traffic=get_profile('baseline')
+    r=ET.Element('routes');ET.SubElement(r,'vType',id='car',length='4.5',
+        minGap=str(traffic.min_gap),maxSpeed=str(traffic.car_speed),
+        accel=str(traffic.accel),decel=str(traffic.decel),
+        emergencyDecel=str(traffic.emergency_decel),sigma=str(traffic.sigma),
+        carFollowModel='IDM',tau=str(traffic.tau),speedFactor='1',speedDev=str(traffic.speed_dev))
     for d,edges in ROUTES.items():ET.SubElement(r,'route',id=d,edges=' '.join(edges))
-    ET.SubElement(r,'flow',id='a',type='car',route='A',begin='0',end='120',period='3',departSpeed='0')
-    ET.SubElement(r,'flow',id='b',type='car',route='B',begin='1',end='120',period='4',departSpeed='0')
+    ET.SubElement(r,'flow',id='a',type='car',route='A',begin='0',end=str(traffic.horizon),period=str(traffic.period_a),departSpeed='0')
+    ET.SubElement(r,'flow',id='b',type='car',route='B',begin='1',end=str(traffic.horizon),period=str(traffic.period_b),departSpeed='0')
     ET.ElementTree(r).write(work/'routes.xml')
 
 @dataclass(frozen=True)
@@ -83,7 +90,9 @@ def run(a):
     if any(work.iterdir()):raise ValueError('fresh empty work directory required')
     netconvert=shutil.which(a.netconvert);sumo=shutil.which(a.sumo)
     if not netconvert or not sumo:raise RuntimeError('sumo and netconvert executables required; check eclipse-sumo installation and PATH')
-    network(work,netconvert)
+    from rampd_core.a58_sumo_profiles import get_profile
+    traffic=get_profile(a.traffic_profile)
+    network(work,netconvert,traffic)
     traci.start([sumo,'-n',str(work/'network.xml'),'-r',str(work/'routes.xml'),'--step-length','0.1','--step-method.ballistic','false','--seed',str(a.seed),'--time-to-teleport','-1','--collision.action','warn','--collision.check-junctions','true','--no-step-log','true','--log',str(work/'sumo.log')])
     try:
         lengths={e:traci.lane.getLength(e+'_0') for r in ROUTES.values() for e in r};bounds={d:(lengths[r[0]],lengths[r[0]]+lengths[r[1]]) for d,r in ROUTES.items()}
@@ -168,10 +177,10 @@ def run(a):
             if guard_exhausted:break
         trace=work/'vehicle_trace.jsonl';trace.write_text(''.join(json.dumps(r)+'\n' for r in vehicle_trace));(work/'roster_trace.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in roster));good=not violations and through['A']>0 and through['B']>0 and any(r['to_phase']=='B_GREEN' for r in transitions) and any(r['to_phase']=='A_GREEN' for r in transitions)
         remaining=len(before);pending=traci.simulation.getMinExpectedNumber();drained=remaining==0 and pending==0
-        completed=drained and departure_ids==arrival_ids==set().union(*entry_ids.values())==set().union(*clear_ids.values()) and all(entry_ids[d]==clear_ids[d] for d in ROUTES) and len(departure_ids)==70
+        completed=drained and departure_ids==arrival_ids==set().union(*entry_ids.values())==set().union(*clear_ids.values()) and all(entry_ids[d]==clear_ids[d] for d in ROUTES) and len(departure_ids)==traffic.expected_vehicles
         if a.require_drain and not completed:good=False
         if a.require_comfort and braking:good=False
-        return dict(status='SUMO_LOGICAL_CORRIDOR_PASS' if good else 'REVIEW_REQUIRED',scope='TRAFFIC_ACTUATED_LOGICAL_CORRIDOR_NOT_PHYSICAL_SINGLE_LANE',sumo_version=traci.getVersion(),dt_s=.1,seed=a.seed,resource_bounds_m=bounds,entries=through,transitions=transitions,violations=violations,steps=rows,trace=str(trace),roster_trace=str(work/'roster_trace.jsonl'),comfort_guard=a.comfort_guard,stop_reserve_guard=a.stop_reserve_guard,reaction_s=a.reaction_s,extra_stop_m=a.extra_stop_m,departed_count=len(departure_ids),arrived_count=len(arrival_ids),unique_entries={d:len(v) for d,v in entry_ids.items()},rear_clearances={d:len(v) for d,v in clear_ids.items()},roster_completion_pass=completed,detector_range_m=a.detector_range_m,max_green_extension_s=a.max_green_extension_s if (a.comfort_guard or a.stop_reserve_guard) else 0,comfort_review_required=bool(braking or guard_exhausted),brake_steps=braking,comfort_block_records=switch_blocks,remaining_vehicles=remaining,min_expected_number=pending,drained_at_cutoff=drained,physical_clearance_certified=False,training_labels_generated=False)
+        return dict(status='SUMO_LOGICAL_CORRIDOR_PASS' if good else 'REVIEW_REQUIRED',traffic_profile=traffic.name,expected_vehicles=traffic.expected_vehicles,scope='TRAFFIC_ACTUATED_LOGICAL_CORRIDOR_NOT_PHYSICAL_SINGLE_LANE',sumo_version=traci.getVersion(),dt_s=.1,seed=a.seed,resource_bounds_m=bounds,entries=through,transitions=transitions,violations=violations,steps=rows,trace=str(trace),roster_trace=str(work/'roster_trace.jsonl'),comfort_guard=a.comfort_guard,stop_reserve_guard=a.stop_reserve_guard,reaction_s=a.reaction_s,extra_stop_m=a.extra_stop_m,departed_count=len(departure_ids),arrived_count=len(arrival_ids),unique_entries={d:len(v) for d,v in entry_ids.items()},rear_clearances={d:len(v) for d,v in clear_ids.items()},roster_completion_pass=completed,detector_range_m=a.detector_range_m,max_green_extension_s=a.max_green_extension_s if (a.comfort_guard or a.stop_reserve_guard) else 0,comfort_review_required=bool(braking or guard_exhausted),brake_steps=braking,comfort_block_records=switch_blocks,remaining_vehicles=remaining,min_expected_number=pending,drained_at_cutoff=drained,physical_clearance_certified=False,training_labels_generated=False)
     finally:traci.close()
 
 
@@ -179,7 +188,7 @@ def CounterLike():return {'A':0,'B':0}
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--work',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);p.add_argument('--sumo',default='sumo');p.add_argument('--netconvert',default='netconvert');p.add_argument('--seed',type=int,default=17);p.add_argument('--steps',type=int,default=1800);p.add_argument('--comfort-guard',action='store_true');p.add_argument('--stop-reserve-guard',action='store_true');p.add_argument('--reaction-s',type=float,default=.5);p.add_argument('--extra-stop-m',type=float,default=1.); p.add_argument('--max-green-extension-s',type=int,default=20);p.add_argument('--detector-range-m',type=float,default=200.);p.add_argument('--require-drain',action='store_true');p.add_argument('--require-comfort',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--traffic-profile',choices=('baseline','dense','slow_reaction','lower_friction_proxy'),default='baseline');p.add_argument('--work',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);p.add_argument('--sumo',default='sumo');p.add_argument('--netconvert',default='netconvert');p.add_argument('--seed',type=int,default=17);p.add_argument('--steps',type=int,default=1800);p.add_argument('--comfort-guard',action='store_true');p.add_argument('--stop-reserve-guard',action='store_true');p.add_argument('--reaction-s',type=float,default=.5);p.add_argument('--extra-stop-m',type=float,default=1.); p.add_argument('--max-green-extension-s',type=int,default=20);p.add_argument('--detector-range-m',type=float,default=200.);p.add_argument('--require-drain',action='store_true');p.add_argument('--require-comfort',action='store_true');a=p.parse_args()
     try:
         if a.comfort_guard and a.stop_reserve_guard:raise ValueError('choose one guard')
         if not all(math.isfinite(x) and x>=0 for x in (a.reaction_s,a.extra_stop_m)):raise ValueError('bad reaction or margin')

@@ -25,7 +25,11 @@ class ClosureMonitor:
     state:WorkZoneInterlock
     fault:str|None=None
     @property
-    def permissions(self):return (False,False) if self.fault else self.state.permissions
+    def permissions(self):
+        # A monitor fault revokes NEW entry, but must not silently revoke a
+        # preexisting incumbent's right to clear a resource during DRAIN.
+        # Safe evacuation remains a separate physical/control obligation.
+        return (False,self.state.permissions[1]) if self.fault else self.state.permissions
     def step(self,report,observation,**kw):
         if self.fault:return self
         try:return ClosureMonitor(advance_monitored(report,self.state,observation,**kw))

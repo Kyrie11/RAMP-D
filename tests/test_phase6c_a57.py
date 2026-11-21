@@ -107,3 +107,14 @@ def test_nominal_controls_are_not_silently_clamped():
     lim=dict(wheelbase=2.8,mu=.8,a_min=-8,a_max=3,jerk_max=3,steering_max=.5,steering_rate_max=.2,v_max=30)
     assert nominal_control_screen((0,0,0,8,0,.05),(0,.05),1,**lim)['screen_pass']
     r=nominal_control_screen((0,0,0,20,-7,.4),(-3,.3),1,**lim);assert not r['screen_pass'] and not r['checks']['actuator_accel'] and not r['checks']['friction'] and not r['checks']['steering_rate'] and not r['certificate']
+
+
+def test_a58_interlock_fault_preserves_incumbent_drain_permission():
+    from rampd_core.a57_interlock import ClosureMonitor
+    from test_phase6c_a53b_interlock import pending
+    e,s=pending()
+    # Synthetic forced monitor fault while still in DRAIN -- keep clearing right.
+    import dataclasses
+    import fractions
+    c=dataclasses.replace(s,phase='DRAIN',command_id=None,command_time=None,empty_since=None)
+    assert ClosureMonitor(c,'sensor unavailable').permissions==(False,True)

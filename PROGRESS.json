@@ -1,12 +1,12 @@
 {
-  "assurance_scope": "LOCAL_REFERENCE_REGRESSION_PASS_NATIVE_RUNTIME_PENDING",
+  "assurance_scope": "19_PURE_LOCAL_PASS_NATIVE_A58_SERVER_PENDING",
   "concrete_safety_certified": false,
   "current_scene_verified": false,
   "full_support_certified": false,
-  "local_limit": "216 dependency-free + 29 finite passed; native CMake missing MPFR/GMP dev files; new simulators and 511 CSV pending",
+  "local_limit": "19 pure new tests passed incl. turning RK4 convergence; 5 new native tests need MPFR/GMP development headers on server; no fresh Waymax/SUMO/CARLA run",
   "manuscript_files_required": false,
-  "next_gate": "A57 native full gate; official IDM internal audit resolution; SUMO stop reserve; 511 quality audit; integration of physical Post to SC",
-  "phase": "6C-A5_3B7_DECLARED_PHYSICAL_POST_GUARD",
+  "next_gate": "A58 676 full regression and 3 CTest; SUMO stress seeds/profiles; CARLA actor calibration and clock preflight; then physical post SC integration",
+  "phase": "6C-A5_3B8_PHYSICAL_PROOF_OBLIGATIONS_AND_SIM_BRIDGE_PREFLIGHT",
   "phase0": "completed",
   "phase1a": "server acceptance passed; regression suite retained",
   "phase1b": "server acceptance passed: 3 native tests, 71 Python tests, full-horizon witness replay",
@@ -204,10 +204,10 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
-  "release": "0.9.10-a5.3b-increment5",
+  "release": "0.9.13",
   "requires_carla": false,
-  "requires_dataset": true,
-  "requires_sumo": true,
+  "requires_dataset": false,
+  "requires_sumo": false,
   "user_reported_target": {
     "carla_api": "0.9.16",
     "python": "3.10",
@@ -278,5 +278,24 @@
     "full_support_certified": false,
     "physical_post_sc_integrated": false,
     "training_labels_generated": false
+  },
+  "phase6c_a5_3b8": {
+    "paper_unchanged": true,
+    "server_a57_baseline": {
+      "python": 653,
+      "native_ctest": 3
+    },
+    "local_a58_pure_passed": 19,
+    "local_a58_native_run": false,
+    "server_a58_native_expected_min": 6,
+    "full_pytest_expected_min": 679,
+    "a57_uploaded_sumo_reserve_brake_samples": 0,
+    "a57_uploaded_waymax_initial_gap_120_m": 10.75,
+    "reference_geom_gap_m": 10.5,
+    "certified_full_joint_support": false,
+    "physical_post_sc_integrated": false,
+    "real_carla_sumo_sync": false,
+    "generated_formal_training_labels": false,
+    "partial_safety_audit": "CONDITIONAL_EGO_AVOIDANCE_PASS or UNKNOWN"
   }
 }
