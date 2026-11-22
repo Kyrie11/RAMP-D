@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CARLA 0.9.16 Town04 isolated-actor metadata and empirical response capture.
+"""CARLA 0.9.16 isolated-actor metadata and empirical response capture on the active map.
 
 INVENTORY: read only; CAPTURE: spawn + read metadata (then destroy);
 TRIALS: explicit exclusive world assertion, spawn our own actor, own ticks.
@@ -56,7 +56,7 @@ def spot(world, carla):
             if abs(diff)>5:straight=False;break
             cur=nxt[0]
         if straight:return pose
-    raise RuntimeError('REVIEW_NO_STRAIGHT_TOWN04_LANE_FOR_CONTROLLED_TRIAL')
+    raise RuntimeError('REVIEW_NO_STRAIGHT_DRIVING_LANE_FOR_CONTROLLED_TRIAL')
 
 
 def observe(actor,world,snapshot,cmd,trigger):
@@ -153,8 +153,9 @@ def main():
     import carla
     client=carla.Client(a.host,a.port);client.set_timeout(12.0)
     world=client.get_world();original=world.get_settings();spawned=None
-    if not client.get_server_version().startswith('0.9.16') or not world.get_map().name.endswith('Town04'):
-        raise RuntimeError('EXPECTED_0_9_16_TOWN04')
+    # Any CARLA map is allowed; only the supported server version is required.
+    if not client.get_server_version().startswith('0.9.16'):
+        raise RuntimeError('EXPECTED_CARLA_0_9_16')
     result={'status':'REVIEW','map':world.get_map().name,
             'carla_server_version':client.get_server_version(), 'actor_type':a.blueprint,
             'calibrated_vehicle_dynamics':False,'world_exclusive_confirmed':False}

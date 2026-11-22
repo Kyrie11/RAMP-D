@@ -18,7 +18,7 @@ Expected: previously server-accepted A59/0 replays, CTest 3, A59/1a pure
 real-world conformance flags remain false. Do not replace a failed step with
 `|| true` or a manufactured PASS.
 
-## 1. The already-running Town04 CARLA server
+## 1. The already-running CARLA server (any map)
 
 The CARLA command starts a map/server but need not spawn an actor. You can
 perform a zero-mutation inventory first:
@@ -31,7 +31,7 @@ python scripts/a60_carla_actor_trials.py --mode inventory \
 ```
 
 Check `existing_dynamic_actors`, `actor_metadata` and `carla_server_version`.
-If no vehicles, this is expected for a fresh, traffic-free Town04. To capture
+If no vehicles, this is expected for a fresh, traffic-free CARLA map. To capture
 **the running CARLA blueprint**, on a dedicated empty world only:
 
 ```bash
@@ -49,7 +49,7 @@ wheel torques, NOT guaranteed stopping deceleration.
 
 ## 2. 5/10/15 m/s repeated command-response experiments
 
-**Only** on a dedicated Town04 CARLA server with no other CARLA simulation
+**Only** on a dedicated CARLA 0.9.16 server (any map) with no other CARLA simulation
 client ticking, no Traffic Manager, no connected SUMO bridge, no NPCs and no
 active sensors; precondition must be verified by the operator. This program
 acquires a best-effort local Linux lock, but cannot rule out an arbitrary
@@ -72,7 +72,7 @@ Expected 3 maneuvers (`brake`, `steer`, `combined`) × 3 speeds (5, 10, 15 m/s)
 sim frame/time, preceding control, observed control, longitudinal/lateral
 acceleration, angular velocity, body pose and speed. It samples raw front wheel
 steer angle when supported. Each run resets by destroying *its own actor*;
-there is no teleport-based fake dynamics reset. The test lane must be straight,
+there is no teleport-based fake dynamics reset. On the active map, the test lane must be straight,
 non-junction, and the vehicle must remain on drivable road. Missing the target
 speed, no eligible stretch, foreign ticks or leaving the lane gives REVIEW.
 
