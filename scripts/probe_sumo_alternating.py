@@ -189,6 +189,11 @@ def CounterLike():return {'A':0,'B':0}
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--traffic-profile',choices=('baseline','dense','slow_reaction','lower_friction_proxy'),default='baseline');p.add_argument('--work',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);p.add_argument('--sumo',default='sumo');p.add_argument('--netconvert',default='netconvert');p.add_argument('--seed',type=int,default=17);p.add_argument('--steps',type=int,default=1800);p.add_argument('--comfort-guard',action='store_true');p.add_argument('--stop-reserve-guard',action='store_true');p.add_argument('--reaction-s',type=float,default=.5);p.add_argument('--extra-stop-m',type=float,default=1.); p.add_argument('--max-green-extension-s',type=int,default=20);p.add_argument('--detector-range-m',type=float,default=200.);p.add_argument('--require-drain',action='store_true');p.add_argument('--require-comfort',action='store_true');a=p.parse_args()
+    # Never overwrite a previous successful report when a work directory is reused.
+    # Reuse is an experiment orchestration error, not an ERROR replacement record.
+    if a.output.exists():
+        print(f'EXISTING_SUMO_REPORT_PRESERVED: {a.output}; use a fresh work AND output path',file=sys.stderr)
+        return 4
     try:
         if a.comfort_guard and a.stop_reserve_guard:raise ValueError('choose one guard')
         if not all(math.isfinite(x) and x>=0 for x in (a.reaction_s,a.extra_stop_m)):raise ValueError('bad reaction or margin')

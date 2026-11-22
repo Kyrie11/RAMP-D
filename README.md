@@ -1,3 +1,11 @@
+# RAMP-D Phase 6C-A59/0 (v0.9.14)
+
+Local new checks: 11/11 independent forensic/data tests pass, existing A58 pure 19/19 pass, and the uploaded 12 SUMO traces replay successfully in the explicitly limited sense reported in `docs/PHASE6C_A59_0_IMPLEMENTATION_AND_ACCEPTANCE.md`. **Only 3/12 retained valid controller summaries; no actual CARLA vehicle actor was captured.** Native A59 SC rank bridge tests (5) still require the user's MPFR/GMP server. Run `bash scripts/validate_phase6c_a59_0.sh` from a fresh release checkout, and `python scripts/audit_a59_uploaded_a58.py --zip /path/to/a58.zip --output reports/a59_0/forensic.json` independently. Never read a model-relative predecessor candidate as full `CERTIFIED`.
+
+See `docs/PHASE6C_A59_0_RUNBOOK.md` for safe SUMO rerun instructions and required CARLA metadata/response measurements. No training labels or live physical co-simulation were certified in this increment.
+
+---
+
 # RAMP-D Phase 6C-A5/3b-8 (v0.9.13)
 
 This increment independently audits uploaded A57 simulator evidence, adds exact nominal jerk-stop references, model-relative per-slab MPFR safety screening, barrier actor frame evidence, SUMO stress profiles, ROADWork visual templates, and CARLA/SUMO read-only preflight. **Not SC / task-tail / physical co-simulation certification.** See `docs/PHASE6C_A5_3B8_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B8_RUNBOOK.md`. Local 19 pure reference tests pass; 6 new native tests need user server with MPFR/GMP. Run `bash scripts/validate_phase6c_a5_3b8.sh`.

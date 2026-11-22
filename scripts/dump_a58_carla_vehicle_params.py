@@ -13,6 +13,25 @@ def vector(v):
     return {axis:float(getattr(v,axis)) for axis in ('x','y','z')}
 
 
+def optional_float(obj,name):
+    value=getattr(obj,name,None)
+    return None if value is None else float(value)
+
+
+def optional_curve(physics):
+    curve=getattr(physics,'steering_curve',None)
+    if curve is None:return None
+    return [{'speed_kmh_raw':float(x.x),'max_steer_fraction_raw':float(x.y)} for x in curve]
+
+
+def wheel_metadata(wheel):
+    return {'position_raw':vector(wheel.position),'radius_raw':float(wheel.radius),
+            'max_steer_angle_raw':float(wheel.max_steer_angle),
+            'tire_friction':float(wheel.tire_friction),
+            'max_brake_torque_nm_raw':optional_float(wheel,'max_brake_torque'),
+            'max_handbrake_torque_nm_raw':optional_float(wheel,'max_handbrake_torque')}
+
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument('--host',default='127.0.0.1')
@@ -38,9 +57,7 @@ def main():
             p=actor.get_physics_control()
             wheels=[]
             for wheel in p.wheels:
-                wheels.append({'position_raw':vector(wheel.position),'radius_raw':float(wheel.radius),
-                               'max_steer_angle_raw':float(wheel.max_steer_angle),
-                               'tire_friction':float(wheel.tire_friction)})
+                wheels.append(wheel_metadata(wheel))
             result['vehicles'].append({'actor_id':int(actor.id),'type_id':actor.type_id,
                  'body_transform':{'location':vector(body.location),
                                    'rotation_degrees':{'yaw':float(body.rotation.yaw),
@@ -52,14 +69,17 @@ def main():
                                                            'roll':float(box.rotation.roll)}},
                  'physics':{'mass':float(p.mass),'center_of_mass_raw':vector(p.center_of_mass),
                             'drag_coefficient':float(p.drag_coefficient),
+                            'steering_curve_raw':optional_curve(p),
                             'wheels':wheels},
-                 'WARNING':'Uncalibrated raw CARLA metadata; no validated wheelbase, rear axle, CG or actuator map inferred'})
+                 'raw_wheel_position_units':'unverified by this probe; check CARLA API and live actor',
+                 'raw_wheel_radius_units':'unverified by this probe; check CARLA API and live actor',
+                 'WARNING':'Uncalibrated raw CARLA metadata; torque capacity is not guaranteed deceleration and steering angle is not speed-dependent effective bicycle steering; no measured latency' })
         if not vehicles:result['status']='REVIEW_NO_VEHICLE_ACTOR'
     except Exception as e:
         result['error']=f'{type(e).__name__}: {e}'
         result['traceback']=traceback.format_exc()
     a.output.parent.mkdir(parents=True,exist_ok=True)
-    a.output.write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+    a.output.write_text(json.dumps(result,indent=2,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
     print(result['status'])
     return 0 if result['status']=='READ_ONLY_METADATA_CAPTURED' else 4
 
