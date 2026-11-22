@@ -42,21 +42,56 @@ def actor_metadata(actor, world, client):
 
 
 def spot(world, carla):
-    """A candidate long, nearly straight driving lane, not a proven safe track."""
+    """Find a 110 m non-junction straight lane; use the full map if spawns fail.
+
+    Site selection only: the 22 x 5 m / 5-degree eligibility gate and the
+    subsequent 27 trial controls, ticks and recording are unchanged.
+    """
     m=world.get_map()
-    for pose in m.get_spawn_points():
-        wp=m.get_waypoint(pose.location,project_to_road=False,lane_type=carla.LaneType.Driving)
-        if wp is None or wp.is_junction:continue
-        cur=wp;straight=True
+
+    def eligible(wp):
+        if wp is None or wp.is_junction or wp.lane_type!=carla.LaneType.Driving:
+            return False
+        cur=wp
         for _ in range(22):
             nxt=cur.next(5.0)
-            if len(nxt)!=1 or nxt[0].is_junction:
-                straight=False;break
+            if (len(nxt)!=1 or nxt[0].is_junction or
+                    nxt[0].lane_type!=carla.LaneType.Driving):
+                return False
             diff=(nxt[0].transform.rotation.yaw-wp.transform.rotation.yaw+180)%360-180
-            if abs(diff)>5:straight=False;break
+            if abs(diff)>5:
+                return False
             cur=nxt[0]
-        if straight:return pose
-    raise RuntimeError('REVIEW_NO_STRAIGHT_DRIVING_LANE_FOR_CONTROLLED_TRIAL')
+        return True
+
+    # CARLA recommended spawn points are slightly above the road.  Projecting
+    # a candidate onto its driving-lane waypoint avoids a false negative from
+    # the initial 'project_to_road=False' query; this does not move the actor.
+    spawns=m.get_spawn_points()
+    for pose in spawns:
+        wp=m.get_waypoint(pose.location,project_to_road=True,lane_type=carla.LaneType.Driving)
+        if eligible(wp):
+            return pose
+
+    # A map can have suitable long lanes without a recommended spawn point at
+    # their start.  The waypoint transform is lane-centered and lane-aligned;
+    # add CARLA's normal 0.5 m spawn height to prevent ground collision.
+    waypoints=m.generate_waypoints(5.0)
+    for wp in waypoints:
+        if eligible(wp):
+            transform=wp.transform
+            location=transform.location
+            return carla.Transform(
+                carla.Location(x=location.x,y=location.y,z=location.z+0.5),
+                transform.rotation)
+
+    # Do not accept a short, curved or junction-crossing substitute: that
+    # would change the controlled dynamics experiment's geometric premise.
+    raise RuntimeError(
+        'REVIEW_NO_STRAIGHT_DRIVING_LANE_FOR_CONTROLLED_TRIAL'
+        f' map={m.name} spawn_points={len(spawns)}'
+        f' sampled_lane_waypoints={len(waypoints)}'
+        ' required_straight_m=110 max_heading_delta_deg=5')
 
 
 def observe(actor,world,snapshot,cmd,trigger):

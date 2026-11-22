@@ -21,8 +21,9 @@ def inspect_trials(document, *, required_repeats=3):
         return {'status':'REVIEW','reasons':['WRONG_SCHEMA'],'physical_certified':False}
     if document.get('carla_server_version','').split('-',1)[0]!='0.9.16':
         reasons.append('SERVER_VERSION_NOT_CONFIRMED_0_9_16')
-    if not str(document.get('map','')).endswith('Town04'):
-        reasons.append('MAP_MISMATCH_TOWN04')
+    # CARLA 0.9.16 evidence may come from any map; retain map provenance.
+    if not isinstance(document.get('map'),str) or not document['map'].strip():
+        reasons.append('MISSING_CARLA_MAP')
     if document.get('actor_type')!='vehicle.tesla.model3' or type(document.get('actor_id')) is not int:
         reasons.append('UNVERIFIED_ACTOR_BLUEPRINT_ID')
     if document.get('world_exclusive_confirmed') is not True:
