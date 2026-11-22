@@ -194,3 +194,15 @@ Use a new empty checkout; `python scripts/verify_release.py`, then `bash scripts
 
 ## A5/3b-7
 See `docs/PHASE6C_A5_3B7_ACCEPTANCE.md` and `docs/PHASE6C_A5_3B7_ROADMAP.md`. Local reference tests passed; new native and simulator acceptance are pending.
+
+### Phase 6C-A59/1a (conditional; 2026-11-22)
+
+This release adds a fail-closed **Native Post → rectangular resource slab /
+exact model-clock → SC rank** subgate, read-only CARLA actor inventory,
+explicit isolated Model 3 metadata capture and a separately opt-in 27-trial
+brake/steer/combined raw evidence collector. The local full suite passes
+718 tests using the supplied A59/0 MPFR `.so`; extracted original native
+binaries pass 3/3. **No actual live CARLA actor/trials or fully verified SC
+completion policy are supplied/certified.** Run
+`bash scripts/validate_phase6c_a59_1a.sh` in a fresh checkout and follow
+`docs/PHASE6C_A59_1A_RUNBOOK.md` for CARLA evidence acquisition.
