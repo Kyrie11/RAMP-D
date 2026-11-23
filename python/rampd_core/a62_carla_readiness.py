@@ -69,6 +69,12 @@ def inspect_readiness_log(doc):
     if not isinstance(doc,dict):
         return {'status':'REVIEW','reasons':['INVALID_JSON_ROOT'],'physical_certified':False}
     reasons=[]
+    if doc.get('status')=='REVIEW':
+        reasons.append('TOP_LEVEL_REVIEW')
+    if doc.get('error'):
+        # Preserve the actual pre-trial abort cause; no trials implies no
+        # evidence, but must not obscure why they were not run.
+        reasons.append('EXECUTION_ABORT:'+str(doc['error']).split(':',1)[-1].strip()[:120])
     for trial in doc.get('trials',[]):
         if not isinstance(trial,dict):
             reasons.append('INVALID_TRIAL');continue

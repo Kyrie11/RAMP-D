@@ -13,6 +13,7 @@ import argparse,fcntl,hashlib,json,math,sys,traceback
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"python"))
 from rampd_core.a62_carla_readiness import ground_window, projected_lane_footprint, wheel_road_height_proxy
+from rampd_core.a63_carla_site_contract import audit_start_waypoint, wp_identity
 
 
 def vec(v):return {k:float(getattr(v,k)) for k in ('x','y','z')}
@@ -135,7 +136,7 @@ def _site_label(source, index, wp):
 
 
 def survey_sites(world, carla, *, spacing_m=2.0, exhaustive=True,
-                 prefer_longest=False, top_k=10):
+                 prefer_longest=False, top_k=10, require_start_identity=False):
     """Read-only map search; return an eligible actor pose and a site report.
 
     Exhaustive mode is intended for --mode site-audit. In normal trials the
@@ -153,10 +154,14 @@ def survey_sites(world, carla, *, spacing_m=2.0, exhaustive=True,
     selected_extra_m = -1.0
     measured = 0
     number_eligible = 0
+    usable_count = 0
+    rejected_start = Counter()
+    rejected_examples = []
+    selected_start_audit = None
     counts_above = {str(n): 0 for n in (40, 60, 80, 100, 110)}
 
     def scan(wp, source, index, pose):
-        nonlocal selected_pose, selected_metadata, selected_extra_m, measured, number_eligible
+        nonlocal selected_pose, selected_metadata, selected_extra_m, measured, number_eligible, usable_count, selected_start_audit
         distance, reason = _site_trace(wp, carla)
         extra_distance = distance
         if reason == 'ELIGIBLE':
@@ -169,10 +174,20 @@ def survey_sites(world, carla, *, spacing_m=2.0, exhaustive=True,
                 counts_above[str(threshold)] += 1
         if reason == 'ELIGIBLE':
             number_eligible += 1
-            if selected_pose is None or (prefer_longest and extra_distance > selected_extra_m):
-                selected_pose = pose
-                selected_metadata = _site_label(source, index, wp)
-                selected_extra_m = extra_distance
+            start_audit=(audit_start_waypoint(m, carla, wp, pose)
+                         if require_start_identity else None)
+            if start_audit is not None and start_audit['status']!='DESCRIPTIVE_LANE_IDENTITY_REPRODUCED':
+                rejected_start[start_audit['reason']]+=1
+                if len(rejected_examples)<8:
+                    rejected_examples.append({'candidate':_site_label(source,index,wp),
+                                              'projection':start_audit})
+            else:
+                usable_count += 1
+                if selected_pose is None or (prefer_longest and extra_distance > selected_extra_m):
+                    selected_pose = pose
+                    selected_metadata = _site_label(source, index, wp)
+                    selected_extra_m = extra_distance
+                    selected_start_audit = start_audit
         if wp is not None:
             data = _site_label(source, index, wp)
             data.update({'verified_step_distance_m': distance,
@@ -214,6 +229,11 @@ def survey_sites(world, carla, *, spacing_m=2.0, exhaustive=True,
         'sampled_lane_waypoints_total': waypoint_count,
         'candidates_checked': measured,
         'eligible_candidates_checked': number_eligible,
+        'projected_start_usable_candidates': usable_count if require_start_identity else None,
+        'projected_start_rejections': dict(sorted(rejected_start.items())),
+        'projected_start_rejection_examples': rejected_examples,
+        'chosen_start_projection_audit': selected_start_audit,
+        'required_projected_start_identity': require_start_identity,
         'rejection_counts': dict(sorted(causes.items())),
         'rejection_counts_by_source': {
             source: dict(sorted(counter.items()))
@@ -236,10 +256,12 @@ def survey_sites(world, carla, *, spacing_m=2.0, exhaustive=True,
     return selected_pose, report
 
 
-def spot(world, carla, *, spacing_m=2.0, prefer_longest=False, report=None):
+def spot(world, carla, *, spacing_m=2.0, prefer_longest=False, report=None,
+         require_start_identity=False):
     """Find a site without relaxing the original 110m / 5-degree conditions."""
     pose, data = survey_sites(world, carla, spacing_m=spacing_m,
-                              exhaustive=prefer_longest, prefer_longest=prefer_longest)
+                              exhaustive=prefer_longest, prefer_longest=prefer_longest,
+                              require_start_identity=require_start_identity)
     if report is not None:
         report.update(data)
     if pose is not None:
@@ -252,7 +274,8 @@ def spot(world, carla, *, spacing_m=2.0, prefer_longest=False, report=None):
         f' best_verified_step_distance_m={data["best_verified_step_distance_m"]}'
         f' required_straight_m={data["required_straight_m"]}'
         f' max_heading_delta_deg={data["max_heading_delta_deg"]}'
-        f' failures={reasons}')
+        f' failures={reasons}'
+        f' projected_start_rejections={data.get("projected_start_rejections", {})}')
 
 
 def observe(actor,world,snapshot,cmd,trigger):
@@ -499,7 +522,8 @@ def main():
                 result['actor_metadata']=[actor_metadata(x,world,client) for x in dynamic if x.type_id.startswith('vehicle.')]
             elif a.mode=='site-audit':
                 _, result['site_audit'] = survey_sites(
-                    world, carla, spacing_m=a.site_spacing, exhaustive=True, prefer_longest=True)
+                    world, carla, spacing_m=a.site_spacing, exhaustive=True, prefer_longest=True,
+                    require_start_identity=True)
                 result['status']='READ_ONLY_SITE_AUDIT'
             else:
                 if dynamic: raise RuntimeError('REVIEW_EXISTING_DYNAMIC_ACTORS_REFUSE_MUTATION')
@@ -510,7 +534,8 @@ def main():
                 if blueprint.has_attribute('role_name'):blueprint.set_attribute('role_name','rampd_calibration')
                 pose=(world.get_map().get_spawn_points()[0] if a.mode=='capture' else spot(
                     world,carla,spacing_m=a.site_spacing,prefer_longest=a.site_prefer_longest,
-                    report=result.setdefault('site_audit',{})))
+                    report=result.setdefault('site_audit',{}),
+                    require_start_identity=True))
                 if a.mode=='capture':
                     spawned=world.try_spawn_actor(blueprint,pose)
                     if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
@@ -533,15 +558,25 @@ def main():
                     result['world_provenance']=world_provenance(world)
                     result.update(schema='rampd.carla.a59_1.raw_trials.v1',
                                   capture_protocol_version='a62_grounding_lane_v1',
+                                  start_site_protocol_version='a63_projected_lane_identity_v1',
                                   world_exclusive_confirmed=True,step_s=a.fixed_delta,
                                   trial_maneuvers=['brake','steer','combined'],trials=[],
                                   steer_fraction=a.steer_fraction,steer_pulse_s=a.steer_pulse_s)
-                    # Anchor the selected roadway lane before any actor trial.
+                    # The site selection has already checked the same map
+                    # projection used here. Recheck after changing world
+                    # settings; if the map query changed, stop with evidence.
                     selected_wp=world.get_map().get_waypoint(
                         pose.location,project_to_road=True,lane_type=carla.LaneType.Driving)
-                    if selected_wp is None or selected_wp.is_junction:
-                        raise RuntimeError('REVIEW_INVALID_START_LANE')
-                    expected_lane=(int(selected_wp.road_id),int(selected_wp.section_id),int(selected_wp.lane_id))
+                    site_id=result.get('site_audit',{}).get('chosen_waypoint') or {}
+                    expected_lane=(site_id.get('road_id'),site_id.get('section_id'),site_id.get('lane_id'))
+                    reread_id=wp_identity(selected_wp)
+                    result['start_lane_recheck']={
+                        'expected_identity':expected_lane,'projected_identity':reread_id,
+                        'projected_is_junction':(bool(selected_wp.is_junction) if selected_wp is not None else None),
+                        'accepted':bool(selected_wp is not None and not selected_wp.is_junction and reread_id==expected_lane),
+                        'certified':False}
+                    if not result['start_lane_recheck']['accepted']:
+                        raise RuntimeError('REVIEW_START_LANE_PROJECTION_CHANGED_OR_AMBIGUOUS')
                     result['expected_start_lane']={'road_id':expected_lane[0],
                         'section_id':expected_lane[1],'lane_id':expected_lane[2]}
                     if a.mode=='readiness':

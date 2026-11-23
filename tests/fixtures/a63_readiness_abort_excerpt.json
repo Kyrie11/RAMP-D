@@ -1,0 +1,12 @@
+{
+  "status": "REVIEW",
+  "map": "Carla/Maps/Town06_Opt",
+  "carla_server_version": "0.9.16",
+  "actor_type": "vehicle.tesla.model3",
+  "calibrated_vehicle_dynamics": false,
+  "trials": [],
+  "capture_protocol_version": "a62_grounding_lane_v1",
+  "error": "RuntimeError: REVIEW_INVALID_START_LANE",
+  "schema": "rampd.a63.readiness_abort_excerpt.fixture.v1",
+  "source_sha256": "b59d1e75ad8d44b47e9b249b99eab3f545f3b591724dd11c9d9efa2d4178f177"
+}

@@ -392,5 +392,18 @@
     "full_sc_certified": false,
     "eight_heads_certified": false,
     "next_stage": "A59/1b-1 segmented Native MPFR/Picard + Guard/Resource/Observation/SC task tail; A5/3c CARLA/SUMO and calibration"
+  },
+  "a59_1b0i": {
+    "status": "LOCAL_PROJECTED_START_LANE_SELECTION_REGRESSION_PASS_SERVER_RETEST_REQUIRED",
+    "server_uploaded_readiness_trial_count": 0,
+    "server_uploaded_readiness_reason": "REVIEW_INVALID_START_LANE",
+    "previous_freefall_hypothesis_verified_by_latest_readiness": false,
+    "new_strict_site_projection_contract": true,
+    "live_carla_retest_done_here": false,
+    "complete_ego_physical_envelope_certified": false,
+    "mixed_native_event_post_certified": false,
+    "all_eight_supervision_sources_certified": false,
+    "local_full_pytest": 764,
+    "local_targeted_pytest": 24
   }
 }
