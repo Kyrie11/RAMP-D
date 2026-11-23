@@ -507,7 +507,7 @@ def main():
                    help='Waypoint sampling interval in meters for read-only site search (default: 2)')
     a=p.parse_args()
     if a.output.exists():raise FileExistsError('REFUSE_OVERWRITE_CARLA_EVIDENCE')
-    if a.mode in ('capture','readiness','trials') and not a.confirm_isolated_world:
+    if a.mode in ('capture','readiness','smoke','trials') and not a.confirm_isolated_world:
         raise RuntimeError('SPAWN_REQUIRES_EXPLICIT_ISOLATED_WORLD_ACK')
     if a.mode in ('readiness','smoke','trials') and not a.confirm_exclusive_tick:
         raise RuntimeError('TRIALS_REQUIRE_EXCLUSIVE_TICK_ACK')

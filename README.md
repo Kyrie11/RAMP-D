@@ -211,3 +211,17 @@ binaries pass 3/3. **No actual live CARLA actor/trials or fully verified SC
 completion policy are supplied/certified.** Run
 `bash scripts/validate_phase6c_a59_1a.sh` in a fresh checkout and follow
 `docs/PHASE6C_A59_1A_RUNBOOK.md` for CARLA evidence acquisition.
+
+### Phase 6C-A59/1b-0K (CARLA real brake evidence; model conformance review)
+
+Full source ZIP + immutable SHA-256 manifest. A user-supplied CARLA 0.9.16 Town06
+5 m/s **brake** trace has a valid descriptive capture, but its approximately
+26.93 m/s² peak deceleration deviates from a simplified 4.10 m/s²
+wheel-torque/radius/mass comparison. This is a **model conformance REVIEW**,
+not a CARLA physics error proof or a real vehicle maximum deceleration. The
+new independent `a65_review_carla_conformance.py` refuses to produce physical
+certificates or training labels. Both time/velocity response and top-down
+approximate vehicle-rectangle PNGs are available offline. `--mode smoke`
+now requires the same explicit isolated-world declaration as `trials`.
+See `docs/PHASE6C_A59_1B0K_CARLA_CONFORMANCE_AND_NEXT_GATES.md` and
+`docs/PHASE6C_A59_1B0K_SERVER_RUNBOOK.md`. No post-Picard/SC certification.
