@@ -1,3 +1,9 @@
+# CURRENT: Phase 6C-A59/1b-0O / A69, three-track conditional subgate
+
+Based on the previously verified 0N source after comparing the user re-upload of 0M (13 added and 6 modified files in 0N). The A69 scoped math reference jointly replays exact affine reach and declared zone Guard snapshots, and semantically replays exact rational affine Native-role witness bytes together with the raw protocol digest. These **do not replay bicycle MPFR/Picard or certify SC**. The physical one-factor 0.15/0.30/0.45 CARLA gate is ready, while the uploaded 3×0.45 traces reproduce anomalous deceleration and **do not identify an uncertainty envelope**. The supervision gate checks scenario-group splits, source roles, SHA and internal provenance but releases **zero formal labels**. See `docs/PHASE6C_A59_1B0O_THREE_TRACK_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0O_RUNBOOK.md`. Run `bash scripts/validate_phase6c_a59_1b0o.sh` after a new native build.
+
+---
+
 # CURRENT: Phase 6C-A59/1b-0M (A67, conditional)
 
 See `docs/PHASE6C_A59_1B0M_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0M_RUNBOOK.md`. Real CARLA 5 m/s combined control was captured; gross −26.93 m/s² deceleration is still unexplained and not calibrated. A67 adds diagnostic repeat checks and independent artifact byte-hash/context verification, not mathematical proof replay. M1–M13 full closure and all eight supervised labels remain pending.
@@ -247,3 +253,18 @@ viability/margin/deadline/causal` labels are NOT authorized by this phase.
 See `docs/PHASE6C_A59_1B0L_CARLA_HYBRID_COSIM_ACCEPTANCE.md` and
 `docs/PHASE6C_A59_1B0L_SERVER_RUNBOOK.md`. Run the clean-release
 `bash scripts/validate_phase6c_a59_1b0l.sh` with a freshly built MPFR library.
+
+
+## Phase 6C A59/1b-0N (A68): three-track gates (2026-11-23)
+
+Three uploaded independent CARLA 5 m/s combined repeats (actor IDs 121/122/123) were independently re-audited: protocol consistent, deterministic identical physical responses, high ~26.93 m/s² transient remains unexplained. **Not calibrated.**
+
+- Math: `a68_affine_slab_replay.py` exact-Q reference per-slab endpoint/tube/handoff/nonanticipative control; `a68_guard_resource_monitor.py` conditional exclusive-clearance admission/stay/exit/capacity/ACK semantics. Both exclude complete Native MPFR, polygon sweep and observation/goal-tail proof.
+- Physical: `a68_physical_campaign.py` strict raw triple replay including actual physics and control sequences; `a68_waymax_action_contract.py` explicit paper jerk/steer-rate vs discrete Waymax a/curvature mismatch. No live CARLA/SUMO/Waymax run in this local release.
+- Evidence: `a68_supervision_release.py` genuine byte-hash/role and UNKNOWN mask audits; eight formal safety labels remain **unreleased**.
+
+Run `bash scripts/validate_phase6c_a59_1b0n.sh` after a **fresh** Native build on the server. See `docs/PHASE6C_A59_1B0N_THREE_TRACK_IMPLEMENTATION.md` and `docs/PHASE6C_A59_1B0N_RUNBOOK.md`. New target: 42 focused tests, >=875 full Python tests, 3 fresh CTest; no skips. Evidence completeness is not independent proof soundness.
+
+A68 also fixes A64/A67 hardcoded `brake>=0.20` evidence-gate mismatch with A60 capture supporting graded combined brake [0.05,0.80]. All post-control frames must now match the declared brake fraction. A 0.15 command may be a valid *diagnostic*; no safety label is implied.
+
+The graded-audit change also preserves pre-fraction A67 logs via an explicitly **legacy descriptive** constant-command profile; this inference is NOT a physical control guarantee. A declared mismatch always remains REVIEW.

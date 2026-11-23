@@ -12,6 +12,24 @@ def _num(x):
     return type(x) in (int,float) and isfinite(x)
 
 
+def combined_brake_profile(trial, post):
+    """Return (fraction, provenance) without creating a calibration claim.
+
+    A60 now records explicit per-trial fractions. Older A67 fixtures predate
+    this field; infer a *description* only if all 40 observed commands are
+    finite, constant and within capture's permitted [0.05,0.80] domain.
+    An invalid explicitly declared fraction must never be replaced by inference.
+    """
+    f=trial.get('combined_brake_fraction')
+    if f is not None:
+        return f,'DECLARED_INTERVENTION'
+    if post and all(isinstance(s,dict) and _num(s.get('command_brake')) for s in post):
+        f=post[0]['command_brake']
+        if .05<=f<=.8 and all(abs(s['command_brake']-f)<=.025 for s in post):
+            return f,'LEGACY_CONSTANT_COMMAND_INFERRED_DESCRIPTIVELY'
+    return None,'MISSING_OR_NONCONSTANT_LEGACY_CONTROL'
+
+
 def audit_single_control_smoke(doc):
     reasons=[]
     result={'schema':'rampd.a64.carla.single_smoke_review.v1', 'status':'REVIEW',
@@ -117,7 +135,19 @@ def audit_single_control_smoke(doc):
         elif kind=='steer':
             has_excitation=any(abs(s['command_steer'])>=.025 and s['command_brake']<.1 for s in after)
         else:
-            has_excitation=any(s['command_brake']>=.2 and abs(s['command_steer'])>=.025 for s in after)
+            # A60 permits combined brake profiles in [0.05, 0.80]. An old
+            # hard-coded >=0.20 test falsely rejected valid 0.15 diagnostics.
+            # Check the *declared* intervention, not a fixed legacy threshold.
+            f,profile_source=combined_brake_profile(t,after)
+            result['combined_brake_profile_source']=profile_source
+            if not _num(f) or not .05<=f<=.8:
+                reasons.append('INVALID_DECLARED_COMBINED_BRAKE_PROFILE')
+                has_excitation=False
+            else:
+                has_excitation=any(abs(s['command_brake']-f)<=.025 and
+                                   abs(s['command_steer'])>=.025 for s in after)
+                if any(abs(s['command_brake']-f)>.025 for s in after):
+                    reasons.append('POSTTRIGGER_BRAKE_NOT_DECLARED_PROFILE')
         if not has_excitation:reasons.append('CONTROL_EXCITATION_NOT_COMMANDED')
         if kind in ('steer','combined') and not any(
                 max(abs(s['wheel_steer_deg_front_left_raw']),

@@ -6,7 +6,7 @@ capture quality, a coupled response observation, and torque-only discrepancy.
 """
 from __future__ import annotations
 from math import hypot, isfinite
-from .a64_carla_smoke_evidence import audit_single_control_smoke
+from .a64_carla_smoke_evidence import audit_single_control_smoke,combined_brake_profile
 from .a66_carla_lateral_witness import audit_steering_lane_witness
 
 
@@ -51,7 +51,18 @@ def audit_combined_dynamics(document: object, *, gross_ratio: float = 3.0) -> di
         'command_brake','command_steer','wheel_steer_deg_front_left_raw','wheel_steer_deg_front_right_raw',
         'x_m_carla','y_m_carla')) for s in post):
         r.append('INCOMPLETE_POSTCONTROL_SIGNALS'); return report
-    simultaneous = [s for s in post if s['command_brake'] >= .2 and abs(s['command_steer']) >= .025]
+    # Source capture supports graded brake fractions down to 0.05. Never
+    # assume that 0.45 (or the former >=0.2) is the only valid intervention.
+    declared_fraction,profile_source=combined_brake_profile(trial,post)
+    report['combined_brake_profile_source']=profile_source
+    if not _num(declared_fraction) or not .05<=declared_fraction<=.8:
+        r.append('INVALID_DECLARED_COMBINED_BRAKE_PROFILE')
+        return report
+    report['declared_brake_fraction']=declared_fraction
+    if any(abs(s['command_brake']-declared_fraction)>.025 for s in post):
+        r.append('POSTTRIGGER_BRAKE_NOT_DECLARED_PROFILE')
+    simultaneous = [s for s in post if abs(s['command_brake']-declared_fraction)<=.025
+                    and abs(s['command_steer']) >= .025]
     report['simultaneous_command_frames'] = len(simultaneous)
     report['simultaneous_brake_steer_yaw_response_frames'] = sum(
         1 for s in simultaneous if abs(s['wheel_steer_deg_front_left_raw']) >= .05
@@ -113,7 +124,8 @@ def audit_combined_dynamics(document: object, *, gross_ratio: float = 3.0) -> di
     report['captured']=(cap['status']=='DESCRIPTIVE_SINGLE_CONTROL_SMOKE_CAPTURED_NOT_CALIBRATED')
     report['sampled_lane_witness']=(lat['status']=='DESCRIPTIVE_STEER_SAMPLE_AND_INTERPOLATION_WITNESS_NOT_CERTIFIED')
     report['diagnostic_repetition_allowed']=(report['captured'] and report['sampled_lane_witness'] and
-                                            'NO_MEASURABLE_SIMULTANEOUS_CONTROL_RESPONSE' not in r)
+                                            'NO_MEASURABLE_SIMULTANEOUS_CONTROL_RESPONSE' not in r and
+                                            'POSTTRIGGER_BRAKE_NOT_DECLARED_PROFILE' not in r)
     report['reasons'] = sorted(set(r))
     report['status'] = ('DIAGNOSTIC_REPEAT_ELIGIBLE_MODEL_REVIEW_NOT_CALIBRATED'
                         if report['diagnostic_repetition_allowed'] else 'REVIEW')

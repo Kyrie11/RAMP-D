@@ -157,6 +157,29 @@
     "uploaded_steer_trial_captured": true,
     "validated_physics_envelope": false
   },
+  "a69_three_track_20261123": {
+    "a69_pure_tests": 34,
+    "all_eight_formal_supervision_labels_available": false,
+    "brake_levels_actual": [
+      "0.45"
+    ],
+    "brake_one_factor_campaign_complete": false,
+    "carla_severe_braking_mismatch_unresolved": true,
+    "exact_affine_artifact_semantic_model_replayed_in_tests": true,
+    "full_hidden_support_sc_terminal_verified": false,
+    "general_polygon_guard_resources_complete": false,
+    "historical_native_cpp_direct_executables": 3,
+    "m1_to_m13_complete": false,
+    "native_mpfr_hybrid_slab_replayed": false,
+    "new_native_library_compiled_in_this_environment": false,
+    "python_full_tests": 909,
+    "real_carla_live_trials_executed_here": false,
+    "real_carla_three_uploaded_repeats": 3,
+    "scenario_split_grouping_gate_added": true,
+    "source_baseline": "verified_previous_0N_plus_user_uploaded_0M_comparison",
+    "status": "CONDITIONAL_THREE_TRACK_LOCAL_SOFTWARE_PASS_NOT_FULL_SC",
+    "waymax_interior_speed_reversal_guard_added": true
+  },
   "assurance_scope": "Model-clock hybrid partition, actor geometry and pairwise conflict evidence; no new real simulator executions here.",
   "concrete_safety_certified": false,
   "current_scene_verified": false,
@@ -217,6 +240,48 @@
     "full_support_certified": false,
     "note": "SC support/time inheritance and structural checker, native + real AV2 pending",
     "state": "implemented_local_tests_partial_native_pending"
+  },
+  "phase6c_a59_1b0m": {
+    "actual_artifact_bytes_sha256_check_implemented": true,
+    "actual_native_and_protocol_proof_replay": false,
+    "eight_formal_supervision_sources_certified": false,
+    "full_pytest_local": 833,
+    "full_support_certified": false,
+    "historical_native_executables_local": 3,
+    "hybrid_native_post_integrated": false,
+    "new_pure_python_tests": 18,
+    "new_server_native_build": false,
+    "real_carla_repeats_tested_here": false,
+    "uploaded_carla_5ms_combined_capture": true,
+    "uploaded_carla_5ms_combined_source_status": "DESCRIPTIVE_CAPTURED_MODEL_DISCREPANCY_REVIEW",
+    "verified_dynamic_error_enclosure": false
+  },
+  "phase6c_a59_1b0n": {
+    "all_eight_formal_supervision_certified": false,
+    "eight_loss_source_masks_fail_closed": true,
+    "exact_affine_reference_1d_replayed_in_pure_tests": true,
+    "full_m1_m13_closed": false,
+    "full_pytest_local": 875,
+    "graded_carla_brake_review_015_corrected": true,
+    "historical_native_executable_replay": 3,
+    "hybrid_native_picard_full_post_integrated": false,
+    "identical_nominal_normalized_responses": true,
+    "legacy_carla_constant_brake_profile_descriptively_supported": true,
+    "new_server_native_build": false,
+    "new_targeted_tests": 42,
+    "peak_longitudinal_deceleration_mps2": 26.926564657025754,
+    "phase_status": "CONDITIONAL_A68_THREE_TRACK_SOFTWARE_ENTRY_PASS_NOT_CERTIFIED",
+    "physical_error_support_calibrated": false,
+    "real_waymax_runtime_executed_here": false,
+    "single_zone_guard_semantic_monitor_tested": true,
+    "three_actor_ids": [
+      121,
+      122,
+      123
+    ],
+    "three_raw_carla_5ms_combined_repeat_files_independently_audited": true,
+    "true_sumo_signal_ack_and_complete_resource_sweep": false,
+    "waymax_nominal_input_conversion_with_jerk_error_tested": true
   },
   "phase6c_a5_1": {
     "av2_server": "SKIP_MISSING_PYARROW",
@@ -446,7 +511,7 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
-  "release": "0.9.17",
+  "release": "0.9.19",
   "requires_carla": false,
   "requires_dataset": false,
   "requires_sumo": false,
@@ -455,20 +520,5 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
-  },
-  "phase6c_a59_1b0m": {
-    "uploaded_carla_5ms_combined_capture": true,
-    "uploaded_carla_5ms_combined_source_status": "DESCRIPTIVE_CAPTURED_MODEL_DISCREPANCY_REVIEW",
-    "new_pure_python_tests": 18,
-    "full_pytest_local": 833,
-    "historical_native_executables_local": 3,
-    "new_server_native_build": false,
-    "real_carla_repeats_tested_here": false,
-    "verified_dynamic_error_enclosure": false,
-    "full_support_certified": false,
-    "hybrid_native_post_integrated": false,
-    "actual_artifact_bytes_sha256_check_implemented": true,
-    "actual_native_and_protocol_proof_replay": false,
-    "eight_formal_supervision_sources_certified": false
   }
 }
