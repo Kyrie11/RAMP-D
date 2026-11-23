@@ -405,5 +405,20 @@
     "all_eight_supervision_sources_certified": false,
     "local_full_pytest": 764,
     "local_targeted_pytest": 24
+  },
+  "a59_1b0j": {
+    "phase": "A59/1b-0J",
+    "uploaded_town06_start_projected_usable": 2152,
+    "uploaded_town06_readiness_settled_frames": 20,
+    "uploaded_town06_readiness_descriptive": true,
+    "uploaded_new_control_trials_count": 0,
+    "math_slab_handoff_preflight_added": true,
+    "full_segmented_native_post_certified": false,
+    "physical_dynamics_calibrated": false,
+    "full_sc_certified": false,
+    "eight_supervision_labels_certified": false,
+    "new_specialized_tests": 12,
+    "expected_full_pytest_min": 776,
+    "next_stage": "A59/1b-1 Native MPFR/Picard segmented Post + public observation support; A5/3c CARLA response and SUMO live evidence"
   }
 }

@@ -470,15 +470,32 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s,
             'steer_fraction':steer_fraction,'steer_pulse_s':steer_pulse_s}
 
 
+
+def controlled_trial_matrix(mode, repeats, smoke_speed, smoke_maneuver):
+    """Pure deterministic experiment roster; no CARLA access or actor mutation."""
+    if mode=='smoke':
+        if smoke_speed not in (5,10,15) or smoke_maneuver not in ('brake','steer','combined'):
+            raise ValueError('invalid single trial control profile')
+        return ((smoke_speed, smoke_maneuver, 0),)
+    if mode=='trials' and type(repeats) is int and 1<=repeats<=10:
+        return tuple((v,k,r) for v in (5,10,15)
+                     for k in ('brake','steer','combined') for r in range(repeats))
+    raise ValueError('explicit trials/smoke mode and valid repeats required')
+
+
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('--mode',choices=('inventory','site-audit','capture','readiness','trials'),default='inventory')
+    p.add_argument('--mode',choices=('inventory','site-audit','capture','readiness','smoke','trials'),default='inventory')
     p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=2000)
     p.add_argument('--blueprint',default='vehicle.tesla.model3')
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--confirm-isolated-world',action='store_true')
     p.add_argument('--confirm-exclusive-tick',action='store_true')
     p.add_argument('--repeats',type=int,default=3)
+    p.add_argument('--smoke-speed',type=int,choices=(5,10,15),default=5,
+                   help='Only for --mode smoke; one 5/10/15 m/s controlled attempt')
+    p.add_argument('--smoke-maneuver',choices=('brake','steer','combined'),default='brake',
+                   help='Only for --mode smoke; does not imply calibration')
     p.add_argument('--fixed-delta',type=float,default=0.05)
     p.add_argument('--steer-fraction',type=float,default=0.08,
                    help='CARLA normalized steer input, NOT a radian angle (default original 0.08)')
@@ -492,7 +509,7 @@ def main():
     if a.output.exists():raise FileExistsError('REFUSE_OVERWRITE_CARLA_EVIDENCE')
     if a.mode in ('capture','readiness','trials') and not a.confirm_isolated_world:
         raise RuntimeError('SPAWN_REQUIRES_EXPLICIT_ISOLATED_WORLD_ACK')
-    if a.mode in ('readiness','trials') and not a.confirm_exclusive_tick:
+    if a.mode in ('readiness','smoke','trials') and not a.confirm_exclusive_tick:
         raise RuntimeError('TRIALS_REQUIRE_EXCLUSIVE_TICK_ACK')
     if not math.isfinite(a.site_spacing) or not 0.5<=a.site_spacing<=10.0:
         raise ValueError('site-spacing must be between 0.5 and 10 m')
@@ -597,14 +614,17 @@ def main():
                             settle['status']=='DESCRIPTIVE_STATIONARY_HEIGHT_STABLE' else 'REVIEW')
                         spawned.destroy();spawned=None
                     else:
-                        for v in (5,10,15):
-                            for kind in ('brake','steer','combined'):
-                                for k in range(a.repeats):
-                                    spawned=world.try_spawn_actor(blueprint,pose)
-                                    if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
-                                    spawned.set_autopilot(False)
-                                    try:
-                                        trial=drive_trial(world,spawned,carla,speed=v,kind=kind,repeat=k,
+                        # One small evidence-producing controlled attempt before
+                        # the nine-combination / 27-trial campaign. Never rewrite
+                        # the full campaign or silently relax the lane/physics gates.
+                        matrix = controlled_trial_matrix(
+                            a.mode,a.repeats,a.smoke_speed,a.smoke_maneuver)
+                        for v,kind,k in matrix:
+                            spawned=world.try_spawn_actor(blueprint,pose)
+                            if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
+                            spawned.set_autopilot(False)
+                            try:
+                                trial=drive_trial(world,spawned,carla,speed=v,kind=kind,repeat=k,
                                                           step_s=a.fixed_delta,
                                                           steer_fraction=a.steer_fraction,
                                                           steer_pulse_s=a.steer_pulse_s,
@@ -615,13 +635,12 @@ def main():
                                                               capture_frame=int(world.get_snapshot().frame),
                                                               capture_state='AFTER_STABLE_HEIGHT_BEFORE_ACTUATION')))
                                                               if not result.get('physics') else None)
-                                        trial['actor_id']=int(spawned.id)
-                                        result['trials'].append(trial)
-                                    finally:
-                                        spawned.destroy();spawned=None
-                                        # tick the actor destruction before the
-                                        # next attempt so the spawn point is free.
-                                        world.tick()
+                                trial['actor_id']=int(spawned.id)
+                                result['trials'].append(trial)
+                            finally:
+                                spawned.destroy();spawned=None
+                                # Tick the destruction before the next spawn.
+                                world.tick()
                     counts={}
                     for t in result['trials']:
                         st=t.get('status','MISSING_STATUS')
@@ -629,9 +648,12 @@ def main():
                     result['trial_status_counts']=counts
                     result['trial_captured_count']=counts.get('CAPTURED',0)
                     result['trial_attempt_count']=len(result['trials'])
-                    if a.mode=='trials':result['status']=('RAW_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED'
-                        if result['trial_captured_count']==9*a.repeats
-                        else 'RAW_PARTIAL_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED')
+                    if a.mode in ('trials','smoke'):
+                        required=(1 if a.mode=='smoke' else 9*a.repeats)
+                        result['experiment_scope']=('SINGLE_CONTROL_SMOKE' if a.mode=='smoke' else 'FULL_CONTROL_MATRIX')
+                        result['status']=('RAW_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED'
+                            if result['trial_captured_count']==required
+                            else 'RAW_PARTIAL_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED')
     except Exception as exc:
         result.update(status='REVIEW',error=f'{type(exc).__name__}: {exc}',traceback=traceback.format_exc())
     finally:
@@ -639,7 +661,7 @@ def main():
             try:spawned.destroy()
             except Exception:pass
         # Restore old global settings only if we changed them for trials.
-        if a.mode in ('readiness','trials') and result.get('world_exclusive_confirmed'):
+        if a.mode in ('readiness','smoke','trials') and result.get('world_exclusive_confirmed'):
             try:world.apply_settings(original)
             except Exception as exc:
                 result['restoration_error']=str(exc);result['status']='REVIEW'
