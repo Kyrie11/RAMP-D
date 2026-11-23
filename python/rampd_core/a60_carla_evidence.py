@@ -77,6 +77,11 @@ def inspect_trials(document, *, required_repeats=3):
             reasons.append('TRIGGER_SPEED_NOT_NEAR_TARGET:'+str(key))
         observed.append({'target_speed_mps':key[0],'maneuver':key[1],
                          'samples':len(measurements),'trigger_speed_mps':trial.get('trigger_speed_mps')})
+    if document.get('capture_protocol_version') is not None:
+        from .a62_carla_readiness import inspect_readiness_log
+        gate=inspect_readiness_log(document)
+        if gate['status']=='REVIEW':
+            reasons.extend('A62_READINESS:'+r for r in gate['reasons'])
     if type(required_repeats) is not int or required_repeats < 1:
         raise ValueError('invalid repeat count')
     for speed in SPEEDS:

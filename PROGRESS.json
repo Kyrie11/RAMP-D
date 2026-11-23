@@ -374,5 +374,23 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
+  },
+  "a59_1b0H": {
+    "phase": "Phase 6C-A59/1b-0H",
+    "status": "LOCAL_PYTHON_READINESS_AND_CLOCK_LEDGER_CONDITIONAL_PASS",
+    "user_smoke_trial_attempts": 9,
+    "user_smoke_triggered": 0,
+    "user_smoke_result": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+    "target_server_new_carla_trial": false,
+    "uploaded_actor_geometry_available": true,
+    "live_calibrated_error_envelope": false,
+    "local_full_pytest": 758,
+    "new_pure_tests": 18,
+    "prior_native_binaries_local": 3,
+    "fresh_server_ctest_required": true,
+    "hybrid_native_picard_certified": false,
+    "full_sc_certified": false,
+    "eight_heads_certified": false,
+    "next_stage": "A59/1b-1 segmented Native MPFR/Picard + Guard/Resource/Observation/SC task tail; A5/3c CARLA/SUMO and calibration"
   }
 }

@@ -11,6 +11,8 @@ world ownership lock across arbitrary remote CARLA clients.
 from __future__ import annotations
 import argparse,fcntl,hashlib,json,math,sys,traceback
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"python"))
+from rampd_core.a62_carla_readiness import ground_window, projected_lane_footprint, wheel_road_height_proxy
 
 
 def vec(v):return {k:float(getattr(v,k)) for k in ('x','y','z')}
@@ -272,7 +274,8 @@ def observe(actor,world,snapshot,cmd,trigger):
         wheel_steer_query_error=type(exc).__name__+': '+str(exc)
         actual_fl_steer=actual_fr_steer=None
     out={'frame':int(snapshot.frame),'sim_time_s':float(snapshot.timestamp.elapsed_seconds),
-         'speed_mps':sp, 'accel_mps2':math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z),
+         'speed_mps':sp, 'planar_speed_mps':math.hypot(v.x,v.y),
+         'vertical_speed_mps':float(v.z), 'accel_mps2':math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z),
          'yaw_rate_radps_carla':math.radians(float(w.z)),
          'yaw_rate_degps_raw':float(w.z),
          'signed_longitudinal_accel_mps2':float(a.x*math.cos(math.radians(x.rotation.yaw))+a.y*math.sin(math.radians(x.rotation.yaw))),
@@ -294,8 +297,106 @@ def observe(actor,world,snapshot,cmd,trigger):
     return out
 
 
+
+def lane_audit(world, actor, carla, *, expected_lane=None, margin=0.10):
+    """Explicit 2-D projected lane check with the full vehicle rectangle.
+
+    Nearest waypoint alone is never accepted as road containment. Road IDs and
+    lateral width must also agree. Never a continuous/swept road safety proof.
+    """
+    m=world.get_map(); t=actor.get_transform(); loc=t.location
+    wp=m.get_waypoint(loc,project_to_road=True,lane_type=carla.LaneType.Driving)
+    if wp is None or wp.is_junction:
+        return {'status':'REVIEW','reason':'NO_NONJUNCTION_DRIVING_WAYPOINT'}
+    bb=actor.bounding_box
+    got=(int(wp.road_id),int(wp.section_id),int(wp.lane_id))
+    return projected_lane_footprint(loc.x,loc.y,t.rotation.yaw,
+        bb.location.x,bb.location.y,bb.extent.x,bb.extent.y,
+        wp.transform.location.x,wp.transform.location.y,
+        wp.transform.rotation.yaw,wp.lane_width,lane_margin=margin,
+        expected_lane=expected_lane,observed_lane=got)
+
+
+def road_height_proxy(world, actor, carla):
+    """Check CARLA 0.9.16 wheel heights against map, fail on unknown units."""
+    t=actor.get_transform();wheels=actor.get_physics_control().wheels
+    try:
+        heights=[]
+        m=world.get_map()
+        for w in wheels:
+            # The wheel-coordinate scale must match the body position before
+            # any road elevation comparison is treated as useful evidence.
+            loc=carla.Location(x=float(w.position.x)/100,
+                               y=float(w.position.y)/100,
+                               z=float(w.position.z)/100)
+            wp=m.get_waypoint(loc,project_to_road=True,
+                              lane_type=carla.LaneType.Driving)
+            if wp is None:
+                return {'status':'REVIEW','reason':'NO_ROAD_SURFACE_UNDER_WHEEL'}
+            heights.append(float(wp.transform.location.z))
+        return wheel_road_height_proxy(wheels,(t.location.x,t.location.y,t.location.z),heights)
+    except (AttributeError,RuntimeError,TypeError,ValueError,OverflowError) as exc:
+        return {'status':'REVIEW','reason':'UNAVAILABLE_WHEEL_ROAD_HEIGHT_PROXY',
+                'error':type(exc).__name__+': '+str(exc)}
+
+
+def settle_vehicle(world,actor,carla,*,step_s,max_settle_s=4.0,
+                   min_consecutive=5,expected_lane=None):
+    """Quiescent physical settling before acceleration or metadata fitting.
+
+    Reject floating/falling, horizontally moving and off-center vehicles;
+    preserve diagnostic frames. No contact sensor is inferred from z stability.
+    """
+    samples=[]
+    cmd=carla.VehicleControl(throttle=0,brake=0,steer=0,hand_brake=True)
+    for _ in range(int(max_settle_s/step_s)):
+        before=world.get_snapshot().frame
+        actor.apply_control(cmd)
+        f=world.tick();snap=world.get_snapshot()
+        if f!=before+1 or snap.frame!=f:
+            raise RuntimeError('REVIEW_FOREIGN_TICK_DURING_SETTLING')
+        t=actor.get_transform().location;v=actor.get_velocity()
+        samples.append((int(f),float(snap.timestamp.elapsed_seconds),
+                        float(t.x),float(t.y),float(t.z),
+                        float(v.x),float(v.y),float(v.z)))
+        if len(samples)>=min_consecutive:
+            stable,why=ground_window(samples,minimum=min_consecutive)
+            if stable:
+                lane=lane_audit(world,actor,carla,expected_lane=expected_lane)
+                if lane['status']!='DESCRIPTIVE_RECTANGLE_WITHIN_LANE':
+                    return {'status':'REVIEW_SETTLED_BUT_NOT_IN_LANE',
+                            'reason':lane['reason'],'lane_audit':lane,
+                            'frames':len(samples),'samples':samples[-min_consecutive:]}
+                ground=road_height_proxy(world,actor,carla)
+                if ground['status']!='DESCRIPTIVE_WHEEL_HEIGHT_NEAR_ROAD':
+                    # Height stationary alone can also mean a physics-disabled,
+                    # suspended or badly placed actor; this is not sufficient.
+                    return {'status':'REVIEW_GROUND_HEIGHT_PROXY_UNVERIFIED',
+                            'reason':ground['reason'],'ground_height_proxy':ground,
+                            'frames':len(samples),'samples':samples[-min_consecutive:]}
+                # Remove the handbrake before the first throttle command.
+                actor.apply_control(carla.VehicleControl(throttle=0,brake=0,steer=0,hand_brake=False))
+                return {'status':'DESCRIPTIVE_STATIONARY_HEIGHT_STABLE',
+                        'reason':why,'frames':len(samples),
+                        'lane_audit':lane,'ground_height_proxy':ground,
+                        'samples':samples[-min_consecutive:]}
+    stable,why=ground_window(samples,minimum=min_consecutive)
+    return {'status':'REVIEW_NO_STABLE_GROUNDING_EVIDENCE','reason':why,
+            'frames':len(samples),'samples':samples[-min_consecutive:]}
+
+
 def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s,
-                steer_fraction=0.08,steer_pulse_s=0.8, max_accel_s=22.0):
+                steer_fraction=0.08,steer_pulse_s=0.8, max_accel_s=22.0,
+                expected_lane=None,on_settled=None):
+    settle=settle_vehicle(world,vehicle,carla,step_s=step_s,
+                          expected_lane=expected_lane)
+    if settle['status']!='DESCRIPTIVE_STATIONARY_HEIGHT_STABLE':
+        return {'status':'REVIEW_PRETRIAL_GROUNDING_FAILED',
+                'target_speed_mps':speed,'maneuver':kind,'repeat':repeat,
+                'settling':settle,'samples':[],'trigger_frame':-1,
+                'trigger_speed_mps':-1}
+    if on_settled is not None:
+        on_settled(vehicle)
     samples=[];cmd=carla.VehicleControl(throttle=0.70,brake=0.0,steer=0.0,hand_brake=False)
     target_frame=None;target_speed=None;command_time=None
     n_accel=int(max_accel_s/step_s)
@@ -306,21 +407,21 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s,
         if snap.frame!=f or snap.frame!=old.frame+1:
             raise RuntimeError('REVIEW_FOREIGN_TICK_OWNER_OR_MISSING_CARLA_FRAME')
         sample=observe(vehicle,world,snap,cmd,float(old.timestamp.elapsed_seconds))
+        sample['lane_audit']=lane_audit(world,vehicle,carla,
+                                      expected_lane=expected_lane)
         samples.append(sample)
         # A centerline-only 110m site check is not a proof that the vehicle
         # stayed on the road during the acceleration phase.
-        wp=world.get_map().get_waypoint(vehicle.get_location(),project_to_road=False,
-                                        lane_type=carla.LaneType.Driving)
-        if wp is None or wp.is_junction:
+        if sample['lane_audit']['status']!='DESCRIPTIVE_RECTANGLE_WITHIN_LANE':
             return {'status':'REVIEW_APPROACH_OFF_DRIVABLE_LANE',
                     'target_speed_mps':speed,'maneuver':kind,'repeat':repeat,
-                    'samples':samples,'trigger_frame':-1,'trigger_speed_mps':-1}
-        if sample['speed_mps']>=speed-0.25:
-            target_frame=f;target_speed=sample['speed_mps'];command_time=float(snap.timestamp.elapsed_seconds)
+                    'samples':samples,'settling':settle,'trigger_frame':-1,'trigger_speed_mps':-1}
+        if sample['planar_speed_mps']>=speed-0.25:
+            target_frame=f;target_speed=sample['planar_speed_mps'];command_time=float(snap.timestamp.elapsed_seconds)
             break
     if target_frame is None:
         return {'status':'REVIEW_TARGET_NOT_REACHED','target_speed_mps':speed,
-                'maneuver':kind,'repeat':repeat,'samples':samples,'trigger_frame':-1,'trigger_speed_mps':-1}
+                'maneuver':kind,'repeat':repeat,'samples':samples,'settling':settle,'trigger_frame':-1,'trigger_speed_mps':-1}
     # The first sample at target is the trigger reference; only POST-trigger
     # samples contain the new command and are eligible for delay estimation.
     for i in range(int(2.0/step_s)):
@@ -331,23 +432,24 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s,
         old=world.get_snapshot();vehicle.apply_control(new);f=world.tick();snap=world.get_snapshot()
         if snap.frame!=f or snap.frame!=old.frame+1:
             raise RuntimeError('REVIEW_FOREIGN_TICK_OWNER_OR_MISSING_CARLA_FRAME')
-        samples.append(observe(vehicle,world,snap,new,float(old.timestamp.elapsed_seconds)))
+        post=observe(vehicle,world,snap,new,float(old.timestamp.elapsed_seconds))
+        post['lane_audit']=lane_audit(world,vehicle,carla,expected_lane=expected_lane)
+        samples.append(post)
         # This script is not an autonomous driving controller. Stop if the test
         # leaves the drivable lane or approaches a junction unexpectedly.
-        w=world.get_map().get_waypoint(vehicle.get_location(),project_to_road=False,lane_type=carla.LaneType.Driving)
-        if w is None or w.is_junction:
+        if post['lane_audit']['status']!='DESCRIPTIVE_RECTANGLE_WITHIN_LANE':
             return {'status':'REVIEW_OFF_DRIVABLE_LANE','target_speed_mps':speed,
-                    'maneuver':kind,'repeat':repeat,'samples':samples,
+                    'maneuver':kind,'repeat':repeat,'samples':samples,'settling':settle,
                     'trigger_frame':target_frame,'trigger_speed_mps':target_speed}
     return {'status':'CAPTURED','target_speed_mps':speed,'maneuver':kind,'repeat':repeat,
-            'samples':samples,'trigger_frame':target_frame,'trigger_speed_mps':target_speed,
+            'samples':samples,'settling':settle,'trigger_frame':target_frame,'trigger_speed_mps':target_speed,
             'command_start_sim_time_s':command_time,'command_issue_semantics':'applied prior to next synchronous world.tick',
             'steer_fraction':steer_fraction,'steer_pulse_s':steer_pulse_s}
 
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('--mode',choices=('inventory','site-audit','capture','trials'),default='inventory')
+    p.add_argument('--mode',choices=('inventory','site-audit','capture','readiness','trials'),default='inventory')
     p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=2000)
     p.add_argument('--blueprint',default='vehicle.tesla.model3')
     p.add_argument('--output',type=Path,required=True)
@@ -365,9 +467,9 @@ def main():
                    help='Waypoint sampling interval in meters for read-only site search (default: 2)')
     a=p.parse_args()
     if a.output.exists():raise FileExistsError('REFUSE_OVERWRITE_CARLA_EVIDENCE')
-    if a.mode in ('capture','trials') and not a.confirm_isolated_world:
+    if a.mode in ('capture','readiness','trials') and not a.confirm_isolated_world:
         raise RuntimeError('SPAWN_REQUIRES_EXPLICIT_ISOLATED_WORLD_ACK')
-    if a.mode=='trials' and not a.confirm_exclusive_tick:
+    if a.mode in ('readiness','trials') and not a.confirm_exclusive_tick:
         raise RuntimeError('TRIALS_REQUIRE_EXCLUSIVE_TICK_ACK')
     if not math.isfinite(a.site_spacing) or not 0.5<=a.site_spacing<=10.0:
         raise ValueError('site-spacing must be between 0.5 and 10 m')
@@ -430,42 +532,61 @@ def main():
                     world.apply_settings(settings)
                     result['world_provenance']=world_provenance(world)
                     result.update(schema='rampd.carla.a59_1.raw_trials.v1',
+                                  capture_protocol_version='a62_grounding_lane_v1',
                                   world_exclusive_confirmed=True,step_s=a.fixed_delta,
                                   trial_maneuvers=['brake','steer','combined'],trials=[],
                                   steer_fraction=a.steer_fraction,steer_pulse_s=a.steer_pulse_s)
-                    for v in (5,10,15):
-                        for kind in ('brake','steer','combined'):
-                            for k in range(a.repeats):
-                                spawned=world.try_spawn_actor(blueprint,pose)
-                                if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
-                                spawned.set_autopilot(False)
-                                if not result.get('physics'):
-                                    # CARLA actor.get_transform() can still return the
-                                    # default zero pose immediately after a synchronous
-                                    # spawn, even though wheel positions are world-space.
-                                    # Tick once before recording body vs axle frame.
-                                    old_frame=world.get_snapshot().frame
-                                    sync_frame=world.tick()
-                                    if sync_frame!=old_frame+1 or world.get_snapshot().frame!=sync_frame:
-                                        raise RuntimeError('REVIEW_FOREIGN_TICK_AT_SPAWN')
-                                    result['actor_id']=int(spawned.id)
-                                    result['physics']=actor_metadata(spawned,world,client)
-                                    result['physics']['capture_frame']=int(sync_frame)
-                                    result['physics']['spawn_requested_transform']={
-                                        'location':vec(pose.location),
-                                        'rotation':rotation(pose.rotation)}
-                                try:
-                                    trial=drive_trial(world,spawned,carla,speed=v,kind=kind,repeat=k,
-                                                      step_s=a.fixed_delta,
-                                                      steer_fraction=a.steer_fraction,
-                                                      steer_pulse_s=a.steer_pulse_s)
-                                    trial['actor_id']=int(spawned.id)
-                                    result['trials'].append(trial)
-                                finally:
-                                    spawned.destroy();spawned=None
-                                    # tick the actor destruction before the
-                                    # next attempt so the spawn point is free.
-                                    world.tick()
+                    # Anchor the selected roadway lane before any actor trial.
+                    selected_wp=world.get_map().get_waypoint(
+                        pose.location,project_to_road=True,lane_type=carla.LaneType.Driving)
+                    if selected_wp is None or selected_wp.is_junction:
+                        raise RuntimeError('REVIEW_INVALID_START_LANE')
+                    expected_lane=(int(selected_wp.road_id),int(selected_wp.section_id),int(selected_wp.lane_id))
+                    result['expected_start_lane']={'road_id':expected_lane[0],
+                        'section_id':expected_lane[1],'lane_id':expected_lane[2]}
+                    if a.mode=='readiness':
+                        spawned=world.try_spawn_actor(blueprint,pose)
+                        if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
+                        spawned.set_autopilot(False)
+                        settle=settle_vehicle(world,spawned,carla,step_s=a.fixed_delta,
+                                             expected_lane=expected_lane)
+                        result['trials'].append({'status':
+                            'DESCRIPTIVE_PRETRIAL_READY_NOT_CALIBRATED' if
+                             settle['status']=='DESCRIPTIVE_STATIONARY_HEIGHT_STABLE' else
+                            'REVIEW_PRETRIAL_GROUNDING_FAILED',
+                            'settling':settle,'actor_id':int(spawned.id)})
+                        result['physics']=dict(actor_metadata(spawned,world,client),
+                            capture_frame=int(world.get_snapshot().frame),
+                            capture_state='AFTER_SETTLING_PRETRIAL_READINESS')
+                        result['status']=('DESCRIPTIVE_PRETRIAL_READY_NOT_CALIBRATED' if
+                            settle['status']=='DESCRIPTIVE_STATIONARY_HEIGHT_STABLE' else 'REVIEW')
+                        spawned.destroy();spawned=None
+                    else:
+                        for v in (5,10,15):
+                            for kind in ('brake','steer','combined'):
+                                for k in range(a.repeats):
+                                    spawned=world.try_spawn_actor(blueprint,pose)
+                                    if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
+                                    spawned.set_autopilot(False)
+                                    try:
+                                        trial=drive_trial(world,spawned,carla,speed=v,kind=kind,repeat=k,
+                                                          step_s=a.fixed_delta,
+                                                          steer_fraction=a.steer_fraction,
+                                                          steer_pulse_s=a.steer_pulse_s,
+                                                          expected_lane=expected_lane,
+                                                          on_settled=(lambda v: result.update(
+                                                              actor_id=int(v.id),
+                                                              physics=dict(actor_metadata(v,world,client),
+                                                              capture_frame=int(world.get_snapshot().frame),
+                                                              capture_state='AFTER_STABLE_HEIGHT_BEFORE_ACTUATION')))
+                                                              if not result.get('physics') else None)
+                                        trial['actor_id']=int(spawned.id)
+                                        result['trials'].append(trial)
+                                    finally:
+                                        spawned.destroy();spawned=None
+                                        # tick the actor destruction before the
+                                        # next attempt so the spawn point is free.
+                                        world.tick()
                     counts={}
                     for t in result['trials']:
                         st=t.get('status','MISSING_STATUS')
@@ -473,7 +594,7 @@ def main():
                     result['trial_status_counts']=counts
                     result['trial_captured_count']=counts.get('CAPTURED',0)
                     result['trial_attempt_count']=len(result['trials'])
-                    result['status']=('RAW_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED'
+                    if a.mode=='trials':result['status']=('RAW_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED'
                         if result['trial_captured_count']==9*a.repeats
                         else 'RAW_PARTIAL_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED')
     except Exception as exc:
@@ -483,7 +604,7 @@ def main():
             try:spawned.destroy()
             except Exception:pass
         # Restore old global settings only if we changed them for trials.
-        if a.mode=='trials' and result.get('world_exclusive_confirmed'):
+        if a.mode in ('readiness','trials') and result.get('world_exclusive_confirmed'):
             try:world.apply_settings(original)
             except Exception as exc:
                 result['restoration_error']=str(exc);result['status']='REVIEW'

@@ -1,0 +1,173 @@
+{
+  "schema": "rampd.a62.shortpulse_excerpt.fixture.v1",
+  "derived_from_sha256": "168f321bdbe546625d0a775b6359b19db697e40e9beff4168b458c1e8d5b4fcc",
+  "trial_attempt_count": 9,
+  "trial_captured_count": 0,
+  "trials": [
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.9800000786781311
+          }
+        }
+      ]
+    },
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.4899999797344208
+          }
+        }
+      ]
+    },
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.4899999797344208
+          }
+        }
+      ]
+    },
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.4899999797344208
+          }
+        }
+      ]
+    },
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.4899999797344208
+          }
+        }
+      ]
+    },
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.4899999797344208
+          }
+        }
+      ]
+    },
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.4899999797344208
+          }
+        }
+      ]
+    },
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.4899999797344208
+          }
+        }
+      ]
+    },
+    {
+      "status": "REVIEW_APPROACH_OFF_DRIVABLE_LANE",
+      "trigger_frame": -1,
+      "samples": [
+        {
+          "velocity_xyz_carla": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -0.4899999797344208
+          }
+        }
+      ]
+    }
+  ],
+  "physics": {
+    "wheels": [
+      {
+        "position_raw": {
+          "x": 49019.8203125,
+          "y": -2363.50048828125,
+          "z": 78.33548736572266
+        },
+        "radius_cm_raw": 37.0
+      },
+      {
+        "position_raw": {
+          "x": 49020.18359375,
+          "y": -2530.182861328125,
+          "z": 78.33549499511719
+        },
+        "radius_cm_raw": 37.0
+      },
+      {
+        "position_raw": {
+          "x": 49320.28125,
+          "y": -2362.84423828125,
+          "z": 78.33599853515625
+        },
+        "radius_cm_raw": 37.0
+      },
+      {
+        "position_raw": {
+          "x": 49320.64453125,
+          "y": -2529.526611328125,
+          "z": 78.33556365966797
+        },
+        "radius_cm_raw": 37.0
+      }
+    ],
+    "body_transform": {
+      "location": {
+        "x": 491.8182373046875,
+        "y": -24.464881896972656,
+        "z": 0.4853000044822693
+      },
+      "rotation": {
+        "pitch_deg": 0.0,
+        "yaw_deg": -179.87484741210938,
+        "roll_deg": 0.0
+      }
+    }
+  }
+}
