@@ -1,3 +1,9 @@
+# CURRENT: Phase 6C-A59/1b-0M (A67, conditional)
+
+See `docs/PHASE6C_A59_1B0M_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0M_RUNBOOK.md`. Real CARLA 5 m/s combined control was captured; gross −26.93 m/s² deceleration is still unexplained and not calibrated. A67 adds diagnostic repeat checks and independent artifact byte-hash/context verification, not mathematical proof replay. M1–M13 full closure and all eight supervised labels remain pending.
+
+---
+
 ## 2026-11-23 Phase 6C-A59/1b-0 (conditional evidence gate)
 
 See `docs/PHASE6C_A59_1B0_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0_RUNBOOK.md`.

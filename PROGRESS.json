@@ -446,7 +446,7 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
-  "release": "0.9.14",
+  "release": "0.9.17",
   "requires_carla": false,
   "requires_dataset": false,
   "requires_sumo": false,
@@ -455,5 +455,20 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
+  },
+  "phase6c_a59_1b0m": {
+    "uploaded_carla_5ms_combined_capture": true,
+    "uploaded_carla_5ms_combined_source_status": "DESCRIPTIVE_CAPTURED_MODEL_DISCREPANCY_REVIEW",
+    "new_pure_python_tests": 18,
+    "full_pytest_local": 833,
+    "historical_native_executables_local": 3,
+    "new_server_native_build": false,
+    "real_carla_repeats_tested_here": false,
+    "verified_dynamic_error_enclosure": false,
+    "full_support_certified": false,
+    "hybrid_native_post_integrated": false,
+    "actual_artifact_bytes_sha256_check_implemented": true,
+    "actual_native_and_protocol_proof_replay": false,
+    "eight_formal_supervision_sources_certified": false
   }
 }

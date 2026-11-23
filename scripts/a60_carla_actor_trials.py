@@ -409,7 +409,7 @@ def settle_vehicle(world,actor,carla,*,step_s,max_settle_s=4.0,
 
 
 def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s,
-                steer_fraction=0.08,steer_pulse_s=0.8, max_accel_s=22.0,
+                steer_fraction=0.08,steer_pulse_s=0.8, combined_brake_fraction=0.45, max_accel_s=22.0,
                 expected_lane=None,on_settled=None):
     settle=settle_vehicle(world,vehicle,carla,step_s=step_s,
                           expected_lane=expected_lane)
@@ -450,7 +450,7 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s,
     for i in range(int(2.0/step_s)):
         turn=steer_fraction if i*step_s<steer_pulse_s and kind in ('steer','combined') else 0.0
         if kind=='brake': new=carla.VehicleControl(throttle=0,brake=0.70,steer=0)
-        elif kind=='combined': new=carla.VehicleControl(throttle=0,brake=0.45,steer=turn)
+        elif kind=='combined': new=carla.VehicleControl(throttle=0,brake=combined_brake_fraction,steer=turn)
         else:new=carla.VehicleControl(throttle=0.17,brake=0,steer=turn)
         old=world.get_snapshot();vehicle.apply_control(new);f=world.tick();snap=world.get_snapshot()
         if snap.frame!=f or snap.frame!=old.frame+1:
@@ -467,7 +467,8 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s,
     return {'status':'CAPTURED','target_speed_mps':speed,'maneuver':kind,'repeat':repeat,
             'samples':samples,'settling':settle,'trigger_frame':target_frame,'trigger_speed_mps':target_speed,
             'command_start_sim_time_s':command_time,'command_issue_semantics':'applied prior to next synchronous world.tick',
-            'steer_fraction':steer_fraction,'steer_pulse_s':steer_pulse_s}
+            'steer_fraction':steer_fraction,'steer_pulse_s':steer_pulse_s,
+            'combined_brake_fraction':combined_brake_fraction}
 
 
 
@@ -499,6 +500,8 @@ def main():
     p.add_argument('--fixed-delta',type=float,default=0.05)
     p.add_argument('--steer-fraction',type=float,default=0.08,
                    help='CARLA normalized steer input, NOT a radian angle (default original 0.08)')
+    p.add_argument('--combined-brake-fraction',type=float,default=0.45,
+                   help='Combined-only normalized brake fraction; original protocol 0.45')
     p.add_argument('--steer-pulse-s',type=float,default=0.8,
                    help='Positive steer pulse duration; changes trial protocol, default original 0.8s')
     p.add_argument('--site-prefer-longest', action='store_true',
@@ -516,7 +519,8 @@ def main():
     if not 0<a.fixed_delta<=0.05 or type(a.repeats) is not int or not 1<=a.repeats<=10:
         raise ValueError('invalid fixed step or repeats')
     if (not math.isfinite(a.steer_fraction) or not 0.025<=a.steer_fraction<=0.5 or
-        not math.isfinite(a.steer_pulse_s) or not a.fixed_delta<=a.steer_pulse_s<=1.0):
+        not math.isfinite(a.steer_pulse_s) or not a.fixed_delta<=a.steer_pulse_s<=1.0 or
+        not math.isfinite(a.combined_brake_fraction) or not 0.05<=a.combined_brake_fraction<=0.8):
         raise ValueError('invalid declared steering excitation profile')
     import carla
     client=carla.Client(a.host,a.port);client.set_timeout(12.0)
@@ -578,7 +582,8 @@ def main():
                                   start_site_protocol_version='a63_projected_lane_identity_v1',
                                   world_exclusive_confirmed=True,step_s=a.fixed_delta,
                                   trial_maneuvers=['brake','steer','combined'],trials=[],
-                                  steer_fraction=a.steer_fraction,steer_pulse_s=a.steer_pulse_s)
+                                  steer_fraction=a.steer_fraction,steer_pulse_s=a.steer_pulse_s,
+                                  combined_brake_fraction=a.combined_brake_fraction)
                     # The site selection has already checked the same map
                     # projection used here. Recheck after changing world
                     # settings; if the map query changed, stop with evidence.
@@ -628,6 +633,7 @@ def main():
                                                           step_s=a.fixed_delta,
                                                           steer_fraction=a.steer_fraction,
                                                           steer_pulse_s=a.steer_pulse_s,
+                                                          combined_brake_fraction=a.combined_brake_fraction,
                                                           expected_lane=expected_lane,
                                                           on_settled=(lambda v: result.update(
                                                               actor_id=int(v.id),
