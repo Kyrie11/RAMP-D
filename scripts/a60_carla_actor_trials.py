@@ -41,57 +41,179 @@ def actor_metadata(actor, world, client):
             'calibrated_vehicle_dynamics':False}
 
 
-def spot(world, carla):
-    """Find a 110 m non-junction straight lane; use the full map if spawns fail.
+SITE_STEP_M = 5.0
+SITE_REQUIRED_STEPS = 22
+SITE_EXTENDED_STEPS = 60  # diagnostics: probe up to 300m, never relax the 110m gate
+SITE_MAX_HEADING_DELTA_DEG = 5.0
 
-    Site selection only: the 22 x 5 m / 5-degree eligibility gate and the
-    subsequent 27 trial controls, ticks and recording are unchanged.
+
+def _site_trace(wp, carla, *, max_steps=SITE_REQUIRED_STEPS):
+    """Audit the original 22 x 5 m / 5-degree eligibility test.
+
+    Returns (verified distance, first rejection reason).  This intentionally
+    uses the *same* next(5.0) and unique-successor conditions as the original
+    `spot` implementation; it does not certify vehicle travel or road clearance.
     """
-    m=world.get_map()
+    if wp is None:
+        return 0.0, 'NO_DRIVING_WAYPOINT'
+    if wp.is_junction:
+        return 0.0, 'START_IN_JUNCTION'
+    if wp.lane_type != carla.LaneType.Driving:
+        return 0.0, 'NOT_DRIVING_LANE'
+    cur = wp
+    initial_yaw = float(wp.transform.rotation.yaw)
+    for i in range(max_steps):
+        following = cur.next(SITE_STEP_M)
+        if len(following) == 0:
+            return i * SITE_STEP_M, 'NO_NEXT_WAYPOINT'
+        if len(following) > 1:
+            return i * SITE_STEP_M, 'MULTIPLE_NEXT_WAYPOINTS'
+        successor = following[0]
+        if successor.is_junction:
+            return i * SITE_STEP_M, 'JUNCTION_IN_WINDOW'
+        if successor.lane_type != carla.LaneType.Driving:
+            return i * SITE_STEP_M, 'NON_DRIVING_IN_WINDOW'
+        heading_delta = (float(successor.transform.rotation.yaw) - initial_yaw + 180) % 360 - 180
+        if abs(heading_delta) > SITE_MAX_HEADING_DELTA_DEG:
+            return i * SITE_STEP_M, 'HEADING_DELTA_OVER_5_DEG'
+        cur = successor
+    return SITE_STEP_M * max_steps, 'ELIGIBLE'
 
-    def eligible(wp):
-        if wp is None or wp.is_junction or wp.lane_type!=carla.LaneType.Driving:
-            return False
-        cur=wp
-        for _ in range(22):
-            nxt=cur.next(5.0)
-            if (len(nxt)!=1 or nxt[0].is_junction or
-                    nxt[0].lane_type!=carla.LaneType.Driving):
-                return False
-            diff=(nxt[0].transform.rotation.yaw-wp.transform.rotation.yaw+180)%360-180
-            if abs(diff)>5:
-                return False
-            cur=nxt[0]
-        return True
 
-    # CARLA recommended spawn points are slightly above the road.  Projecting
-    # a candidate onto its driving-lane waypoint avoids a false negative from
-    # the initial 'project_to_road=False' query; this does not move the actor.
-    spawns=m.get_spawn_points()
-    for pose in spawns:
-        wp=m.get_waypoint(pose.location,project_to_road=True,lane_type=carla.LaneType.Driving)
-        if eligible(wp):
-            return pose
+def _site_label(source, index, wp):
+    t = wp.transform
+    return {
+        'source': source,
+        'index': index,
+        'road_id': int(wp.road_id),
+        'section_id': int(wp.section_id),
+        'lane_id': int(wp.lane_id),
+        'x_m': float(t.location.x),
+        'y_m': float(t.location.y),
+        'z_m': float(t.location.z),
+        'yaw_deg': float(t.rotation.yaw),
+    }
 
-    # A map can have suitable long lanes without a recommended spawn point at
-    # their start.  The waypoint transform is lane-centered and lane-aligned;
-    # add CARLA's normal 0.5 m spawn height to prevent ground collision.
-    waypoints=m.generate_waypoints(5.0)
-    for wp in waypoints:
-        if eligible(wp):
-            transform=wp.transform
-            location=transform.location
-            return carla.Transform(
-                carla.Location(x=location.x,y=location.y,z=location.z+0.5),
-                transform.rotation)
 
-    # Do not accept a short, curved or junction-crossing substitute: that
-    # would change the controlled dynamics experiment's geometric premise.
+def survey_sites(world, carla, *, spacing_m=2.0, exhaustive=True,
+                 prefer_longest=False, top_k=10):
+    """Read-only map search; return an eligible actor pose and a site report.
+
+    Exhaustive mode is intended for --mode site-audit. In normal trials the
+    search stops at the first eligible pose, preserving spawn-point precedence.
+    The report is descriptive, not a proof about the entire continuous map.
+    """
+    from collections import Counter
+    m = world.get_map()
+    spawns = m.get_spawn_points()
+    causes = Counter()
+    causes_by_source = {'spawn': Counter(), 'sampled_lane': Counter()}
+    candidates = []
+    selected_pose = None
+    selected_metadata = None
+    selected_extra_m = -1.0
+    measured = 0
+    number_eligible = 0
+    counts_above = {str(n): 0 for n in (40, 60, 80, 100, 110)}
+
+    def scan(wp, source, index, pose):
+        nonlocal selected_pose, selected_metadata, selected_extra_m, measured, number_eligible
+        distance, reason = _site_trace(wp, carla)
+        extra_distance = distance
+        if reason == 'ELIGIBLE':
+            extra_distance, _ = _site_trace(wp, carla, max_steps=SITE_EXTENDED_STEPS)
+        measured += 1
+        causes[reason] += 1
+        causes_by_source[source][reason] += 1
+        for threshold in (40, 60, 80, 100, 110):
+            if distance >= threshold:
+                counts_above[str(threshold)] += 1
+        if reason == 'ELIGIBLE':
+            number_eligible += 1
+            if selected_pose is None or (prefer_longest and extra_distance > selected_extra_m):
+                selected_pose = pose
+                selected_metadata = _site_label(source, index, wp)
+                selected_extra_m = extra_distance
+        if wp is not None:
+            data = _site_label(source, index, wp)
+            data.update({'verified_step_distance_m': distance,
+                         'extended_straight_probe_m': extra_distance,
+                         'first_rejection_reason': reason})
+            candidates.append(data)
+
+    for index, pose in enumerate(spawns):
+        wp = m.get_waypoint(pose.location, project_to_road=True,
+                            lane_type=carla.LaneType.Driving)
+        scan(wp, 'spawn', index, pose)
+        if selected_pose is not None and not exhaustive:
+            break
+
+    waypoint_count = 0
+    if selected_pose is None or exhaustive:
+        waypoints = m.generate_waypoints(spacing_m)
+        waypoint_count = len(waypoints)
+        for index, wp in enumerate(waypoints):
+            t = wp.transform
+            pose = carla.Transform(
+                carla.Location(x=t.location.x, y=t.location.y,
+                               z=t.location.z + 0.5), t.rotation)
+            scan(wp, 'sampled_lane', index, pose)
+            if selected_pose is not None and not exhaustive:
+                break
+
+    ranked = sorted(candidates, key=lambda x: (
+        -x['extended_straight_probe_m'],
+        x['source'] != 'spawn', x['index']))
+    report = {
+        'map': m.name,
+        'method': 'original_22_steps_of_5m_unique_successor_5deg_nonjunction',
+        'required_straight_m': SITE_STEP_M * SITE_REQUIRED_STEPS,
+        'max_heading_delta_deg': SITE_MAX_HEADING_DELTA_DEG,
+        'extended_probe_limit_m': SITE_STEP_M * SITE_EXTENDED_STEPS,
+        'sample_spacing_m': spacing_m,
+        'spawn_points_total': len(spawns),
+        'sampled_lane_waypoints_total': waypoint_count,
+        'candidates_checked': measured,
+        'eligible_candidates_checked': number_eligible,
+        'rejection_counts': dict(sorted(causes.items())),
+        'rejection_counts_by_source': {
+            source: dict(sorted(counter.items()))
+            for source, counter in causes_by_source.items()},
+        'verified_step_distance_counts_ge_m': counts_above,
+        'best_verified_step_distance_m': (ranked[0]['verified_step_distance_m']
+                                          if ranked else 0.0),
+        'best_extended_straight_probe_m': (ranked[0]['extended_straight_probe_m']
+                                           if ranked else 0.0),
+        'top_candidate_waypoints': ranked[:top_k],
+        'chosen_waypoint': selected_metadata,
+        'chosen_extended_straight_probe_m': selected_extra_m if selected_pose is not None else None,
+        'prefer_longest': prefer_longest,
+        'exhaustive': exhaustive,
+        'interpretation_warning': (
+            'Counts describe sampled waypoints under the original 5m test. '
+            'They do not prove that the entire map lacks a site, that an actor '
+            'will successfully spawn, or that 110m suffices for acceleration and maneuver.'),
+    }
+    return selected_pose, report
+
+
+def spot(world, carla, *, spacing_m=2.0, prefer_longest=False, report=None):
+    """Find a site without relaxing the original 110m / 5-degree conditions."""
+    pose, data = survey_sites(world, carla, spacing_m=spacing_m,
+                              exhaustive=prefer_longest, prefer_longest=prefer_longest)
+    if report is not None:
+        report.update(data)
+    if pose is not None:
+        return pose
+    reasons = ','.join(f'{k}:{v}' for k, v in data['rejection_counts'].items())
     raise RuntimeError(
         'REVIEW_NO_STRAIGHT_DRIVING_LANE_FOR_CONTROLLED_TRIAL'
-        f' map={m.name} spawn_points={len(spawns)}'
-        f' sampled_lane_waypoints={len(waypoints)}'
-        ' required_straight_m=110 max_heading_delta_deg=5')
+        f' map={data["map"]} spawn_points={data["spawn_points_total"]}'
+        f' sampled_lane_waypoints={data["sampled_lane_waypoints_total"]}'
+        f' best_verified_step_distance_m={data["best_verified_step_distance_m"]}'
+        f' required_straight_m={data["required_straight_m"]}'
+        f' max_heading_delta_deg={data["max_heading_delta_deg"]}'
+        f' failures={reasons}')
 
 
 def observe(actor,world,snapshot,cmd,trigger):
@@ -169,7 +291,7 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s, max_accel_s=22.0
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('--mode',choices=('inventory','capture','trials'),default='inventory')
+    p.add_argument('--mode',choices=('inventory','site-audit','capture','trials'),default='inventory')
     p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=2000)
     p.add_argument('--blueprint',default='vehicle.tesla.model3')
     p.add_argument('--output',type=Path,required=True)
@@ -177,12 +299,18 @@ def main():
     p.add_argument('--confirm-exclusive-tick',action='store_true')
     p.add_argument('--repeats',type=int,default=3)
     p.add_argument('--fixed-delta',type=float,default=0.05)
+    p.add_argument('--site-prefer-longest', action='store_true',
+                   help='Among 110m-eligible sites select longest 5-degree straight section (up to 300m)')
+    p.add_argument('--site-spacing',type=float,default=2.0,
+                   help='Waypoint sampling interval in meters for read-only site search (default: 2)')
     a=p.parse_args()
     if a.output.exists():raise FileExistsError('REFUSE_OVERWRITE_CARLA_EVIDENCE')
-    if a.mode!='inventory' and not a.confirm_isolated_world:
+    if a.mode in ('capture','trials') and not a.confirm_isolated_world:
         raise RuntimeError('SPAWN_REQUIRES_EXPLICIT_ISOLATED_WORLD_ACK')
     if a.mode=='trials' and not a.confirm_exclusive_tick:
         raise RuntimeError('TRIALS_REQUIRE_EXCLUSIVE_TICK_ACK')
+    if not math.isfinite(a.site_spacing) or not 0.5<=a.site_spacing<=10.0:
+        raise ValueError('site-spacing must be between 0.5 and 10 m')
     if not 0<a.fixed_delta<=0.05 or type(a.repeats) is not int or not 1<=a.repeats<=10:
         raise ValueError('invalid fixed step or repeats')
     import carla
@@ -204,6 +332,10 @@ def main():
             if a.mode=='inventory':
                 result['status']='READ_ONLY_ACTOR_INVENTORY'
                 result['actor_metadata']=[actor_metadata(x,world,client) for x in dynamic if x.type_id.startswith('vehicle.')]
+            elif a.mode=='site-audit':
+                _, result['site_audit'] = survey_sites(
+                    world, carla, spacing_m=a.site_spacing, exhaustive=True, prefer_longest=True)
+                result['status']='READ_ONLY_SITE_AUDIT'
             else:
                 if dynamic: raise RuntimeError('REVIEW_EXISTING_DYNAMIC_ACTORS_REFUSE_MUTATION')
                 if original.synchronous_mode: raise RuntimeError('REVIEW_WORLD_ALREADY_SYNCHRONOUS_MAY_HAVE_TICK_OWNER')
@@ -211,7 +343,9 @@ def main():
                 if blueprint is None or not a.blueprint.startswith('vehicle.'):
                     raise RuntimeError('MISSING_VEHICLE_BLUEPRINT')
                 if blueprint.has_attribute('role_name'):blueprint.set_attribute('role_name','rampd_calibration')
-                pose=(world.get_map().get_spawn_points()[0] if a.mode=='capture' else spot(world,carla))
+                pose=(world.get_map().get_spawn_points()[0] if a.mode=='capture' else spot(
+                    world,carla,spacing_m=a.site_spacing,prefer_longest=a.site_prefer_longest,
+                    report=result.setdefault('site_audit',{})))
                 if a.mode=='capture':
                     spawned=world.try_spawn_actor(blueprint,pose)
                     if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
