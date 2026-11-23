@@ -1,3 +1,8 @@
+## 2026-11-23 Phase 6C-A59/1b-0 (conditional evidence gate)
+
+See `docs/PHASE6C_A59_1B0_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0_RUNBOOK.md`.
+New CARLA 0.9.16 wheel-angle enum and synchronized spawn physics capture fix; offline actor geometry and 27-run descriptive review; exact hidden-event slab partition and rectangular multi-resource conflict *preprocessors*. A native hybrid event Post, full protocol/SC terminal acceptance, real physics envelope and eight training-label authorizations remain **unverified**.
+
 # RAMP-D Phase 6C-A59/0 (v0.9.14)
 
 Local new checks: 11/11 independent forensic/data tests pass, existing A58 pure 19/19 pass, and the uploaded 12 SUMO traces replay successfully in the explicitly limited sense reported in `docs/PHASE6C_A59_0_IMPLEMENTATION_AND_ACCEPTANCE.md`. **Only 3/12 retained valid controller summaries; no actual CARLA vehicle actor was captured.** Native A59 SC rank bridge tests (5) still require the user's MPFR/GMP server. Run `bash scripts/validate_phase6c_a59_0.sh` from a fresh release checkout, and `python scripts/audit_a59_uploaded_a58.py --zip /path/to/a58.zip --output reports/a59_0/forensic.json` independently. Never read a model-relative predecessor candidate as full `CERTIFIED`.

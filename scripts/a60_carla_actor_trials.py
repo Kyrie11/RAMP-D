@@ -17,6 +17,43 @@ def vec(v):return {k:float(getattr(v,k)) for k in ('x','y','z')}
 def rotation(r):return {k+'_deg':float(getattr(r,k)) for k in ('pitch','yaw','roll')}
 def finite(x):return math.isfinite(float(x))
 
+
+def world_provenance(world):
+    """Capture simulation settings/weather and map hash without changing state."""
+    settings=world.get_settings()
+    fields=('synchronous_mode','fixed_delta_seconds','substepping',
+            'max_substep_delta_time','max_substeps','no_rendering_mode')
+    out={'settings':{k:getattr(settings,k,None) for k in fields}}
+    try:
+        w=world.get_weather()
+        out['weather_raw']={k:getattr(w,k,None) for k in
+             ('cloudiness','precipitation','precipitation_deposits','wetness',
+              'wind_intensity','fog_density','sun_altitude_angle')}
+    except (AttributeError,RuntimeError,TypeError) as exc:
+        out['weather_capture_error']=type(exc).__name__+': '+str(exc)
+    try:
+        out['opendrive_sha256']=hashlib.sha256(world.get_map().to_opendrive().encode('utf-8')).hexdigest()
+    except (AttributeError,RuntimeError,TypeError) as exc:
+        out['opendrive_sha256']=None
+        out['opendrive_capture_error']=type(exc).__name__+': '+str(exc)
+    return out
+
+
+def await_async_actor_pose(world, actor, requested_pose, *, max_frames=5):
+    """Read-only wait for a nonstale pose after asynchronous actor spawn.
+
+    Never manually tick an existing asynchronous world. A successful response
+    is an observed location near our requested spawn, not an assumed frame.
+    """
+    for _ in range(max_frames):
+        snapshot=world.wait_for_tick(5.0)
+        actual=actor.get_transform().location
+        expected=requested_pose.location
+        if math.hypot(actual.x-expected.x, actual.y-expected.y)<=5.0:
+            return int(snapshot.frame)
+    raise RuntimeError('REVIEW_STALE_ASYNC_ACTOR_TRANSFORM_AFTER_SPAWN')
+
+
 def actor_metadata(actor, world, client):
     p=actor.get_physics_control(); bb=actor.bounding_box
     wheel=[]
@@ -220,11 +257,19 @@ def observe(actor,world,snapshot,cmd,trigger):
     x=actor.get_transform();v=actor.get_velocity();a=actor.get_acceleration();w=actor.get_angular_velocity()
     ctrl=actor.get_control()
     sp=math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z)
+    # CARLA 0.9.16 enum members are FL_Wheel/FR_Wheel, not FL/FR.
+    # Preserve sensor failure instead of silently treating missing angles as 0.
+    actual_fl_steer=actual_fr_steer=None
+    wheel_steer_query_error=None
     try:
         import carla
-        actual_fl_steer=float(actor.get_wheel_steer_angle(carla.VehicleWheelLocation.FL))
-        actual_fr_steer=float(actor.get_wheel_steer_angle(carla.VehicleWheelLocation.FR))
-    except (AttributeError,RuntimeError,TypeError):
+        wheel_enum=carla.VehicleWheelLocation
+        actual_fl_steer=float(actor.get_wheel_steer_angle(wheel_enum.FL_Wheel))
+        actual_fr_steer=float(actor.get_wheel_steer_angle(wheel_enum.FR_Wheel))
+        if not finite(actual_fl_steer) or not finite(actual_fr_steer):
+            raise ValueError('NONFINITE_WHEEL_STEER_ANGLE')
+    except (AttributeError,RuntimeError,TypeError,ValueError) as exc:
+        wheel_steer_query_error=type(exc).__name__+': '+str(exc)
         actual_fl_steer=actual_fr_steer=None
     out={'frame':int(snapshot.frame),'sim_time_s':float(snapshot.timestamp.elapsed_seconds),
          'speed_mps':sp, 'accel_mps2':math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z),
@@ -241,6 +286,7 @@ def observe(actor,world,snapshot,cmd,trigger):
          'actual_steer':float(ctrl.steer),
          'wheel_steer_deg_front_left_raw':actual_fl_steer,
          'wheel_steer_deg_front_right_raw':actual_fr_steer,
+         'wheel_steer_query_error':wheel_steer_query_error,
          'command_reference_sim_time_s':trigger,
          'coordinate_warning':'CARLA coordinates are left-handed; convert heading/y for RAMP-D before fitting'}
     if not all(finite(out[k]) for k in ('speed_mps','accel_mps2','yaw_rate_radps_carla','sim_time_s')):
@@ -248,7 +294,8 @@ def observe(actor,world,snapshot,cmd,trigger):
     return out
 
 
-def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s, max_accel_s=22.0):
+def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s,
+                steer_fraction=0.08,steer_pulse_s=0.8, max_accel_s=22.0):
     samples=[];cmd=carla.VehicleControl(throttle=0.70,brake=0.0,steer=0.0,hand_brake=False)
     target_frame=None;target_speed=None;command_time=None
     n_accel=int(max_accel_s/step_s)
@@ -260,6 +307,14 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s, max_accel_s=22.0
             raise RuntimeError('REVIEW_FOREIGN_TICK_OWNER_OR_MISSING_CARLA_FRAME')
         sample=observe(vehicle,world,snap,cmd,float(old.timestamp.elapsed_seconds))
         samples.append(sample)
+        # A centerline-only 110m site check is not a proof that the vehicle
+        # stayed on the road during the acceleration phase.
+        wp=world.get_map().get_waypoint(vehicle.get_location(),project_to_road=False,
+                                        lane_type=carla.LaneType.Driving)
+        if wp is None or wp.is_junction:
+            return {'status':'REVIEW_APPROACH_OFF_DRIVABLE_LANE',
+                    'target_speed_mps':speed,'maneuver':kind,'repeat':repeat,
+                    'samples':samples,'trigger_frame':-1,'trigger_speed_mps':-1}
         if sample['speed_mps']>=speed-0.25:
             target_frame=f;target_speed=sample['speed_mps'];command_time=float(snap.timestamp.elapsed_seconds)
             break
@@ -269,7 +324,7 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s, max_accel_s=22.0
     # The first sample at target is the trigger reference; only POST-trigger
     # samples contain the new command and are eligible for delay estimation.
     for i in range(int(2.0/step_s)):
-        turn=0.08 if i*step_s<0.8 and kind in ('steer','combined') else 0.0
+        turn=steer_fraction if i*step_s<steer_pulse_s and kind in ('steer','combined') else 0.0
         if kind=='brake': new=carla.VehicleControl(throttle=0,brake=0.70,steer=0)
         elif kind=='combined': new=carla.VehicleControl(throttle=0,brake=0.45,steer=turn)
         else:new=carla.VehicleControl(throttle=0.17,brake=0,steer=turn)
@@ -286,7 +341,8 @@ def drive_trial(world,vehicle,carla,*,speed,kind,repeat,step_s, max_accel_s=22.0
                     'trigger_frame':target_frame,'trigger_speed_mps':target_speed}
     return {'status':'CAPTURED','target_speed_mps':speed,'maneuver':kind,'repeat':repeat,
             'samples':samples,'trigger_frame':target_frame,'trigger_speed_mps':target_speed,
-            'command_start_sim_time_s':command_time,'command_issue_semantics':'applied prior to next synchronous world.tick'}
+            'command_start_sim_time_s':command_time,'command_issue_semantics':'applied prior to next synchronous world.tick',
+            'steer_fraction':steer_fraction,'steer_pulse_s':steer_pulse_s}
 
 
 def main():
@@ -299,6 +355,10 @@ def main():
     p.add_argument('--confirm-exclusive-tick',action='store_true')
     p.add_argument('--repeats',type=int,default=3)
     p.add_argument('--fixed-delta',type=float,default=0.05)
+    p.add_argument('--steer-fraction',type=float,default=0.08,
+                   help='CARLA normalized steer input, NOT a radian angle (default original 0.08)')
+    p.add_argument('--steer-pulse-s',type=float,default=0.8,
+                   help='Positive steer pulse duration; changes trial protocol, default original 0.8s')
     p.add_argument('--site-prefer-longest', action='store_true',
                    help='Among 110m-eligible sites select longest 5-degree straight section (up to 300m)')
     p.add_argument('--site-spacing',type=float,default=2.0,
@@ -313,6 +373,9 @@ def main():
         raise ValueError('site-spacing must be between 0.5 and 10 m')
     if not 0<a.fixed_delta<=0.05 or type(a.repeats) is not int or not 1<=a.repeats<=10:
         raise ValueError('invalid fixed step or repeats')
+    if (not math.isfinite(a.steer_fraction) or not 0.025<=a.steer_fraction<=0.5 or
+        not math.isfinite(a.steer_pulse_s) or not a.fixed_delta<=a.steer_pulse_s<=1.0):
+        raise ValueError('invalid declared steering excitation profile')
     import carla
     client=carla.Client(a.host,a.port);client.set_timeout(12.0)
     world=client.get_world();original=world.get_settings();spawned=None
@@ -349,8 +412,14 @@ def main():
                 if a.mode=='capture':
                     spawned=world.try_spawn_actor(blueprint,pose)
                     if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
+                    # In async mode we must wait for CARLA to publish the new
+                    # actor pose before comparing body frame with wheel world positions.
+                    frame=await_async_actor_pose(world,spawned,pose)
                     result.update(status='ACTOR_METADATA_CAPTURED_UNCALIBRATED',
                                   actor_id=int(spawned.id),physics=actor_metadata(spawned,world,client))
+                    result['physics']['capture_frame']=frame
+                    result['physics']['spawn_requested_transform']={
+                        'location':vec(pose.location), 'rotation':rotation(pose.rotation)}
                 else:
                     # Own ticks only on an explicitly isolated, originally async
                     # CARLA world. A separate remote client cannot be detected.
@@ -359,9 +428,11 @@ def main():
                     settings.substepping=True;settings.max_substep_delta_time=0.01
                     settings.max_substeps=max(6,math.ceil(a.fixed_delta/0.01))
                     world.apply_settings(settings)
+                    result['world_provenance']=world_provenance(world)
                     result.update(schema='rampd.carla.a59_1.raw_trials.v1',
                                   world_exclusive_confirmed=True,step_s=a.fixed_delta,
-                                  trial_maneuvers=['brake','steer','combined'],trials=[])
+                                  trial_maneuvers=['brake','steer','combined'],trials=[],
+                                  steer_fraction=a.steer_fraction,steer_pulse_s=a.steer_pulse_s)
                     for v in (5,10,15):
                         for kind in ('brake','steer','combined'):
                             for k in range(a.repeats):
@@ -369,11 +440,25 @@ def main():
                                 if spawned is None:raise RuntimeError('REVIEW_ACTOR_SPAWN_FAILED')
                                 spawned.set_autopilot(False)
                                 if not result.get('physics'):
+                                    # CARLA actor.get_transform() can still return the
+                                    # default zero pose immediately after a synchronous
+                                    # spawn, even though wheel positions are world-space.
+                                    # Tick once before recording body vs axle frame.
+                                    old_frame=world.get_snapshot().frame
+                                    sync_frame=world.tick()
+                                    if sync_frame!=old_frame+1 or world.get_snapshot().frame!=sync_frame:
+                                        raise RuntimeError('REVIEW_FOREIGN_TICK_AT_SPAWN')
                                     result['actor_id']=int(spawned.id)
                                     result['physics']=actor_metadata(spawned,world,client)
+                                    result['physics']['capture_frame']=int(sync_frame)
+                                    result['physics']['spawn_requested_transform']={
+                                        'location':vec(pose.location),
+                                        'rotation':rotation(pose.rotation)}
                                 try:
                                     trial=drive_trial(world,spawned,carla,speed=v,kind=kind,repeat=k,
-                                                      step_s=a.fixed_delta)
+                                                      step_s=a.fixed_delta,
+                                                      steer_fraction=a.steer_fraction,
+                                                      steer_pulse_s=a.steer_pulse_s)
                                     trial['actor_id']=int(spawned.id)
                                     result['trials'].append(trial)
                                 finally:
@@ -381,7 +466,16 @@ def main():
                                     # tick the actor destruction before the
                                     # next attempt so the spawn point is free.
                                     world.tick()
-                    result['status']='RAW_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED'
+                    counts={}
+                    for t in result['trials']:
+                        st=t.get('status','MISSING_STATUS')
+                        counts[st]=counts.get(st,0)+1
+                    result['trial_status_counts']=counts
+                    result['trial_captured_count']=counts.get('CAPTURED',0)
+                    result['trial_attempt_count']=len(result['trials'])
+                    result['status']=('RAW_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED'
+                        if result['trial_captured_count']==9*a.repeats
+                        else 'RAW_PARTIAL_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED')
     except Exception as exc:
         result.update(status='REVIEW',error=f'{type(exc).__name__}: {exc}',traceback=traceback.format_exc())
     finally:
@@ -394,6 +488,8 @@ def main():
             except Exception as exc:
                 result['restoration_error']=str(exc);result['status']='REVIEW'
         a.output.write_text(json.dumps(result,indent=2,ensure_ascii=False,allow_nan=False,default=str)+'\n')
-    print(result['status']);return 0 if result['status']!='REVIEW' else 4
+    print(result['status'])
+    return 0 if result['status'] not in ('REVIEW',
+                'RAW_PARTIAL_CARLA_TRIALS_CAPTURED_NOT_CERTIFIED') else 4
 
 if __name__=='__main__':raise SystemExit(main())
