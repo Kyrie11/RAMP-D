@@ -140,6 +140,23 @@
     "user_uploaded_brake_smoke_descriptive_captured": true,
     "user_uploaded_full_steering_smoke": false
   },
+  "a59_1b0l": {
+    "brake_model_conformance_unresolved": true,
+    "combined_control_raw_uploaded": false,
+    "eight_labels_production_authorized": false,
+    "full_pytest_expected": 815,
+    "interpolated_clearance_m_descriptive": 0.42249764577671634,
+    "local_a66_targeted_tests_expected": 31,
+    "phase": "A59/1b-0L A66 lateral and hybrid/co-sim contracts",
+    "real_carla_sumo_cosim_executed_here": false,
+    "real_mixed_native_post_completed": false,
+    "status": "CONDITIONAL_A66_SOFTWARE_GATE_PHYSICAL_AND_PROTOCOL_WORK_PENDING",
+    "steer_sample_count": 66,
+    "steer_true_continuous_safety_certified": false,
+    "terminal_sc_tail_complete": false,
+    "uploaded_steer_trial_captured": true,
+    "validated_physics_envelope": false
+  },
   "assurance_scope": "Model-clock hybrid partition, actor geometry and pairwise conflict evidence; no new real simulator executions here.",
   "concrete_safety_certified": false,
   "current_scene_verified": false,

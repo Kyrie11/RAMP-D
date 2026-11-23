@@ -63,7 +63,9 @@ def audit_single_control_smoke(doc):
     if not isinstance(samples,list) or not samples:
         reasons.append('NO_FRAME_SAMPLES');return result
     trigger=t.get('trigger_frame')
-    if type(trigger) is not int or trigger<0:reasons.append('NO_VALID_TRIGGER_FRAME')
+    if type(trigger) is not int or trigger<0:
+        reasons.append('NO_VALID_TRIGGER_FRAME')
+        return result
     if not _num(t.get('trigger_speed_mps')) or not _num(speed) or abs(t['trigger_speed_mps']-speed)>0.5:
         reasons.append('TRIGGER_SPEED_NOT_AT_TARGET')
     before=[];after=[];lastframe=None;lasttime=None

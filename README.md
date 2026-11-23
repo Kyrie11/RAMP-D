@@ -225,3 +225,19 @@ approximate vehicle-rectangle PNGs are available offline. `--mode smoke`
 now requires the same explicit isolated-world declaration as `trials`.
 See `docs/PHASE6C_A59_1B0K_CARLA_CONFORMANCE_AND_NEXT_GATES.md` and
 `docs/PHASE6C_A59_1B0K_SERVER_RUNBOOK.md`. No post-Picard/SC certification.
+
+
+### Phase 6C-A59/1b-0L (A66, conditional CARLA steering and hybrid/co-sim source audit)
+
+The uploaded 5 m/s CARLA `steer` trace contains 66 sampled frames with actual
+front wheel angle and yaw response. A66 independently recomputes an approximate
+straight-lane *interpolated-pose* clearance; it is not a true continuous
+swept-trajectory certificate or validated vehicle error bound. No `combined`
+raw trial was provided, so the combined entry remains **MISSING**. A66 adds
+exact rational two-simulator tick-owner/ACK contract screening and hidden-world
+hybrid artifact digest binding. All are **declared evidence contracts**, not
+live co-simulation or MPFR proof replay. `event/joint/occupancy/observation/
+viability/margin/deadline/causal` labels are NOT authorized by this phase.
+See `docs/PHASE6C_A59_1B0L_CARLA_HYBRID_COSIM_ACCEPTANCE.md` and
+`docs/PHASE6C_A59_1B0L_SERVER_RUNBOOK.md`. Run the clean-release
+`bash scripts/validate_phase6c_a59_1b0l.sh` with a freshly built MPFR library.
