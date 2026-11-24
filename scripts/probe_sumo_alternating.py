@@ -3,7 +3,7 @@
 Separate directed SUMO lanes share one logical conflict resource. Not yet a
 physically single-lane CARLA geometry or a continuous-world certificate.
 """
-import argparse,json,math,shutil,subprocess,sys,traceback
+import argparse,json,math,shutil,subprocess,sys,traceback,hashlib
 from pathlib import Path
 from fractions import Fraction as Q
 from dataclasses import dataclass
@@ -108,6 +108,8 @@ def run(a):
             links[d]=(len(groups),entry,exit)
         signal_evidence=[]
         last_commanded={}
+        metric=[]
+        metric_enabled=getattr(a,'metric_samples',False)
         def apply(c):
             for d,display in zip('AB',c.displays):
                 n,entry,exit=links[d];s=['r']*n
@@ -142,7 +144,7 @@ def run(a):
         departure_ids=set(); arrival_ids=set(); entry_ids={d:set() for d in ROUTES}; clear_ids={d:set() for d in ROUTES}
         apply(c);rows=[];violations=[];through=CounterLike();transitions=[];vehicle_trace=[];roster=[];braking=[];switch_blocks=[];guard_exhausted=False
         for k in range(1,a.steps+1):
-            old_phase=c.phase;old_displays=c.displays;traci.simulationStep();t=Q(k,10)
+            old_phase=c.phase;old_displays=c.displays;old_rule_version=c.version;old_since=c.since;traci.simulationStep();t=Q(k,10)
             if abs(traci.simulation.getTime()-float(t))>1e-6:raise ValueError('SUMO time mismatch')
             for d in 'AB':
                 observed=traci.trafficlight.getRedYellowGreenState(d)
@@ -152,6 +154,13 @@ def run(a):
                     raise ValueError('SUMO signal state changed contrary to declared controller between ticks')
             if traci.simulation.getStartingTeleportIDList() or traci.simulation.getEndingTeleportIDList():raise ValueError('teleport invalidates route sweep')
             after=snapshot();departed=tuple(traci.simulation.getDepartedIDList());arrived=tuple(traci.simulation.getArrivedIDList());occ,entries=swept_occupants(before,after,bounds,departed,arrived)
+            if metric_enabled:
+                actors=[]
+                for vid,v in sorted(after.items()):
+                    x,y=traci.vehicle.getPosition(vid);angle=traci.vehicle.getAngle(vid);width=traci.vehicle.getWidth(vid)
+                    if not all(math.isfinite(n) for n in (x,y,angle,width)) or width<=0:raise ValueError('invalid metric snapshot')
+                    actors.append(dict(id=vid,front_bumper_xy=[x,y],angle_navigation_deg=angle,length_m=v.length,width_m=width,direction=v.route,lane_id=traci.vehicle.getLaneID(vid),speed_mps=v.speed))
+                metric.append(dict(tick=k,time=str(t),rule_version=old_rule_version,phase=old_phase,phase_since=str(old_since),command_epoch=k-1,issue=str(t-Q(1,10)),command=dict(last_commanded),observed_execution={d:traci.trafficlight.getRedYellowGreenState(d) for d in 'AB'},departed=list(departed),arrived=list(arrived),actors=actors,logical_swept_occupants={d:sorted(occ[d]) for d in 'AB'},physical_rule_effective_time=None,physical_ack=None))
             roster.append(dict(time_s=float(t),departed=departed,arrived=arrived))
             if departure_ids.intersection(departed) or arrival_ids.intersection(arrived):raise ValueError('duplicate roster event')
             departure_ids.update(departed);arrival_ids.update(arrived)
@@ -193,6 +202,9 @@ def run(a):
             for vid,v in after.items():vehicle_trace.append(dict(time_s=float(t),id=vid,direction=v.route,front_m=v.front,speed_mps=v.speed,length_m=v.length))
             before=after
             if guard_exhausted:break
+        if metric_enabled:
+            (work/'metric_actor_trace.jsonl').write_text(''.join(json.dumps(r,allow_nan=False)+'\n' for r in metric))
+            (work/'metric_source.json').write_text(json.dumps(dict(status='SAMPLED_SUMO_METRIC_COORDINATES_NOT_SHARED_LANE_PROOF',network_sha256=hashlib.sha256((work/'network.xml').read_bytes()).hexdigest(),routes_sha256=hashlib.sha256((work/'routes.xml').read_bytes()).hexdigest(),actor_trace_sha256=hashlib.sha256((work/'metric_actor_trace.jsonl').read_bytes()).hexdigest(),reference='front_bumper_navigation_deg',ticks=len(metric),formal_labels_authorized=False),indent=2))
         signal_trace=work/'signal_trace.jsonl'
         signal_trace.write_text(''.join(json.dumps(r,allow_nan=False)+'\n' for r in signal_evidence))
         trace=work/'vehicle_trace.jsonl';trace.write_text(''.join(json.dumps(r)+'\n' for r in vehicle_trace));(work/'roster_trace.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in roster));good=not violations and through['A']>0 and through['B']>0 and any(r['to_phase']=='B_GREEN' for r in transitions) and any(r['to_phase']=='A_GREEN' for r in transitions)
@@ -210,7 +222,7 @@ def CounterLike():return {'A':0,'B':0}
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--traffic-profile',choices=('baseline','dense','slow_reaction','lower_friction_proxy'),default='baseline');p.add_argument('--work',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);p.add_argument('--sumo',default='sumo');p.add_argument('--netconvert',default='netconvert');p.add_argument('--seed',type=int,default=17);p.add_argument('--steps',type=int,default=1800);p.add_argument('--comfort-guard',action='store_true');p.add_argument('--stop-reserve-guard',action='store_true');p.add_argument('--reaction-s',type=float,default=.5);p.add_argument('--extra-stop-m',type=float,default=1.); p.add_argument('--max-green-extension-s',type=int,default=20);p.add_argument('--detector-range-m',type=float,default=200.);p.add_argument('--require-drain',action='store_true');p.add_argument('--require-comfort',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--traffic-profile',choices=('baseline','dense','slow_reaction','lower_friction_proxy'),default='baseline');p.add_argument('--work',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--plot',type=Path);p.add_argument('--sumo',default='sumo');p.add_argument('--netconvert',default='netconvert');p.add_argument('--seed',type=int,default=17);p.add_argument('--steps',type=int,default=1800);p.add_argument('--comfort-guard',action='store_true');p.add_argument('--stop-reserve-guard',action='store_true');p.add_argument('--reaction-s',type=float,default=.5);p.add_argument('--extra-stop-m',type=float,default=1.); p.add_argument('--max-green-extension-s',type=int,default=20);p.add_argument('--detector-range-m',type=float,default=200.);p.add_argument('--require-drain',action='store_true');p.add_argument('--require-comfort',action='store_true');p.add_argument('--metric-samples',action='store_true');a=p.parse_args()
     # Never overwrite a previous successful report when a work directory is reused.
     # Reuse is an experiment orchestration error, not an ERROR replacement record.
     if a.output.exists():

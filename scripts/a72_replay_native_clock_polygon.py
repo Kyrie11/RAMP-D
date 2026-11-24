@@ -9,6 +9,9 @@ root=Path(__file__).resolve().parents[1];sys.path.insert(0,str(root/'python'))
 from rampd_core.a60_clock_resource import ClockEvent
 from rampd_core.a61_hybrid_partition import ClockWorld
 from rampd_core.a72_native_world_resource import audit_clock_bound_polygon_exclusion
+from rampd_core.a73_native_context import audit_context
+from rampd_core.model import BicycleParameters
+from dataclasses import asdict
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--native-dir',type=Path,required=True)
@@ -26,8 +29,10 @@ def main():
  worlds=tuple(ClockWorld(w,(ClockEvent('switch-'+w,'RULE_EFFECTIVE',Q(1,20),'DECLARED_TOY_MODEL'),),
                      declared_complete=True,public_history_id='same') for w in ('A','B'))
  resources=json.loads(a.resource_file.read_text())
+ declarations={(w,lo,hi):dict(params=asdict(BicycleParameters(3,.9)),control=[[0,0],[0,0]],disturbance=[[0,0]]*6,initial=[[0,0],[0,0],[0,0],[4,4],[0,0],[0,0]] if lo==0 else None) for w in ('A','B') for lo,hi in ((Q(0),Q(1,20)),(Q(1,20),Q(1,10)))}
  r=audit_clock_bound_polygon_exclusion(report,certs,worlds,resources,start=Q(0),end=Q(1,10),
-                                       length_m=a.length,width_m=a.width)
+                                       length_m=a.length,width_m=a.width,physical_declarations=declarations)
+ r['independent_physical_context_errors']=audit_context(certs,declarations)
  a.output.parent.mkdir(parents=True,exist_ok=True)
  a.output.write_text(json.dumps(r,ensure_ascii=False,indent=2,allow_nan=False)+'\n')
  print(r['status']);return 0 if r['status']=='CONDITIONAL_DECLARED_POLYGON_EXCLUSION' else 4

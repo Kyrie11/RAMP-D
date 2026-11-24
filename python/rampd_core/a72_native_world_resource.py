@@ -15,7 +15,7 @@ from .a71_native_polygon_geometry import audit_native_polygon_resources
 def audit_clock_bound_polygon_exclusion(report, certs, worlds, polygons, *,
                                         start, end, length_m, width_m,
                                         offset_x_m=0, offset_y_m=0,
-                                        history_events=()):
+                                        history_events=(), physical_declarations=None):
     reasons=[]
     if not isinstance(start,Q) or not isinstance(end,Q) or not start<end:
         raise ValueError('exact observation horizon required')
@@ -36,6 +36,12 @@ def audit_clock_bound_polygon_exclusion(report, certs, worlds, polygons, *,
         reasons.append('HORIZON_DECLARATION_CHANGED')
     if report.get('status')!='CONDITIONAL_DECLARED_EGO_NATIVE_PICARD_SEGMENTED_REPLAY':
         reasons.append('NATIVE_REPORT_NOT_REPLAYED')
+    # An unrelated valid tube must not authorize this time/control/initial context.
+    from .a73_native_context import audit_context
+    if physical_declarations is None:
+        reasons.append('INDEPENDENT_PHYSICAL_CONTEXT_REQUIRED')
+    elif not reasons:
+        reasons.extend(audit_context(certs,physical_declarations))
     # Do not let an incomplete partition authorize any polygon conclusion.
     geometry=None
     if not reasons:

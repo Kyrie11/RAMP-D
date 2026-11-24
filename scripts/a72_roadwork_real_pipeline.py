@@ -28,8 +28,11 @@ def main():
         result=subprocess.run([sys.executable,str(root/'scripts'/cmd[0])]+cmd[1:],text=True,capture_output=True)
         steps.append(dict(script=cmd[0],returncode=result.returncode,stdout=result.stdout[-3500:],stderr=result.stderr[-2500:]))
         if result.returncode!=0:break
-    r=dict(schema='rampd.a72.roadwork.real_ingest.v1',status='DESCRIPTIVE_VISUAL_PIPELINE_COMPLETE' if len(steps)==4 and all(not x['returncode'] for x in steps) else 'REVIEW',
-           steps=steps,visual_annotations_verified=(len(steps)==4 and all(not x['returncode'] for x in steps)),
+    accepted=0
+    if len(steps)==4 and all(not x['returncode'] for x in steps):
+        audit=json.loads((out/'roadwork_auxiliary.jsonl.audit.json').read_text());accepted=audit['counts']['accepted']
+    r=dict(accepted_visual_templates=accepted,schema='rampd.a72.roadwork.real_ingest.v1',status='DESCRIPTIVE_VISUAL_PIPELINE_COMPLETE' if accepted>0 else 'REVIEW',
+           steps=steps,visual_annotations_verified=(accepted>0),
            pixel_boxes_are_not_metric_geometry=True,official_temporal_rule_authority_not_proved=True,
            formal_supervision_authorized=False)
     (out/'pipeline_review.json').write_text(json.dumps(r,indent=2,ensure_ascii=False)+'\n')

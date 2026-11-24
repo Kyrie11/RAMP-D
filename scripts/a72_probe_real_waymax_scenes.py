@@ -7,7 +7,7 @@ One bounded shard/sample is for smoke and diagnosis; use Scenario protobuf
 for full scenario ID, map-change and dynamic-map semantics downstream.
 """
 from __future__ import annotations
-import argparse,hashlib,json,sys,math
+import argparse,hashlib,json,sys,math,dataclasses
 from pathlib import Path
 
 
@@ -23,24 +23,27 @@ def summarize_arrays(valid, types, is_sdc, x,y,vx,vy):
     valid=np.asarray(valid,dtype=bool);types=np.asarray(types);sdc=np.asarray(is_sdc,dtype=bool)
     arrays=[np.asarray(v) for v in (x,y,vx,vy)]
     if valid.ndim!=2 or any(a.shape!=valid.shape for a in arrays):raise ValueError('trajectory shape mismatch')
-    if len(sdc)!=len(types) or len(sdc)!=valid.shape[0] or int(sdc.sum())!=1:raise ValueError('invalid SDC metadata')
+    if sdc.ndim!=1 or types.ndim!=1 or not valid.shape[1] or len(sdc)!=len(types) or len(sdc)!=valid.shape[0] or int(sdc.sum())!=1:raise ValueError('invalid SDC metadata')
     if not np.all(np.isfinite(np.stack([a[valid] for a in arrays]))):raise ValueError('nonfinite observed trajectories')
-    ego=int(np.flatnonzero(sdc)[0]);active=valid.any(axis=1);dur=(valid.sum(axis=1)).tolist()
+    ego=int(np.flatnonzero(sdc)[0]);
+    if not valid[ego].any():raise ValueError("no valid ego samples")
+    active=valid.any(axis=1);dur=(valid.sum(axis=1)).tolist()
     return dict(objects_present_any_time=int(active.sum()),sdc_track_index=ego,
         sdc_valid_steps=int(valid[ego].sum()),trajectory_steps=int(valid.shape[1]),
         agent_types_count={str(v):int(sum((types==v)&active)) for v in np.unique(types)},
         agents_at_first_step=int(valid[:,0].sum()),agents_at_last_step=int(valid[:,-1].sum()),
         mean_valid_steps_per_active=float(sum(dur)/max(1,sum(active))),
+        consecutive_valid_actor_pairs=int((valid[:,1:] & valid[:,:-1]).sum()),
         actual_logged_coordinates_not_synthetic=True)
 
 def run(source:Path, limit:int):
     import numpy as np
     from waymax import config,dataloader
     if not source.is_file() or limit<1 or limit>50:raise ValueError('existing shard and bounded sample 1..50 required')
-    cfg=config.WOD_1_3_1_VALIDATION.replace(path=str(source.resolve()),max_num_objects=128,
+    cfg=dataclasses.replace(config.WOD_1_3_1_VALIDATION,path=str(source.resolve()),max_num_objects=128,
         repeat=1,num_shards=1,batch_dims=(),deterministic=True,shuffle_seed=None)
     gen=dataloader.simulator_state_generator(config=cfg)
-    records=[]
+    records=[];source_digest=_digest(source)
     for i in range(limit):
         try:state=next(gen)
         except StopIteration:break
@@ -48,11 +51,11 @@ def run(source:Path, limit:int):
         r=summarize_arrays(np.asarray(traj.valid),np.asarray(state.object_metadata.object_types),
              np.asarray(state.object_metadata.is_sdc),np.asarray(traj.x),np.asarray(traj.y),
              np.asarray(traj.vel_x),np.asarray(traj.vel_y))
-        r['source_index_in_shard']=i;r['map_points_present']=getattr(state,'roadgraph_points',None) is not None
+        r['source_index_in_shard']=i;r['loader_local_id']=source_digest+':'+str(i);r['official_scenario_id_verified']=False;r['map_points_present']=getattr(state,'roadgraph_points',None) is not None
         records.append(r)
     if not records:raise ValueError('source shard provided no state')
     return dict(schema='rampd.a72.waymax.real_womd_inventory.v1',
-        status='DESCRIPTIVE_REAL_WOMD_SCENARIOS_SAMPLED',source_shard_sha256=_digest(source),
+        status='DESCRIPTIVE_REAL_WOMD_SCENARIOS_SAMPLED',source_shard_sha256=source_digest,
         source_shard_name=source.name,real_records=records,
         physical_effectivity_and_message_receipt_observed=False,
         real_sdc_other_actor_factual_records_only=True,

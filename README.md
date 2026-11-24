@@ -286,3 +286,7 @@ Run `bash scripts/validate_phase6c_a59_1b0n.sh` after a **fresh** Native build o
 A68 also fixes A64/A67 hardcoded `brake>=0.20` evidence-gate mismatch with A60 capture supporting graded combined brake [0.05,0.80]. All post-control frames must now match the declared brake fraction. A 0.15 command may be a valid *diagnostic*; no safety label is implied.
 
 The graded-audit change also preserves pre-fraction A67 logs via an explicitly **legacy descriptive** constant-command profile; this inference is NOT a physical control guarantee. A declared mismatch always remains REVIEW.
+
+## A73 / Phase6C-A59/1b-0S
+
+See `docs/PHASE6C_A59_1B0S_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0S_RUNBOOK.md`. Local 41 A73 + 59 old pure tests; fresh Native configure blocked by missing MPFR/GMP development files; real simulators pending. All eight formal masks remain zero.

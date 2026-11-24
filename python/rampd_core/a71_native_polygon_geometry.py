@@ -49,6 +49,9 @@ def polygon_vertices(poly):
     for i in range(count):
         a,b=pts[i],pts[(i+1)%count]
         if a==b:raise ValueError('zero polygon edge')
+        c=pts[(i+2)%count]
+        if cross(a,b,c)==0 and ((a[0]-b[0])*(c[0]-b[0])+(a[1]-b[1])*(c[1]-b[1]))>0:
+            raise ValueError('adjacent polygon edge backtracking')
         for j in range(i+1,count):
             if j==i+1 or (i==0 and j==count-1):continue
             if intersects(a,b,pts[j],pts[(j+1)%count]):

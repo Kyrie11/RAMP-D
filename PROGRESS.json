@@ -216,6 +216,20 @@
     "waymax_live_run_this_environment": false,
     "waymax_new_synthetic_pair_checker_written": true
   },
+  "a59_1b0s": {
+    "carla_replicated_factorial_verified": false,
+    "formal_labels_authorized": 0,
+    "fresh_native_configure": "FAILED_MISSING_MPFR_GMP_DEV",
+    "full_sc_certified": false,
+    "new_quarantined_numeric_categories": 21,
+    "old_pure_regression_passed": 59,
+    "real_sumo_metric_runtime_verified": false,
+    "real_waymax_runtime_verified": false,
+    "status": "LOCAL_PURE_AND_OFFLINE_PASS_NATIVE_AND_LIVE_PENDING",
+    "targeted_passed": 41,
+    "weak_511ny_rows": 1500,
+    "weak_roadwork_rows": 69
+  },
   "a69_three_track_20261123": {
     "a69_pure_tests": 34,
     "all_eight_formal_supervision_labels_available": false,
@@ -549,6 +563,22 @@
     },
     "server_a58_native_expected_min": 6
   },
+  "phase6c_a72": {
+    "511ny_quarantined_rows": 1,
+    "511ny_report_auxiliary_rows_accepted": 1521,
+    "carla_2x3_three_repeat_completed": false,
+    "carla_brake_steer_two_pairs_observed": true,
+    "formal_supervision_8_labels_authorized": false,
+    "math_two_hidden_world_native_replay_conditional": true,
+    "native_clock_polygon_full_sc": false,
+    "release": "A59/1b-0R",
+    "roadwork_files_json_not_grouped_template": true,
+    "roadwork_real_pipeline_server_pending": true,
+    "sumo_logical_12_run_offline_replay": true,
+    "sumo_physical_reversible_lane": false,
+    "waymax_real_factual_scene_inventory_runtime_pending": true,
+    "waymax_synthetic_three_lookahead_replay": true
+  },
   "phase6c_a_tests": {
     "dependency_free_python_tests": 67,
     "native_backend_tested": false,
@@ -579,21 +609,5 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
-  },
-  "phase6c_a72": {
-    "release": "A59/1b-0R",
-    "math_two_hidden_world_native_replay_conditional": true,
-    "native_clock_polygon_full_sc": false,
-    "carla_brake_steer_two_pairs_observed": true,
-    "carla_2x3_three_repeat_completed": false,
-    "sumo_logical_12_run_offline_replay": true,
-    "sumo_physical_reversible_lane": false,
-    "waymax_synthetic_three_lookahead_replay": true,
-    "waymax_real_factual_scene_inventory_runtime_pending": true,
-    "511ny_report_auxiliary_rows_accepted": 1521,
-    "511ny_quarantined_rows": 1,
-    "roadwork_real_pipeline_server_pending": true,
-    "roadwork_files_json_not_grouped_template": true,
-    "formal_supervision_8_labels_authorized": false
   }
 }

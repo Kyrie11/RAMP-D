@@ -65,7 +65,11 @@ def actor_metadata(actor, world, client):
                       'tire_friction_raw':float(w.tire_friction),
                       'max_steer_angle_deg_raw':float(w.max_steer_angle),
                       'max_brake_torque_nm_raw':getattr(w,'max_brake_torque',None),
-                      'max_handbrake_torque_nm_raw':getattr(w,'max_handbrake_torque',None)})
+                      'max_handbrake_torque_nm_raw':getattr(w,'max_handbrake_torque',None),
+                      'damping_rate_raw':getattr(w,'damping_rate',None),
+                      'long_stiff_value_raw':getattr(w,'long_stiff_value',None),
+                      'lat_stiff_value_raw':getattr(w,'lat_stiff_value',None),
+                      'lat_stiff_max_load_raw':getattr(w,'lat_stiff_max_load',None)})
     return {'actor_id':int(actor.id),'actor_type':actor.type_id,
             'map':world.get_map().name,'carla_server_version':client.get_server_version(),
             'body_transform':{'location':vec(actor.get_transform().location),
@@ -77,6 +81,9 @@ def actor_metadata(actor, world, client):
             'steering_curve_raw':[{'x_raw':float(z.x),'y_raw':float(z.y)}
                                   for z in getattr(p,'steering_curve',[])],
             'drag_coefficient_raw':float(p.drag_coefficient),
+            'engine_gear_metadata_raw':{k:getattr(p,k,None) for k in ('max_rpm','moi','damping_rate_full_throttle','damping_rate_zero_throttle_clutch_engaged','damping_rate_zero_throttle_clutch_disengaged','use_gear_autobox','gear_switch_time','clutch_strength','final_ratio','use_sweep_wheel_collision')},
+            'engine_torque_curve_raw': [{'x':float(v.x),'y':float(v.y)} for v in getattr(p,'torque_curve',[])],
+            'forward_gears_raw': [{k:getattr(g,k,None) for k in ('ratio','down_ratio','up_ratio')} for g in getattr(p,'forward_gears',[])],
             'units_warning':'Wheel position coordinate frame and effective steering / braking must be independently checked. Raw tire friction is not effective mu.',
             'calibrated_vehicle_dynamics':False}
 
@@ -310,6 +317,11 @@ def observe(actor,world,snapshot,cmd,trigger):
          'command_steer':float(cmd.steer),'command_issued_before_tick':True,
          'actual_throttle':float(ctrl.throttle),'actual_brake':float(ctrl.brake),
          'actual_steer':float(ctrl.steer),
+         'actual_gear':getattr(ctrl,'gear',None),'actual_hand_brake':getattr(ctrl,'hand_brake',None),
+         'actual_reverse':getattr(ctrl,'reverse',None),'actual_manual_gear_shift':getattr(ctrl,'manual_gear_shift',None),
+         'command_gear':getattr(cmd,'gear',None),'command_hand_brake':getattr(cmd,'hand_brake',None),
+         'command_reverse':getattr(cmd,'reverse',None),'command_manual_gear_shift':getattr(cmd,'manual_gear_shift',None),
+         'pitch_deg_carla':getattr(x.rotation,'pitch',None),'roll_deg_carla':getattr(x.rotation,'roll',None),
          'wheel_steer_deg_front_left_raw':actual_fl_steer,
          'wheel_steer_deg_front_right_raw':actual_fr_steer,
          'wheel_steer_query_error':wheel_steer_query_error,
