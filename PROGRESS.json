@@ -520,5 +520,34 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
+  },
+  "a59_1b0p_a70": {
+    "phase": "6C-A59/1b-0P",
+    "status": "CONDITIONAL_NATIVE_EGO_SEGMENTED_TWO_WORLD_REPLAY_AND_PHYSICAL_DIAGNOSTICS",
+    "native_6d_world_slabs_replayed_local": 4,
+    "reported_local_all_pytest_shards_passed": 940,
+    "new_tests_passed": 31,
+    "source_files_verified_pending_release_resign": false,
+    "native_microcase_actual_cpp_backend_invoked": true,
+    "general_native_resource_post_certified": false,
+    "seven_full_end_to_end_counterexamples_certified": false,
+    "terminal_sc_certified": false,
+    "swept_polygon_all_actor_certified": false,
+    "carla_real_brake_arms_single_capture": [
+      0.15,
+      0.3,
+      0.45
+    ],
+    "brake_peak_speed_mps_regime": [
+      "NEAR_STOP",
+      "MOVING",
+      "MOVING"
+    ],
+    "brake_saturation_law_identified": false,
+    "physical_error_envelope_certified": false,
+    "carla_sumo_live_cosim_verified": false,
+    "eight_formal_supervision_masks_enabled": false,
+    "next": "A59/1b-1 general all-actor swept native resource/observation/tail proof; A5/3c 5m/s brake-only 2x3 factorial, SUMO fresh nine jobs, co-sim isolation; M11-M13 proof-authorized source factory",
+    "world_clock_source_digest_bound_to_mpfr_certificates": true
   }
 }

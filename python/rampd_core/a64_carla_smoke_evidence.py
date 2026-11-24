@@ -30,6 +30,21 @@ def combined_brake_profile(trial, post):
     return None,'MISSING_OR_NONCONSTANT_LEGACY_CONTROL'
 
 
+def brake_only_profile(trial, post):
+    """Declared brake-only arm, with explicit legacy inference if needed.
+
+    Never identify it with combined braking: steering zero is a distinct arm.
+    """
+    value=trial.get('brake_only_fraction')
+    if value is not None:
+        return value,'DECLARED_INTERVENTION'
+    if post and all(isinstance(s,dict) and _num(s.get('command_brake')) for s in post):
+        value=post[0]['command_brake']
+        if .05<=value<=.8 and all(abs(s['command_brake']-value)<=.025 for s in post):
+            return value,'LEGACY_CONSTANT_COMMAND_INFERRED_DESCRIPTIVELY'
+    return None,'MISSING_OR_NONCONSTANT_BRAKE_ONLY_PROFILE'
+
+
 def audit_single_control_smoke(doc):
     reasons=[]
     result={'schema':'rampd.a64.carla.single_smoke_review.v1', 'status':'REVIEW',
@@ -131,7 +146,18 @@ def audit_single_control_smoke(doc):
         reasons.append('PRETRIGGER_COMMAND_NOT_ACCELERATION')
     if after:
         if kind=='brake':
-            has_excitation=any(s['command_brake']>=.3 and abs(s['command_steer'])<=.001 for s in after)
+            f,profile_source=brake_only_profile(t,after)
+            result['brake_only_profile_source']=profile_source
+            if not _num(f) or not .05<=f<=.8:
+                reasons.append('INVALID_DECLARED_BRAKE_ONLY_PROFILE')
+                has_excitation=False
+            else:
+                has_excitation=any(abs(s['command_brake']-f)<=.025 and
+                                   abs(s['command_steer'])<=.001 for s in after)
+                if any(abs(s['command_brake']-f)>.025 for s in after):
+                    reasons.append('POSTTRIGGER_BRAKE_NOT_DECLARED_BRAKE_ONLY_PROFILE')
+                if any(abs(s['command_steer'])>.001 for s in after):
+                    reasons.append('BRAKE_ONLY_ARM_CONTAINS_STEERING')
         elif kind=='steer':
             has_excitation=any(abs(s['command_steer'])>=.025 and s['command_brake']<.1 for s in after)
         else:
