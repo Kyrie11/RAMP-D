@@ -106,13 +106,25 @@ def run(a):
                     elif out.startswith('out') and inc.startswith('mid'):exit.append(i)
             if len(set(entry))!=1 or not exit or set(entry)&set(exit):raise ValueError(f'bad entry/exit signal mapping: {d}, {groups}')
             links[d]=(len(groups),entry,exit)
+        signal_evidence=[]
+        last_commanded={}
         def apply(c):
             for d,display in zip('AB',c.displays):
                 n,entry,exit=links[d];s=['r']*n
                 for i in exit:s[i]='G'
                 for i in entry:s[i]={'GREEN':'G','YELLOW':'y','RED':'r'}[display]
                 target=''.join(s);traci.trafficlight.setRedYellowGreenState(d,target)
-                if traci.trafficlight.getRedYellowGreenState(d)!=target:raise ValueError('signal acknowledgement mismatch')
+                returned=traci.trafficlight.getRedYellowGreenState(d)
+                if returned!=target:raise ValueError('signal TraCI readback mismatch')
+                raw_time=traci.simulation.getTime()
+                stamp=Q(round(raw_time*10),10)
+                if abs(float(stamp)-raw_time)>1e-6:
+                    raise ValueError('SUMO controller command not on 0.1s tick')
+                signal_evidence.append(dict(kind='COMMAND_READBACK',time=str(stamp),tls_id=d,
+                    desired=target,readback=returned,controller_phase=c.phase,controller_version=c.version,
+                    entry_link_indices=sorted(set(entry)),exit_link_indices=sorted(set(exit)),
+                    proof_scope='TRACI_SIGNAL_STATE_NOT_FIELD_ACTUATION_ACK'))
+                last_commanded[d]=target
         def snapshot():
             rows={}
             for vid in traci.vehicle.getIDList():
@@ -132,6 +144,12 @@ def run(a):
         for k in range(1,a.steps+1):
             old_phase=c.phase;old_displays=c.displays;traci.simulationStep();t=Q(k,10)
             if abs(traci.simulation.getTime()-float(t))>1e-6:raise ValueError('SUMO time mismatch')
+            for d in 'AB':
+                observed=traci.trafficlight.getRedYellowGreenState(d)
+                signal_evidence.append(dict(kind='POST_STEP_READBACK',time=str(t),tls_id=d,
+                    expected=last_commanded[d],observed=observed,proof_scope='TRACI_SIGNAL_STATE_NOT_FIELD_ACTUATION_ACK'))
+                if observed!=last_commanded[d]:
+                    raise ValueError('SUMO signal state changed contrary to declared controller between ticks')
             if traci.simulation.getStartingTeleportIDList() or traci.simulation.getEndingTeleportIDList():raise ValueError('teleport invalidates route sweep')
             after=snapshot();departed=tuple(traci.simulation.getDepartedIDList());arrived=tuple(traci.simulation.getArrivedIDList());occ,entries=swept_occupants(before,after,bounds,departed,arrived)
             roster.append(dict(time_s=float(t),departed=departed,arrived=arrived))
@@ -175,12 +193,16 @@ def run(a):
             for vid,v in after.items():vehicle_trace.append(dict(time_s=float(t),id=vid,direction=v.route,front_m=v.front,speed_mps=v.speed,length_m=v.length))
             before=after
             if guard_exhausted:break
+        signal_trace=work/'signal_trace.jsonl'
+        signal_trace.write_text(''.join(json.dumps(r,allow_nan=False)+'\n' for r in signal_evidence))
         trace=work/'vehicle_trace.jsonl';trace.write_text(''.join(json.dumps(r)+'\n' for r in vehicle_trace));(work/'roster_trace.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in roster));good=not violations and through['A']>0 and through['B']>0 and any(r['to_phase']=='B_GREEN' for r in transitions) and any(r['to_phase']=='A_GREEN' for r in transitions)
         remaining=len(before);pending=traci.simulation.getMinExpectedNumber();drained=remaining==0 and pending==0
         completed=drained and departure_ids==arrival_ids==set().union(*entry_ids.values())==set().union(*clear_ids.values()) and all(entry_ids[d]==clear_ids[d] for d in ROUTES) and len(departure_ids)==traffic.expected_vehicles
         if a.require_drain and not completed:good=False
         if a.require_comfort and braking:good=False
-        return dict(status='SUMO_LOGICAL_CORRIDOR_PASS' if good else 'REVIEW_REQUIRED',traffic_profile=traffic.name,expected_vehicles=traffic.expected_vehicles,scope='TRAFFIC_ACTUATED_LOGICAL_CORRIDOR_NOT_PHYSICAL_SINGLE_LANE',sumo_version=traci.getVersion(),dt_s=.1,seed=a.seed,resource_bounds_m=bounds,entries=through,transitions=transitions,violations=violations,steps=rows,trace=str(trace),roster_trace=str(work/'roster_trace.jsonl'),comfort_guard=a.comfort_guard,stop_reserve_guard=a.stop_reserve_guard,reaction_s=a.reaction_s,extra_stop_m=a.extra_stop_m,departed_count=len(departure_ids),arrived_count=len(arrival_ids),unique_entries={d:len(v) for d,v in entry_ids.items()},rear_clearances={d:len(v) for d,v in clear_ids.items()},roster_completion_pass=completed,detector_range_m=a.detector_range_m,max_green_extension_s=a.max_green_extension_s if (a.comfort_guard or a.stop_reserve_guard) else 0,comfort_review_required=bool(braking or guard_exhausted),brake_steps=braking,comfort_block_records=switch_blocks,remaining_vehicles=remaining,min_expected_number=pending,drained_at_cutoff=drained,physical_clearance_certified=False,training_labels_generated=False)
+        return dict(status='SUMO_LOGICAL_CORRIDOR_PASS' if good else 'REVIEW_REQUIRED',traffic_profile=traffic.name,expected_vehicles=traffic.expected_vehicles,scope='TRAFFIC_ACTUATED_LOGICAL_CORRIDOR_NOT_PHYSICAL_SINGLE_LANE',sumo_version=traci.getVersion(),dt_s=.1,seed=a.seed,resource_bounds_m=bounds,entries=through,transitions=transitions,violations=violations,steps=rows,trace=str(trace),roster_trace=str(work/'roster_trace.jsonl'),
+                    signal_trace=str(signal_trace),signal_records=len(signal_evidence),
+                    traci_signal_state_readback_observed=True,physical_signal_actuation_ack_verified=False,comfort_guard=a.comfort_guard,stop_reserve_guard=a.stop_reserve_guard,reaction_s=a.reaction_s,extra_stop_m=a.extra_stop_m,departed_count=len(departure_ids),arrived_count=len(arrival_ids),unique_entries={d:len(v) for d,v in entry_ids.items()},rear_clearances={d:len(v) for d,v in clear_ids.items()},roster_completion_pass=completed,detector_range_m=a.detector_range_m,max_green_extension_s=a.max_green_extension_s if (a.comfort_guard or a.stop_reserve_guard) else 0,comfort_review_required=bool(braking or guard_exhausted),brake_steps=braking,comfort_block_records=switch_blocks,remaining_vehicles=remaining,min_expected_number=pending,drained_at_cutoff=drained,physical_clearance_certified=False,training_labels_generated=False)
     finally:traci.close()
 
 

@@ -1,3 +1,11 @@
+## CURRENT: Phase 6C-A59/1b-0Q / A71 — parallel simulator and data-source evidence gates (conditional)
+
+Based on A70 full source, NOT only a report. New operational adapters for SUMO TraCI per-tick signal command/readback (not physical ACK), a *fresh* 12-run SUMO campaign that never overwrites old evidence, the independent Waymax official IDM synthetic-pair trace audit, 511NY real CSV report-time normalization and ROADWork grouped visual template conversion, and matched real CARLA brake-only vs combined 0.15 diagnostics. New exact-rational conservative polygon exclusion consumes declared six-dimensional native MPFR/Picard tubes; true native replay of those tubes is mandatory for the server conditional audit. It neither proves legal resource entry/stay/exit nor full physical SC. See `docs/PHASE6C_A59_1B0Q_THREE_TRACK_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0Q_RUNBOOK.md`.
+
+New A71 pure negative/positive tests are 29/29 locally; previous A58 (19/19) and A59 (11/11) pure gates were also re-run. Existing four native certificate bytes were checked with non-certifying offline geometry; new Native was **not** executed here. CARLA/SUMO and Waymax live sims, and actual 511NY/ROADWork bulk data remain **pending on user's server**. Eight formal supervision heads stay masked, no full SC certificate. Run `bash scripts/validate_phase6c_a59_1b0q.sh` after a freshly built MPFR backend.
+
+---
+
 ## Phase6C A59/1b-0P (A70) — newly added (conditional)
 
 Actual 6D Native MPFR/Picard segmented ego dynamics for two hidden worlds, four world/slabs and independently replayed certificates; 1D Native resource MAY-intersection fail-closed, rank and ACK necessary checks; real three-arm CARLA 0.15/0.30/0.45 time-course diagnostics distinguishing near-stop and moving deceleration peaks; independent configurable brake-only trial for 2x3 factorial; canonical recording-family split protection. **None establishes all-agent continuous safety, general geometry, terminal SC, or formal labels.** See `docs/PHASE6C_A59_1B0P_THREE_TRACK_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0P_RUNBOOK.md`. Clean build: `bash scripts/validate_phase6c_a59_1b0p.sh`.

@@ -157,6 +157,65 @@
     "uploaded_steer_trial_captured": true,
     "validated_physics_envelope": false
   },
+  "a59_1b0p_a70": {
+    "brake_peak_speed_mps_regime": [
+      "NEAR_STOP",
+      "MOVING",
+      "MOVING"
+    ],
+    "brake_saturation_law_identified": false,
+    "carla_real_brake_arms_single_capture": [
+      0.15,
+      0.3,
+      0.45
+    ],
+    "carla_sumo_live_cosim_verified": false,
+    "eight_formal_supervision_masks_enabled": false,
+    "general_native_resource_post_certified": false,
+    "native_6d_world_slabs_replayed_local": 4,
+    "native_microcase_actual_cpp_backend_invoked": true,
+    "new_tests_passed": 31,
+    "next": "A59/1b-1 general all-actor swept native resource/observation/tail proof; A5/3c 5m/s brake-only 2x3 factorial, SUMO fresh nine jobs, co-sim isolation; M11-M13 proof-authorized source factory",
+    "phase": "6C-A59/1b-0P",
+    "physical_error_envelope_certified": false,
+    "reported_local_all_pytest_shards_passed": 940,
+    "seven_full_end_to_end_counterexamples_certified": false,
+    "source_files_verified_pending_release_resign": false,
+    "status": "CONDITIONAL_NATIVE_EGO_SEGMENTED_TWO_WORLD_REPLAY_AND_PHYSICAL_DIAGNOSTICS",
+    "swept_polygon_all_actor_certified": false,
+    "terminal_sc_certified": false,
+    "world_clock_source_digest_bound_to_mpfr_certificates": true
+  },
+  "a59_1b0q_a71": {
+    "511ny_real_csv_ingested_this_environment": false,
+    "511ny_roadwork_source_adapters_written": true,
+    "a58_pure_retested_local": 19,
+    "a59_pure_retested_local": 11,
+    "all_eight_formal_label_masks_enabled": false,
+    "based_on": "A59/1b-0P full current release + user 2026-11-24 paper + CARLA brakeonly b0.15 + historical 511NY/ROADWork/Waymax/SUMO sources",
+    "carla_combined_brake_015_real_capture": true,
+    "carla_paired_control_diagnostics": true,
+    "carla_physical_error_enclosure_certified": false,
+    "carla_pure_brake_015_real_capture": true,
+    "carla_sumo_live_joint_run_this_environment": false,
+    "complete_sc_terminal_tail_certified": false,
+    "declared_polygon_far_interval_geometry_excluded": true,
+    "declared_polygon_near_interval_geometry_remains_possible": true,
+    "general_polygon_entry_stay_exit_certified": false,
+    "historical_four_native_certificate_byte_hash_crosschecked": true,
+    "new_a71_pure_tests_passed_local": 29,
+    "new_full_repo_native_gate_server_executed": false,
+    "new_mpfr_native_post_replayed_this_environment": false,
+    "next": "A59/1b-1 complete all actor mixed polygon/Guard/observation/Post/terminal SC; parallel real SUMO 12-run TLS trace + Waymax IDM paired replay + NY511/ROADWork actual sources + CARLA brake factorial",
+    "phase": "6C-A59/1b-0Q",
+    "previous_940_pytest_a70_historical_only": true,
+    "roadwork_real_template_jsonl_ingested_this_environment": false,
+    "status": "A71_PURE_AND_HISTORICAL_NATIVE_POLYGON_GEOMETRY_CONDITIONAL_SERVER_PENDING",
+    "sumo_live_run_this_environment": false,
+    "sumo_new_traci_state_recorder_written": true,
+    "waymax_live_run_this_environment": false,
+    "waymax_new_synthetic_pair_checker_written": true
+  },
   "a69_three_track_20261123": {
     "a69_pure_tests": 34,
     "all_eight_formal_supervision_labels_available": false,
@@ -511,7 +570,7 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
-  "release": "0.9.19",
+  "release": "0.9.21",
   "requires_carla": false,
   "requires_dataset": false,
   "requires_sumo": false,
@@ -520,34 +579,5 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
-  },
-  "a59_1b0p_a70": {
-    "phase": "6C-A59/1b-0P",
-    "status": "CONDITIONAL_NATIVE_EGO_SEGMENTED_TWO_WORLD_REPLAY_AND_PHYSICAL_DIAGNOSTICS",
-    "native_6d_world_slabs_replayed_local": 4,
-    "reported_local_all_pytest_shards_passed": 940,
-    "new_tests_passed": 31,
-    "source_files_verified_pending_release_resign": false,
-    "native_microcase_actual_cpp_backend_invoked": true,
-    "general_native_resource_post_certified": false,
-    "seven_full_end_to_end_counterexamples_certified": false,
-    "terminal_sc_certified": false,
-    "swept_polygon_all_actor_certified": false,
-    "carla_real_brake_arms_single_capture": [
-      0.15,
-      0.3,
-      0.45
-    ],
-    "brake_peak_speed_mps_regime": [
-      "NEAR_STOP",
-      "MOVING",
-      "MOVING"
-    ],
-    "brake_saturation_law_identified": false,
-    "physical_error_envelope_certified": false,
-    "carla_sumo_live_cosim_verified": false,
-    "eight_formal_supervision_masks_enabled": false,
-    "next": "A59/1b-1 general all-actor swept native resource/observation/tail proof; A5/3c 5m/s brake-only 2x3 factorial, SUMO fresh nine jobs, co-sim isolation; M11-M13 proof-authorized source factory",
-    "world_clock_source_digest_bound_to_mpfr_certificates": true
   }
 }
