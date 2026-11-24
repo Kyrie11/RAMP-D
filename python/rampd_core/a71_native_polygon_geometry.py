@@ -33,6 +33,26 @@ def polygon_vertices(poly):
     if not any((b[0]-pts[0][0])*(c[1]-pts[0][1])-(b[1]-pts[0][1])*(c[0]-pts[0][0])
                for b in pts[1:] for c in pts[1:]):
         raise ValueError('degenerate collinear polygon')
+    # A polygon with self-crossing boundary has ambiguous road-resource
+    # interior.  Its convex-hull exclusion may be conservative, but silently
+    # accepting an invalid map is not a valid road-topology contract.
+    def cross(a,b,c):
+        return (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])
+    def on(a,b,c):
+        return cross(a,b,c)==0 and min(a[0],b[0])<=c[0]<=max(a[0],b[0]) and min(a[1],b[1])<=c[1]<=max(a[1],b[1])
+    def intersects(a,b,c,d):
+        q1,q2,q3,q4=cross(a,b,c),cross(a,b,d),cross(c,d,a),cross(c,d,b)
+        return ((q1==0 and on(a,b,c)) or (q2==0 and on(a,b,d)) or
+                (q3==0 and on(c,d,a)) or (q4==0 and on(c,d,b)) or
+                (q1*q2<0 and q3*q4<0))
+    count=len(pts)
+    for i in range(count):
+        a,b=pts[i],pts[(i+1)%count]
+        if a==b:raise ValueError('zero polygon edge')
+        for j in range(i+1,count):
+            if j==i+1 or (i==0 and j==count-1):continue
+            if intersects(a,b,pts[j],pts[(j+1)%count]):
+                raise ValueError('self-intersecting or self-touching polygon')
     return pts
 
 

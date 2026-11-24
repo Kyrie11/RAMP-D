@@ -50,6 +50,12 @@ def audit_brake_steer_pair(pure,combined,*,brake:float=0.15):
                 raise ValueError('off-lane/unknown sampled footprint')
             if any(abs(x['command_brake']-brake)>1e-5 or abs(x['actual_brake']-brake)>1e-5 for x in post):
                 raise ValueError('declared and effective brake mismatch')
+            # A71 accidentally compared brake but never checked throttle.
+            # Nonzero simultaneous traction would confound the intervention.
+            if any(abs(x.get('command_throttle',99))>1e-6 or abs(x.get('actual_throttle',99))>1e-6
+                   for x in post):raise ValueError('nonzero or missing throttle confounds braking')
+            if any(x.get('command_issued_before_tick') is not True for x in post):
+                raise ValueError('missing pre-tick command causality')
             if expected=='brake':
                 if any(abs(x['command_steer'])>1e-7 or abs(x['actual_steer'])>1e-7 for x in post):
                     raise ValueError('pure arm contains steering')

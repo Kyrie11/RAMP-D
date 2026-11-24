@@ -570,7 +570,7 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
-  "release": "0.9.21",
+  "release": "0.9.22",
   "requires_carla": false,
   "requires_dataset": false,
   "requires_sumo": false,
@@ -579,5 +579,21 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
+  },
+  "phase6c_a72": {
+    "release": "A59/1b-0R",
+    "math_two_hidden_world_native_replay_conditional": true,
+    "native_clock_polygon_full_sc": false,
+    "carla_brake_steer_two_pairs_observed": true,
+    "carla_2x3_three_repeat_completed": false,
+    "sumo_logical_12_run_offline_replay": true,
+    "sumo_physical_reversible_lane": false,
+    "waymax_synthetic_three_lookahead_replay": true,
+    "waymax_real_factual_scene_inventory_runtime_pending": true,
+    "511ny_report_auxiliary_rows_accepted": 1521,
+    "511ny_quarantined_rows": 1,
+    "roadwork_real_pipeline_server_pending": true,
+    "roadwork_files_json_not_grouped_template": true,
+    "formal_supervision_8_labels_authorized": false
   }
 }
