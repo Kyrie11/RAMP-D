@@ -3,10 +3,11 @@
 Official split unchanged; strict auxiliary split is separate (not benchmark).
 Unknown groups quarantined, no inferred legal labels or metric geometry.
 """
-import argparse,collections,hashlib,json,re,zipfile
+import argparse,collections,hashlib,json,re
 from pathlib import Path
 from math import isfinite,sin,cos,radians,floor
 from itertools import product
+from audit_roadwork import reader, index
 C=collections.Counter
 
 def group(im):
@@ -47,11 +48,12 @@ def site_audit(train,val,radius=100.):
 
 def audit(zpath,manifest=None):
     data={};summary={};group_sets={};digests={}
-    with zipfile.ZipFile(zpath) as z:
+    with reader(Path(zpath)) as z:
+        members=index(z)
         for split in ('train','val'):
             files=[]
             for suffix in ('','_with_signs'):
-                target=f'instances_{split}_gps_split{suffix}.json';matches=[x for x in z.namelist() if Path(x).name==target]
+                target=f'instances_{split}_gps_split{suffix}.json';matches=members.get(target, [])
                 if len(matches)!=1:raise ValueError('missing/ambiguous '+target)
                 raw=z.read(matches[0]);digests[target]=hashlib.sha256(raw).hexdigest();files.append(json.loads(raw))
             base,enh=files;ims=indexed(base['images']);sign_ims=indexed(enh['images']);anns=indexed(base['annotations']);sa=indexed(enh['annotations']);cats={k:v['name'] for k,v in indexed(base['categories']).items()};scats={k:v['name'] for k,v in indexed(enh['categories']).items()}

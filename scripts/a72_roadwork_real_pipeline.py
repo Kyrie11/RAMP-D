@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ROADWork official annotation -> alignment -> GPS group split -> templates -> auxiliary.
 
-Images.zip and sem_seg_labels.zip/gtFine MUST be available at --dataset-root.
+Extracted annotations/, images/ and gtFine/ MUST be available at --dataset-root.
 Do not pass roadwork_files.json: that file is merely a file inventory.
 """
 import argparse,subprocess,sys,json
@@ -13,8 +13,9 @@ def main():
     p.add_argument('--output-dir',type=Path,required=True);p.add_argument('--max-templates',type=int,default=100)
     a=p.parse_args();data=a.dataset_root;out=a.output_dir
     if out.exists():raise SystemExit('REFUSE_EXISTING_OUTPUT_DIRECTORY')
-    annotations=next((p for p in (data/'annotations.zip',data/'archives'/'annotations.zip') if p.is_file()),None)
-    if annotations is None:raise SystemExit('MISSING_OFFICIAL_ANNOTATIONS_ZIP_NOT_ROADWORK_FILES_JSON')
+    missing=[str(data/name) for name in ('annotations','images','gtFine') if not (data/name).is_dir()]
+    if missing:raise SystemExit('MISSING_EXTRACTED_ROADWORK_DIRECTORIES: '+', '.join(missing))
+    annotations=data/'annotations'
     out.mkdir(parents=True)
     commands=[
       ['audit_roadwork.py','--root',str(data),'--output',str(out/'alignment.json'),'--samples-per-split','3'],
