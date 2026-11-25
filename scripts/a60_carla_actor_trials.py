@@ -285,6 +285,25 @@ def spot(world, carla, *, spacing_m=2.0, prefer_longest=False, report=None,
         f' projected_start_rejections={data.get("projected_start_rejections", {})}')
 
 
+def capture_solver_telemetry(actor):
+    """Optional 0.9.16 RPC; raw values only. Explicitly preserve unavailable fields."""
+    try:
+        t=actor.get_telemetry_data()
+        def fields(obj,names):
+            out={}
+            for name in names:
+                v=getattr(obj,name,None)
+                out[name]=float(v) if isinstance(v,(int,float)) and math.isfinite(v) else None
+            return out
+        wheels=getattr(t,'wheels',None)
+        return {'status':'RAW_TELEMETRY' if wheels is not None else 'REVIEW_NO_WHEEL_TELEMETRY',
+                'vehicle':fields(t,('speed','steer','throttle','brake','engine_rpm','gear','drag')),
+                'wheels':[fields(w,('omega','torque','long_slip','lat_slip','tire_load','long_force','lat_force','tire_friction')) for w in wheels] if wheels is not None else [],
+                'units_and_frame_not_independently_verified':True}
+    except (AttributeError,RuntimeError,TypeError,ValueError) as e:
+        return {'status':'UNAVAILABLE','reason':type(e).__name__+': '+str(e)}
+
+
 def observe(actor,world,snapshot,cmd,trigger):
     x=actor.get_transform();v=actor.get_velocity();a=actor.get_acceleration();w=actor.get_angular_velocity()
     ctrl=actor.get_control()
@@ -327,6 +346,8 @@ def observe(actor,world,snapshot,cmd,trigger):
          'wheel_steer_query_error':wheel_steer_query_error,
          'command_reference_sim_time_s':trigger,
          'coordinate_warning':'CARLA coordinates are left-handed; convert heading/y for RAMP-D before fitting'}
+    import os
+    if os.environ.get('RAMPD_CARLA_TELEMETRY')=='1':out['solver_telemetry_raw']=capture_solver_telemetry(actor)
     if not all(finite(out[k]) for k in ('speed_mps','accel_mps2','yaw_rate_radps_carla','sim_time_s')):
         raise RuntimeError('NONFINITE_CARLA_STATE')
     return out

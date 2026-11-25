@@ -52,7 +52,8 @@ def safe_edge(s,t,resources,guards,conflicts,roster):
             if span is None:continue
             times[a]=span;lo,hi=span
             dx=c[0]-b[0]; dy=c[1]-b[1]; direction='east' if dx>0 else 'west' if dx<0 else 'stationary'
-            if (dy!=0 or not g['ack'] or g['ack_version']!=g['version'] or not g['stay'] or direction not in g['directions'] or ((lo>0 or lo==hi==0) and not g['entry']) or (hi<1 and not g['exit'])):reasons.append('GUARD:'+r+':'+a)
+            strict_start=all(b[k]<p[k+2] and p[k]<b[k+2] for k in (0,1))
+            if (dy!=0 or not g['ack'] or g['ack_version']!=g['version'] or not g['stay'] or direction not in g['directions'] or ((lo>0 or not strict_start) and not g['entry']) or (hi<1 and not g['exit'])):reasons.append('GUARD:'+r+':'+a)
         for x in {x for span in times.values() for x in span}:
             if sum(lo<=x<=hi for lo,hi in times.values())>g['capacity']:reasons.append('CAPACITY:'+r)
         occ[r]=times

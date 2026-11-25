@@ -609,5 +609,17 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
+  },
+  "a74": {
+    "status": "LOCAL_PURE_AND_OFFLINE_REPLAY_NATIVE_PENDING",
+    "targeted_tests_passed": 55,
+    "new_targeted_tests": 14,
+    "carla_strict_valid": 17,
+    "carla_captures": 18,
+    "roadwork_strict_templates": 65,
+    "sumo_sample_ticks": 9000,
+    "full_sc_certified": false,
+    "phase6c_exit": false,
+    "formal_labels_authorized": false
   }
 }

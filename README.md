@@ -290,3 +290,6 @@ The graded-audit change also preserves pre-fraction A67 logs via an explicitly *
 ## A73 / Phase6C-A59/1b-0S
 
 See `docs/PHASE6C_A59_1B0S_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0S_RUNBOOK.md`. Local 41 A73 + 59 old pure tests; fresh Native configure blocked by missing MPFR/GMP development files; real simulators pending. All eight formal masks remain zero.
+
+## A74 integration checkpoint
+See [finite Phase6C exit contract](docs/A74_PHASE6C_EXIT.md) and [server runbook](docs/A74_SERVER_RUNBOOK.md). Native and actual simulator validation pending.

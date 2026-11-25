@@ -15,6 +15,7 @@ from rampd_core.reachability import integrate,TubeStatus
 from rampd_core.a5_replay_bridge import exact_step_endpoint
 from rampd_core.exact_time import binary64_bracket
 from rampd_core.a73_native_multi_actor import audit_joint_native
+from rampd_core.a74_successor import audit_native_successors
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--output-dir',type=Path,required=True);a=p.parse_args();out=a.output_dir
@@ -33,7 +34,13 @@ def main():
             (out/(actor+'_'+k[0]+'_'+str(k[1]).replace('/','_')+'.json')).write_text(json.dumps(c,allow_nan=False))
             guards[k]={'r':dict(entry=True,stay=True,exit=True,all_directions=True,ack=True,version=1,ack_version=1,capacity=1)}
     run=lambda:audit_joint_native(certs,decl,geometry,resource,guards,[],worlds,start=Q(0),end=2*h,ego='ego')
-    pos=run();next(iter(guards.values()))['r']['entry']=False;neg=run()
-    result={'positive':pos,'closed_guard':neg,'formal_labels_authorized':False};(out/'review.json').write_text(json.dumps(result,indent=2)+'\n')
-    print(pos['status'],neg['status']);return 0 if pos['status'].startswith('CONDITIONAL') and neg['status']=='UNKNOWN' else 4
+    pos=run()
+    # Independent generous endpoint cells for declared straight motion; not taken from certificates.
+    target={w:dict(latent=w,actors={'ego':[[-1,1],[-1,1],[-1,1],[3,5],[-1,1],[-1,1]],'other':[[19,21],[-1,1],[-1,1],[3,5],[-1,1],[-1,1]]}) for w in ('A','B')}
+    outcomes={w:[dict(observation='[]',atom=w,latent=w)] for w in ('A','B')}
+    def succ(targets):return audit_native_successors(certs,decl,geometry,resource,guards,[],worlds,start=Q(0),end=2*h,ego='ego',roster=('ego','other'),outcomes=outcomes,targets=targets)
+    post=succ({'[]':target});missing=succ({'[]':{'A':target['A']}})
+    next(iter(guards.values()))['r']['entry']=False;neg=run()
+    result={'positive':pos,'closed_guard':neg,'public_post':post,'missing_posterior_atom':missing,'formal_labels_authorized':False};(out/'review.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(pos['status'],neg['status']);return 0 if pos['status'].startswith('CONDITIONAL') and neg['status']=='UNKNOWN' and post['status']=='CONDITIONAL_DECLARED_NATIVE_POST_SUPPORT' and missing['status']=='UNKNOWN' else 4
 if __name__=='__main__':raise SystemExit(main())
