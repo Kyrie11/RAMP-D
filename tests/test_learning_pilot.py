@@ -157,3 +157,51 @@ def test_lazy_public_api_does_not_load_native():
 def test_overlay_outside_scene_rejected(source):
     e,r=overlay(source,effective_on='2',effective_off='4')
     with pytest.raises(ValueError,match='intersect'):e.bind(r)
+
+# Fixed public query grid; actual future timestamps are target-side only.
+def test_future_timestamp_jitter_not_public(source):
+    r=records(source)[0];f=build_features(r,horizon=5);q=copy.deepcopy(r);q['scene']['manifest']['timestamps'][-1]+=.005
+    for a in q['scene']['tracks']:a['states'][-1]['timestamp']+=.005
+    g=build_features(q,horizon=5);assert f['inputs']==g['inputs'] and f['candidate']==g['candidate'];assert f['targets']['actual_dt']!=g['targets']['actual_dt']
+
+def test_collate_rejects_future_history(source):
+    f=features(source)[0];f['inputs']['history'][0][-1][8]=.1
+    with pytest.raises(ValueError,match='history after'):collate([f])
+
+def test_collate_rejects_numeric_mask(source):
+    f=features(source)[0];f['targets']['valid'][1][0]=1
+    with pytest.raises(ValueError,match='boolean'):collate([f])
+
+def test_cv_initialization_and_epoch_zero(source):
+    fs=features(source);tr=[dict(f,training_allowed=True) for f in fs if f['split']=='training'];va=[dict(f,training_allowed=False) for f in fs if f['split']=='validation']
+    _,r=fit(tr,va,epochs=1,d=16,modes=2,neighbors=4,lr=.001)
+    init=r['history'][0]['validation'];assert init['top1_ADE_m']==pytest.approx(init['cv_ADE_m'],abs=1e-6)
+    assert r['checkpoint_validation']['joint_nll_per_knot']<=init['joint_nll_per_knot']+1e-7
+
+def test_protocol_future_only_and_recipient_views(source):
+    from rampd_core.datasets.rule_overlay import ScheduledDelivery,replay_scheduled_world
+    e,r=overlay(source,generation='.2',effective_on='.4',issue='.25',receipt=None,announce_window=True)
+    d=[ScheduledDelivery('1','.3','.6'),ScheduledDelivery('2','.3','.35'),ScheduledDelivery('3','.3',None)]
+    p=replay_scheduled_world(r,e,d,query_steps=6);a=p['worlds']['EVENT'];b=p['worlds']['NO_EVENT'];assert a[0]['public_by_recipient']==b[0]['public_by_recipient'];assert a[2]['teacher']['rule_active'];assert a[2]['public_by_recipient']['1']==b[2]['public_by_recipient']['1'];assert a[2]['public_by_recipient']['2']['received_messages'];assert not a[-1]['public_by_recipient']['3']['received_messages'];assert p['event_training_allowed'] is False
+    old,_=overlay(source,receipt=None)
+    with pytest.raises(ValueError,match='history not regenerated'):replay_scheduled_world(r,old,d)
+
+def test_publication_clock(source):
+    from rampd_core.datasets.rule_overlay import ScheduledDelivery
+    e,_=overlay(source)
+    with pytest.raises(ValueError,match='publication before'):ScheduledDelivery('1','.1','.2').validate(e)
+    with pytest.raises(ValueError,match='receipt before'):ScheduledDelivery('1','.3','.2').validate(e)
+
+def test_event_clock_loss_masks():
+    from rampd_core.learning.event_loss import event_clock_nll
+    x=torch.zeros(3,4,requires_grad=True);a=torch.tensor([[True,False,False,False],[False,True,True,False],[True,True,True,True]]);k=torch.tensor([True,True,False]);loss=event_clock_nll(x,a,k);assert loss.item()==pytest.approx((math.log(4)+math.log(2))/2);loss.backward();assert x.grad[2].abs().sum()==0;assert event_clock_nll(x,a,torch.zeros_like(k)) is None
+    with pytest.raises(ValueError):event_clock_nll(x,torch.zeros_like(a),k)
+
+def test_lane_proposal(source):
+    from rampd_core.datasets.incident_scenarios import propose
+    r=records(source)[0]
+    with pytest.raises(ValueError,match='logged time span'):propose(r)
+    r['scene']['manifest']['timestamps'].append(1.1)
+    for a in r['scene']['tracks']:
+        a['states'].append(dict(a['states'][-1],timestamp=1.1,observed=False))
+    p=propose(r);assert p['lane_proposal']['lane_id']=='10';assert p['joint_counterfactual_mask'] is False;assert p['teacher_schedule']['physical_activation'] is None

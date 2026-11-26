@@ -52,3 +52,46 @@ class RuleOverlay:
         return {'received_messages':[msg]}  # actual effectivity not inferred from message
     def teacher_active(self, t):
         return _time(self.effective_on)<=_time(t)<_time(self.effective_off)
+
+@dataclass(frozen=True)
+class ScheduledDelivery:
+    """One recipient's synthetic delivery. None means no delivery in this world,
+    not a real-world negative observation or confirmed packet drop."""
+    recipient: str
+    publication: str
+    receipt: str | None
+    def validate(self, event):
+        if not self.recipient or _time(self.publication)<_time(event.issue): raise ValueError('publication before issue or missing recipient')
+        if self.receipt is not None and _time(self.receipt)<_time(self.publication): raise ValueError('receipt before publication')
+    def public_view(self,event,cutoff):
+        self.validate(event)
+        if self.receipt is None or _time(self.receipt)>_time(cutoff): return {'received_messages': []}
+        msg=dict(event_id=event.event_id,lane_id=event.lane_id,kind=event.kind,authority=event.authority,issue=event.issue,publication=self.publication,receipt=self.receipt)
+        if event.announce_window: msg['announced_window']=[event.effective_on,event.effective_off]
+        return {'received_messages':[msg]}
+
+
+def replay_scheduled_world(record,event,deliveries,*,query_steps=30):
+    """Future-only declared schedule replay. Does NOT simulate vehicle response.
+    All worlds share the factual initialization; no hidden event changes its past.
+    Teacher clock targets are for the declared schedule only, not physical ACK.
+    """
+    if type(query_steps) is not int or query_steps<1: raise ValueError('query_steps')
+    s=record['scene'];m=s['manifest']; cutoff=_time(str(m['timestamps'][m['current_time_index']]))
+    binding=event.bind(record)
+    if _time(event.generation)<cutoff: raise ValueError('event history not regenerated: require generation >= decision cutoff')
+    deliveries=tuple(deliveries)
+    if not deliveries or len({d.recipient for d in deliveries})!=len(deliveries): raise ValueError('unique recipient deliveries required')
+    if len({ _time(d.publication) for d in deliveries})!=1: raise ValueError('one report publication clock required')
+    valid_roster={str(a['track_id']) for a in s['tracks'] if a['states'][m['current_time_index']]['valid'] is True}
+    for d in deliveries:
+        d.validate(event)
+        if d.recipient not in valid_roster: raise ValueError('recipient outside current valid roster')
+    if event.receipt is not None: raise ValueError('use recipient-specific receipts, not legacy ego receipt')
+    ticks=[cutoff+Q(j,10) for j in range(query_steps+1)]
+    rows=[]
+    for t in ticks:
+        rows.append(dict(time=str(t),public_by_recipient={d.recipient:d.public_view(event,t) for d in deliveries},teacher=dict(rule_active=event.teacher_active(t),rule_generated=t>=_time(event.generation),physical_execution='UNKNOWN',response='NOT_RUN')))
+    # No event is a separate declared alternative, never a deduction from silence.
+    no_event=[dict(time=str(t),public_by_recipient={d.recipient:{'received_messages':[]} for d in deliveries},teacher=dict(rule_active=False,rule_generated=False,physical_execution='UNKNOWN',response='NOT_RUN')) for t in ticks]
+    return dict(schema='rampd.scheduled_rule_replay.v1',binding=binding,decision_time=str(cutoff),split=m['split'],family_id=m['scenario_id'],source_digest=record['record_sha256'],deliveries=[dict(d.__dict__) for d in deliveries],worlds={'EVENT':rows,'NO_EVENT':no_event},teacher_schedule=dict(generation=event.generation,effective_on=event.effective_on,effective_off=event.effective_off,issue=event.issue,publication=deliveries[0].publication,physical_activation=None,physical_clearance=None,first_local_detection=None),scope='DECLARED_SYNTHETIC_SCHEDULE_NOT_SIMULATOR_RESPONSE',event_training_allowed=False,joint_counterfactual_mask=False,formal_sc=False)

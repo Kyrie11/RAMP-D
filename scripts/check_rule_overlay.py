@@ -12,7 +12,7 @@ def main():
     m=json.loads(Path(a.manifest).read_text()); record=next((r for r in stream_records(m) if r['scene']['manifest']['scenario_id']==a.scenario_id),None)
     if record is None: raise ValueError('scenario not in manifest')
     s=record['scene']['manifest']; cutoff=str(s['timestamps'][s['current_time_index']]); event=RuleOverlay(a.scenario_id,record['record_sha256'],a.scenario_id+':demo:1',a.lane_id,a.kind,a.generation,a.on,a.off,a.issue,a.receipt,a.authority,a.seed,a.announce_window)
-    output=event.bind(record);output.update(cutoff=cutoff,public_at_cutoff=event.public_view(cutoff),teacher_active_at_cutoff=event.teacher_active(cutoff),time_reference='WOMD_SCENARIO_SECONDS',physical_execution='NOT_RUN')
+    output=event.bind(record);output.update(cutoff=cutoff,public_at_cutoff=event.public_view(cutoff),teacher_active_at_cutoff=event.teacher_active(cutoff),time_reference='WOMD_SCENARIO_SECONDS',physical_execution='NOT_RUN',history_reuse_compatible=(Q(event.generation)>=Q(cutoff)),history_reuse_note='Prior events require regenerated history or independent compatibility evidence; no response labels authorized')
     with open(a.output,'x') as f:json.dump(output,f,indent=2)
     print('SYNTHETIC_OVERLAY_BOUND_NO_TRAINING_AUTHORIZATION')
 if __name__=='__main__':main()

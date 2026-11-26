@@ -65,3 +65,6 @@ Legacy `aXX_...` imports for migrated core modules resolve to the same module ob
 ## Active engineering boundary
 
 The final planner, complete Native multi-actor SafeTube/Succ/SC integration, synchronized shared-resource incident runs, full split registry, all eight label adapters and learned model remain to be completed. Use log/vector-token inputs for the main planning model. Rendered images are for the observation adapter/robustness evaluation, not a prerequisite for training all eight heads.
+
+## Phase7A follow-up
+See [follow-up scope](docs/PHASE7A_FOLLOWUP.md). Fixed query-grid factual features, CV initialization and epoch-zero selection, future-only incident schedule replay, isolated event-clock likelihood. No simulator response or SC authorization.

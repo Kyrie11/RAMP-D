@@ -279,6 +279,24 @@
     "sumo_sampled_validation_rows": 9000
   },
   "assurance_scope": "Model-clock hybrid partition, actor geometry and pairwise conflict evidence; no new real simulator executions here.",
+  "cleanup_v1_dev": {
+    "archived_scripts": 17,
+    "eight_heads_end_to_end_ready": false,
+    "full_sc_certified": false,
+    "native_regression_executed": false,
+    "next": "Phase7A D1/L1 parallel with G1 Native SC and G3 shared map co-sim",
+    "phase6c_exit": false,
+    "pure_regression_before_after": 239,
+    "release_integrity_fixture_tests": 6,
+    "renamed_cli_scripts": 11,
+    "renamed_core_modules": 43,
+    "source": "A75 upload, 0.9.25",
+    "status": "CLEANUP_ONLY_PURE_REGRESSION_PASS_NATIVE_PENDING",
+    "train_candidate_scenarios": 50,
+    "training_rows_authorized_from_upload": 0,
+    "validation_scenarios": 5,
+    "version": "1.0.0.dev0"
+  },
   "concrete_safety_certified": false,
   "current_scene_verified": false,
   "full_support_certified": false,
@@ -625,6 +643,31 @@
     "trained_prediction_and_rulenet": false,
     "womd_time_evaluation_resampled": true
   },
+  "phase7a_followup": {
+    "checkpoint_replay_pass": 5,
+    "event_training_authorized": false,
+    "local_cv_init_1s_best_epoch": 0,
+    "native_sc_certified": false,
+    "physical_cosim_verified": false,
+    "status": "FACTUAL_REPLAY_AND_SCHEDULE_PROPOSAL_LOCAL"
+  },
+  "phase7a_pilot": {
+    "active_losses": [
+      "joint"
+    ],
+    "cosim_online_executed": false,
+    "native_config_pass": false,
+    "native_sc_complete": false,
+    "new_tests_passed": 30,
+    "other_losses_instantiated": false,
+    "phase6c_exit": false,
+    "real_training_scenes_local": 0,
+    "real_validation_knots": 1708,
+    "real_validation_scenes": 5,
+    "split_scope": "bounded official directory pilot only",
+    "status": "LOCAL_SOFTWARE_AND_VALIDATION_DIAGNOSTIC_PASS_REAL_TRAINING_PENDING",
+    "version": "1.0.0.dev0"
+  },
   "release": "0.9.22",
   "requires_carla": false,
   "requires_dataset": false,
@@ -634,40 +677,5 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
-  },
-  "cleanup_v1_dev": {
-    "version": "1.0.0.dev0",
-    "source": "A75 upload, 0.9.25",
-    "status": "CLEANUP_ONLY_PURE_REGRESSION_PASS_NATIVE_PENDING",
-    "renamed_core_modules": 43,
-    "renamed_cli_scripts": 11,
-    "archived_scripts": 17,
-    "pure_regression_before_after": 239,
-    "release_integrity_fixture_tests": 6,
-    "native_regression_executed": false,
-    "phase6c_exit": false,
-    "full_sc_certified": false,
-    "eight_heads_end_to_end_ready": false,
-    "training_rows_authorized_from_upload": 0,
-    "train_candidate_scenarios": 50,
-    "validation_scenarios": 5,
-    "next": "Phase7A D1/L1 parallel with G1 Native SC and G3 shared map co-sim"
-  },
-  "phase7a_pilot": {
-    "version": "1.0.0.dev0",
-    "status": "LOCAL_SOFTWARE_AND_VALIDATION_DIAGNOSTIC_PASS_REAL_TRAINING_PENDING",
-    "active_losses": [
-      "joint"
-    ],
-    "other_losses_instantiated": false,
-    "real_validation_scenes": 5,
-    "real_validation_knots": 1708,
-    "real_training_scenes_local": 0,
-    "native_config_pass": false,
-    "native_sc_complete": false,
-    "cosim_online_executed": false,
-    "phase6c_exit": false,
-    "split_scope": "bounded official directory pilot only",
-    "new_tests_passed": 30
   }
 }

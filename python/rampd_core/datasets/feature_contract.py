@@ -32,7 +32,10 @@ def build_features(record, *, horizon=10, history_steps=11, max_agents=128, max_
     all_agents=[a for a in row['history'] if a['id']!=row['ego_id']]
     all_agents.sort(key=lambda a:(math.hypot(a['states'][-1][0]-ex,a['states'][-1][1]-ey),a['id']))
     selected=[ego]+all_agents[:max_agents-1]; targets={a['id']:a for a in row['targets']}
-    history=[]; categories=[]; out=[]; masks=[]; cv=[]; dt=np.asarray(row['future_times'])-times[k]
+    history=[]; categories=[]; out=[]; masks=[]; cv=[]; actual_dt=np.asarray(row['future_times'])-times[k]
+    # Fixed 10 Hz query grid: exact future sampling jitter is target metadata, not an online feature.
+    dt=np.arange(1,horizon+1,dtype=float)*.1
+    if np.max(np.abs(actual_dt-dt))>.02: raise ValueError('future samples outside nominal query tolerance')
     for a in selected:
         h=[hist(z,t) for z,t in zip(a['states'][-history_steps:],row['history_times'][-history_steps:])]
         history.append([[0.]*HISTORY_DIM]*(history_steps-len(h))+h)
@@ -77,14 +80,14 @@ def build_features(record, *, horizon=10, history_steps=11, max_agents=128, max_
     if not maps: raise ValueError('no local static map geometry')
     # Explicit candidate query, separate from scene input. Actual logged path not measured controls.
     candidate=[xy(z[0],z[1])+[float(t)] for z,t in zip(row['candidate_ego_path'][1:],dt)]
-    result=dict(schema='rampd.factual_features.v1',scenario_id=row['scenario_id'],source_digest=row['source_digest'],split=row['split'],
+    result=dict(schema='rampd.factual_features.v2',scenario_id=row['scenario_id'],source_digest=row['source_digest'],split=row['split'],
         inputs=dict(history=history,category=categories,map=maps,forecast_dt=dt.tolist()),
         candidate=dict(path=candidate,domain='OFFLINE_LOGGED_EGO_PATH_SURROGATE'),
-        targets=dict(xy=out,valid=masks),baseline_cv=cv,
+        targets=dict(xy=out,valid=masks,actual_dt=actual_dt.tolist()),baseline_cv=cv,
         actor_ids=[a['id'] for a in selected],ego_id=row['ego_id'],
         stats=dict(future_births_unmodelled=len(row['births_unmodelled']),actors_dropped=len(all_agents)+1-len(selected),map_segments_dropped=len(segments)-len(maps),valid_knots=sum(map(sum,masks))),
         frame=dict(position_reference='bounding_box_center',origin=[ex,ey],yaw=heading),
-        context=dict(decision_time_s=times[k],lane_candidates=lane_candidates),
+        context=dict(decision_time_s=times[k],lane_candidates=lane_candidates,query_grid='FIXED_10HZ_APPROXIMATE_SAMPLE_ALIGNMENT',max_sample_time_error_s=float(np.max(np.abs(actual_dt-dt)))),
         heads={h:h=='joint' for h in HEADS},domain='REAL_FACTUAL_LOGGED_EGO_PATH_SURROGATE',formal_sc=False)
     # Check only numeric tensor fields, not arbitrary provenance metadata.
     for value in (*result['inputs'].values(),candidate,out,cv):
