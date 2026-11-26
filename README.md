@@ -293,3 +293,7 @@ See `docs/PHASE6C_A59_1B0S_ACCEPTANCE.md` and `docs/PHASE6C_A59_1B0S_RUNBOOK.md`
 
 ## A74 integration checkpoint
 See [finite Phase6C exit contract](docs/A74_PHASE6C_EXIT.md) and [server runbook](docs/A74_SERVER_RUNBOOK.md). Native and actual simulator validation pending.
+
+
+### A75 (0.9.25)
+See `docs/A75_ACCEPTANCE.md`, `docs/A75_SERVER_RUNBOOK.md`, `docs/A75_SUPERVISION_CONTRACT.md`. Finite wait/resource/rank and scoped factual/sampled evidence; Native full gate and full SC pending.

@@ -533,6 +533,8 @@ def main():
     p.add_argument('--smoke-maneuver',choices=('brake','steer','combined'),default='brake',
                    help='Only for --mode smoke; does not imply calibration')
     p.add_argument('--fixed-delta',type=float,default=0.05)
+    p.add_argument('--max-substep-delta',type=float,default=0.01,help='Physics integration setting; change independently from fixed-delta')
+    p.add_argument('--max-substeps',type=int,default=None,help='Explicit physics substep budget; defaults to at least six')
     p.add_argument('--steer-fraction',type=float,default=0.08,
                    help='CARLA normalized steer input, NOT a radian angle (default original 0.08)')
     p.add_argument('--combined-brake-fraction',type=float,default=0.45,
@@ -555,6 +557,11 @@ def main():
         raise ValueError('site-spacing must be between 0.5 and 10 m')
     if not 0<a.fixed_delta<=0.05 or type(a.repeats) is not int or not 1<=a.repeats<=10:
         raise ValueError('invalid fixed step or repeats')
+    if not math.isfinite(a.max_substep_delta) or not 0.001<=a.max_substep_delta<=0.02:
+        raise ValueError('invalid max substep delta')
+    substeps=a.max_substeps if a.max_substeps is not None else max(6,math.ceil(a.fixed_delta/a.max_substep_delta))
+    if not 1<=substeps<=100 or a.fixed_delta>substeps*a.max_substep_delta+1e-12:
+        raise ValueError('fixed delta exceeds substep budget')
     if (not math.isfinite(a.steer_fraction) or not 0.025<=a.steer_fraction<=0.5 or
         not math.isfinite(a.steer_pulse_s) or not a.fixed_delta<=a.steer_pulse_s<=1.0 or
         not math.isfinite(a.combined_brake_fraction) or not 0.05<=a.combined_brake_fraction<=0.8 or
@@ -611,8 +618,8 @@ def main():
                     # CARLA world. A separate remote client cannot be detected.
                     settings=world.get_settings();settings.synchronous_mode=True
                     settings.fixed_delta_seconds=a.fixed_delta
-                    settings.substepping=True;settings.max_substep_delta_time=0.01
-                    settings.max_substeps=max(6,math.ceil(a.fixed_delta/0.01))
+                    settings.substepping=True;settings.max_substep_delta_time=a.max_substep_delta
+                    settings.max_substeps=substeps
                     world.apply_settings(settings)
                     result['world_provenance']=world_provenance(world)
                     result.update(schema='rampd.carla.a59_1.raw_trials.v1',

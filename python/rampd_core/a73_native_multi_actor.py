@@ -38,7 +38,7 @@ def geometry_guard_screen(certs,geometry,resources,guards,conflicts):
         for a,c in certs.items():
             l,w,ox,oy=geometry[a]
             if any(guaranteed_polygon_separation(s['tube'],p,length_m=l,width_m=w,offset_x_m=ox,offset_y_m=oy)['status']!='DECLARED_TUBE_POLYGON_STRICTLY_SEPARATED' for s in c['segments']):may[r].append(a)
-        if may[r] and (not all(g.get(k) is True for k in ('entry','stay','exit','all_directions','ack')) or type(g.get('version')) is not int or g.get('ack_version')!=g['version']):reasons.append('POSSIBLE_CONTACT_WITH_UNRESOLVED_GUARD:'+r)
+        if may[r] and (not all(g.get(k) is True for k in ('entry','stay','exit','all_directions','ack')) or type(g.get('version')) is not int or g['version']<0 or type(g.get('ack_version')) is not int or g.get('ack_version')!=g['version']):reasons.append('POSSIBLE_CONTACT_WITH_UNRESOLVED_GUARD:'+r)
         if len(may[r])>g['capacity']:reasons.append('POSSIBLE_CAPACITY_VIOLATION:'+r)
     for r,s in conflicts:
         if r==s or r not in may or s not in may:raise ValueError('bad conflict')

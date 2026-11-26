@@ -278,3 +278,14 @@ def test_rank_budget_rejects_hidden_choice_and_new_horizon_stall():
     bad_budget = replace(budget, remaining_rank=1)
     with pytest.raises(SCExecutionError):
         replan_sc_execution(cert, bad_budget)
+
+def test_a75_replan_tightens_inherited_rank_and_completion():
+    cert=_solve();current=start_sc_execution(cert,'B')
+    # Artificial previously larger budget illustrates the old slack-reset hole.
+    slack=replace(current,remaining_rank=5,remaining_completion_s=F(9))
+    tightened=replan_sc_execution(cert,slack)
+    assert tightened.remaining_rank==current.remaining_rank
+    assert tightened.remaining_completion_s==current.remaining_completion_s
+    nxt=advance_sc_execution(cert,slack,'seen','C')
+    assert nxt.remaining_rank==cert.ranks['C']
+    assert nxt.remaining_completion_s==cert.completion_upper_s['C']

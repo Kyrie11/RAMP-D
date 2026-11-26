@@ -461,7 +461,8 @@ def advance_sc_execution(certificate: SCResult, budget: SCExecutionBudget,
         raise SCExecutionError("REPLAN_CONTEXT_CHANGED")
     if budget.remaining_completion_s is None or certificate.step_s <= 0:
         raise SCExecutionError("EXECUTION_COMPLETION_BUDGET_MISSING")
-    if certificate.completion_upper_s.get(budget.cell_id, Fraction(-1)) > budget.remaining_completion_s:
+    parent_time = certificate.completion_upper_s.get(budget.cell_id)
+    if parent_time is None or parent_time < 0 or parent_time > budget.remaining_completion_s:
         raise SCExecutionError("EXECUTION_COMPLETION_CERTIFICATE_EXCEEDS_BUDGET")
     if budget.remaining_rank == 0:
         raise SCExecutionError("TERMINAL_TAIL_REQUIRED_NO_FURTHER_PREFIX")
@@ -485,12 +486,17 @@ def advance_sc_execution(certificate: SCResult, budget: SCExecutionBudget,
     next_support = certificate.support_digests.get(next_cell_id)
     if not next_support:
         raise SCExecutionError("CHILD_SUPPORT_BINDING_MISSING")
-    remaining_time = budget.remaining_completion_s - certificate.step_s
+    remaining_time = min(budget.remaining_completion_s, parent_time) - certificate.step_s
     child_time = certificate.completion_upper_s.get(next_cell_id)
     if remaining_time < 0 or child_time is None or child_time > remaining_time:
         raise SCExecutionError("CHILD_COMPLETION_EXCEEDS_INHERITED_TIME_BUDGET")
+    from .a75_rank import tighten
+    try:
+        rank, completion = tighten(parent_rank, parent_time, next_rank, child_time, elapsed=certificate.step_s, executed=True)
+    except ValueError as e:
+        raise SCExecutionError("CHILD_RANK_OR_COMPLETION_BUDGET_INVALID") from e
     return SCExecutionBudget(budget.contract_digest, next_cell_id,
-                             budget.remaining_rank - 1, next_support, remaining_time)
+                             rank, next_support, completion)
 
 
 def replan_sc_execution(new_certificate: SCResult,
@@ -509,4 +515,9 @@ def replan_sc_execution(new_certificate: SCResult,
     new_rank = new_certificate.ranks.get(inherited.cell_id)
     if new_rank is None or new_rank > inherited.remaining_rank:
         raise SCExecutionError("REPLAN_RESETS_OR_EXCEEDS_INHERITED_RANK")
-    return inherited
+    from .a75_rank import tighten
+    try:
+        rank, completion = tighten(inherited.remaining_rank, inherited.remaining_completion_s, new_rank, new_certificate.completion_upper_s[inherited.cell_id])
+    except ValueError as e:
+        raise SCExecutionError("REPLAN_RANK_OR_COMPLETION_BUDGET_INVALID") from e
+    return SCExecutionBudget(inherited.contract_digest, inherited.cell_id, rank, inherited.support_digest, completion)

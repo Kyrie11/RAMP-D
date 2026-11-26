@@ -253,6 +253,31 @@
     "status": "CONDITIONAL_THREE_TRACK_LOCAL_SOFTWARE_PASS_NOT_FULL_SC",
     "waymax_interior_speed_reversal_guard_added": true
   },
+  "a74": {
+    "carla_captures": 18,
+    "carla_strict_valid": 17,
+    "formal_labels_authorized": false,
+    "full_sc_certified": false,
+    "new_targeted_tests": 14,
+    "phase6c_exit": false,
+    "roadwork_strict_templates": 65,
+    "status": "LOCAL_PURE_AND_OFFLINE_REPLAY_NATIVE_PENDING",
+    "sumo_sample_ticks": 9000,
+    "targeted_tests_passed": 55
+  },
+  "a75": {
+    "all_eight_heads_authorized": false,
+    "carla_raw_captures": 8,
+    "factual_valid_future_actor_knots": 1708,
+    "factual_validation_scenarios": 5,
+    "finite_wait_rank": 12,
+    "full_sc_certified": false,
+    "native_configure_pass": false,
+    "phase6c_exit": false,
+    "pure_targeted_pass": 80,
+    "status": "LOCAL_FINITE_AND_SCOPED_EVIDENCE_PASS_NATIVE_PENDING",
+    "sumo_sampled_validation_rows": 9000
+  },
   "assurance_scope": "Model-clock hybrid partition, actor geometry and pairwise conflict evidence; no new real simulator executions here.",
   "concrete_safety_certified": false,
   "current_scene_verified": false,
@@ -609,17 +634,5 @@
     "python": "3.10",
     "simulator_mode": "headless",
     "sumo": "1.20"
-  },
-  "a74": {
-    "status": "LOCAL_PURE_AND_OFFLINE_REPLAY_NATIVE_PENDING",
-    "targeted_tests_passed": 55,
-    "new_targeted_tests": 14,
-    "carla_strict_valid": 17,
-    "carla_captures": 18,
-    "roadwork_strict_templates": 65,
-    "sumo_sample_ticks": 9000,
-    "full_sc_certified": false,
-    "phase6c_exit": false,
-    "formal_labels_authorized": false
   }
 }

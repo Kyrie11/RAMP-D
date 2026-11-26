@@ -15,7 +15,7 @@ def bounds(a,n=6):
     if any(len(x)!=2 or x[0]>x[1] for x in z):raise ValueError('box ordering')
     return z
 
-def contains(a,b):return all(x<=u<=v<=y for (x,y),(u,v) in zip(a,b))
+def contains(a,b):return len(a)==len(b) and all(x<=u<=v<=y for (x,y),(u,v) in zip(a,b))
 
 def exact_endpoint(cert,dt):
     for seg in cert['segments']:
