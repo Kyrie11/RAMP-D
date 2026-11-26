@@ -216,9 +216,9 @@ def audit_native_resource_tubes(parents, tubes, *, ego_geometry,
     The upstream native dynamic protocol, tail, observation relation and real
     physical model completeness remain outside this conditional check.
     """
-    from .a57_native_guard import NativeParent
-    from .a53b_actor_envelope import propagate_other
-    from .a5_replay_bridge import _subslab_box
+    from .native_tick_guard import NativeParent
+    from .actor_response_envelope import propagate_other
+    from .native_protocol_replay import _subslab_box
     from .certificate import to_dict, replay_certificate
     from .reachability import TubeStatus
     from .footprint import VehicleGeometry
@@ -281,7 +281,7 @@ def native_sc_predecessor_a59_1(source_cell, parents, control, *,
     A58 still rejects potential resource entry; this stage does NOT circumvent
     that guard and does not yet generate any accepting terminal policy.
     """
-    from .a59_sc_predecessor import native_sc_predecessor
+    from .conditional_sc_predecessor import native_sc_predecessor
     parents=tuple(parents)
     result=native_sc_predecessor(source_cell,parents,control,
                    contract=contract,sc_result=sc_result,target_cells=target_cells,

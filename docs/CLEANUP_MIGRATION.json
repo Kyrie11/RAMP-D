@@ -1,0 +1,512 @@
+{
+  "source": "A75 0.9.25",
+  "release": "1.0.0.dev0",
+  "scope": "naming / compatibility / archive; no algorithm changes",
+  "migrations": [
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a53_mission.py",
+      "new": "python/rampd_core/absolute_time_mission.py",
+      "original_sha256": "7874fa9b30123af303cdfba6acb07561629fa625f01557355099e441cbd52919",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a53_rule_models.py",
+      "new": "python/rampd_core/workzone_rule_models.py",
+      "original_sha256": "cf10bc60a4a85a422afe255dbb73a1f8f0b4c48869a91ed65bac11369cc94415",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a53_schedule.py",
+      "new": "python/rampd_core/permission_schedule.py",
+      "original_sha256": "c69d4b84fda3a8a9e86c9c96783e0b6d730bcca185c0d4a264c43d1f183539c5",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a53b_actor_envelope.py",
+      "new": "python/rampd_core/actor_response_envelope.py",
+      "original_sha256": "d1d16d5a9aa2eb6c637d19da66c5921fd65fe3aede66aec7452204ebf00ae332",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a53b_event_clock.py",
+      "new": "python/rampd_core/event_clock_support.py",
+      "original_sha256": "c3a2fbe05a5223b09f18a9a62a6abcd8e2359c0efe5f11346bd25a8ce9be46f0",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a53b_incident.py",
+      "new": "python/rampd_core/incident_mechanism.py",
+      "original_sha256": "abbc254f1bbc2f16fccc084502247c74e4f030d3f27808dfee260cd47dbc00c6",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a54_message_mission.py",
+      "new": "python/rampd_core/message_mission_compiler.py",
+      "original_sha256": "c7a0659d84fc6fc91e022a7c7287f55dad667aa3e2c2760f292e4e953bd17bdc",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a5_replay_bridge.py",
+      "new": "python/rampd_core/native_protocol_replay.py",
+      "original_sha256": "f2b79b2e63b073bf246a9ddde2fa08edb5eca91bfdac805c49c8ddc8213caa39",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a5_task_tail.py",
+      "new": "python/rampd_core/declared_task_tail.py",
+      "original_sha256": "b69e80ad2383277ab331cff6759eb7a5c319b185a55e12052bdff11f243489f5",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a5_logged_labels.py",
+      "new": "python/rampd_core/logged_factual_labels.py",
+      "original_sha256": "b39fe588d87a5627ec68721beacc1da856de0a87b841616452a0e7217c0955ce",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a5_sampled_occupancy.py",
+      "new": "python/rampd_core/sampled_occupancy.py",
+      "original_sha256": "ae59b059653c263d76e0ec8f9ae7a47310ab0eeb3b41f0c987bbca347dae30ba",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a57_native_guard.py",
+      "new": "python/rampd_core/native_tick_guard.py",
+      "original_sha256": "ec588f7c8dc801b9daa364e55f051c48bee2efedcdd01ca1b86197a520f934fb",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a58_cosim_contract.py",
+      "new": "python/rampd_core/cosim_contract.py",
+      "original_sha256": "2e24dee1a6fdb23553a998c70a47f33110b47b5c79f7ffe42aeaeb70eeba9227",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a58_frames.py",
+      "new": "python/rampd_core/vehicle_frame_conversion.py",
+      "original_sha256": "ae012e11d964d37de4397976f2f87204dfdeae2fe63df6663f4a7b6a3736896b",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a58_jerk.py",
+      "new": "python/rampd_core/longitudinal_jerk_reference.py",
+      "original_sha256": "590bd60b5c356e0a02e2a2a2f91b29a79b57d8e97f703e41031dfb0d718c3917",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a58_native_safety.py",
+      "new": "python/rampd_core/native_safety_obligations.py",
+      "original_sha256": "a7fbf02f99dd0df1a7133d436e3bc4d09d06d3d55acb7f45b0930c8804b247f0",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a58_roadwork_templates.py",
+      "new": "python/rampd_core/roadwork_templates.py",
+      "original_sha256": "4c641504df40c58f8f45d8219681eeece076167e1b30373898250ab64a2a3ebc",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a58_sumo_profiles.py",
+      "new": "python/rampd_core/sumo_stress_profiles.py",
+      "original_sha256": "f0a0b3a53776bf0aff0a470986a2dd1a07c2dc5eb01e68aa1c4e901ccade319c",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a59_sc_predecessor.py",
+      "new": "python/rampd_core/conditional_sc_predecessor.py",
+      "original_sha256": "7b45bc17a5914427b8e7fae7f6bcb1b0c9009290d6c3ef8f9f00de321f61f295",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a59_sumo_forensics.py",
+      "new": "python/rampd_core/sumo_trace_forensics.py",
+      "original_sha256": "73a36d9641a057e9bf0893b4eed8f91a55d17bfc0d860409731b97837b670e9d",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a66_cosim_clock_contract.py",
+      "new": "python/rampd_core/cosim_clock_contract.py",
+      "original_sha256": "78c9d880f7f6a11c3fff7da9e124ec977b248f2e9c9f13d3a9e0b742ddd88740",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a67_artifact_bytes_binding.py",
+      "new": "python/rampd_core/artifact_byte_binding.py",
+      "original_sha256": "0c80a85631939d2574cf37411456e1b9def6238851e90154638c19abb77c15e1",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a68_waymax_action_contract.py",
+      "new": "python/rampd_core/waymax_action_contract.py",
+      "original_sha256": "f7a17883760ab8e24faf5e3ab12bf6c8ebc8bd1181d52998cd35e5a1d77de0b6",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a69_supervision_provenance.py",
+      "new": "python/rampd_core/supervision_provenance.py",
+      "original_sha256": "2425d2d83ab449c4a827b02dcb3a916efe5347d80cc4bd9a736b7ad29e306250",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a70_native_segmented.py",
+      "new": "python/rampd_core/segmented_native_post.py",
+      "original_sha256": "a83191c744a30d64dba5caf5adccd268389d83af7b259639ecdf456b9b9e00a9",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a70_provenance_family.py",
+      "new": "python/rampd_core/split_family_firewall.py",
+      "original_sha256": "ec126f67c94727459409309282a0064432fe2870b56b9565001feb598269b795",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a71_native_polygon_geometry.py",
+      "new": "python/rampd_core/native_polygon_geometry.py",
+      "original_sha256": "2abe3675d9b9485ff29ed9c946d24b5848e5d1c6f6502ba146de5e83fd259321",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a71_sumo_tls_evidence.py",
+      "new": "python/rampd_core/sumo_tls_replay.py",
+      "original_sha256": "32f16cb65de761dcdbdc29a697bf0041e2cfd42aca6f3b9a658788bf7ee5e9de",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a72_incident_intervention.py",
+      "new": "python/rampd_core/incident_intervention.py",
+      "original_sha256": "e079748cd7b100c3d332dc07a8a74a483ba4da314824885d965788e1f11a2e3c",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a72_native_world_resource.py",
+      "new": "python/rampd_core/native_world_resource.py",
+      "original_sha256": "534b6e3d62457b4756a46c840fbcdc78dbe57a4c226b46df1facf7a08891099f",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a72_sumo_campaign.py",
+      "new": "python/rampd_core/sumo_campaign_audit.py",
+      "original_sha256": "002739a6f40690878f9781bb5225dacc92ac0b7b3914d5c0fa67a8779bfef398",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a73_auxiliary.py",
+      "new": "python/rampd_core/weak_source_labels.py",
+      "original_sha256": "7a3203cc31785169611776e2d7bfd37805e64495de90c27459cbdc4c621c001c",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a73_guard_trace.py",
+      "new": "python/rampd_core/guard_execution_trace.py",
+      "original_sha256": "b0e26b9348be76c4ce08d5e8d9e591a6c61ebc7b995d1ff75430eb4b4d91a364",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a73_joint_reference.py",
+      "new": "python/rampd_core/finite_joint_reference.py",
+      "original_sha256": "2024524d32cd5b4372336db83a3294da753dcc9f38a0199bc837aade93f2142d",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a73_native_context.py",
+      "new": "python/rampd_core/native_certificate_context.py",
+      "original_sha256": "83560d2201fd47e0c690cef2880bb55830c70c1b31593e39adfbcb515c5a2e0a",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a73_native_multi_actor.py",
+      "new": "python/rampd_core/native_multi_actor_screen.py",
+      "original_sha256": "ed7c808517bf534033150531c840cd4b00fd8245e3a5794890642e7ae80022f9",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a73_physics.py",
+      "new": "python/rampd_core/carla_run_diagnostics.py",
+      "original_sha256": "6233303febdfe1d28099b5c58f761b2aa27e6f6fb5606052a332f7ee3f8465a1",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a74_finite_policy_replay.py",
+      "new": "python/rampd_core/finite_policy_replay.py",
+      "original_sha256": "c9185fe35268c40be93282a006f169c8e8693155dc8bf834ea7de15bd36d036b",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a74_successor.py",
+      "new": "python/rampd_core/public_successor_binding.py",
+      "original_sha256": "6466e9e4c266c4d9602a57c1cf0210c9921bafdc0ce83693177b743a20b4fa4c",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a75_contract.py",
+      "new": "python/rampd_core/scoped_factual_labels.py",
+      "original_sha256": "71f8e40c78a3ffd6c75e94ea00caa61a027da81f0a6b0493850c38330bfa6d1a",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a75_rank.py",
+      "new": "python/rampd_core/rank_budget.py",
+      "original_sha256": "8e6c749f3a2f7a63d9f2db9f764f3aaefafb783068bf4df8bb20823610a63db9",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a75_resource.py",
+      "new": "python/rampd_core/affine_resource_monitor.py",
+      "original_sha256": "ef78a3d86a958c3e2a48f45f493c44f5be15f833d838f124060f909eff932aea",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "module",
+      "old": "python/rampd_core/a75_wait_game.py",
+      "new": "python/rampd_core/finite_wait_reference.py",
+      "original_sha256": "d86a1727669db7adbe866d04507c3e0d3d012f2d3807729959d9009d4d27b1c7",
+      "compatibility": "module_identity_alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a73_womd_scenario_inventory.py",
+      "new": "scripts/womd_scenario_inventory.py",
+      "original_sha256": "3636126f3df84cc609696786cde2f2c21d40a0ba0cd5b841effb4a1f122d5e83",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a74_womd_format_probe.py",
+      "new": "scripts/womd_format_probe.py",
+      "original_sha256": "66a7820004c922659de29b001aa9c8b27e784775e010698113484a9ab7f96509",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a74_waymax_real_pair.py",
+      "new": "scripts/waymax_idm_pairs.py",
+      "original_sha256": "a994431d18293896beb9f250693537696cd47c15535b41451fa46aefb549a9fc",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a73_roadwork_site_split.py",
+      "new": "scripts/roadwork_site_split.py",
+      "original_sha256": "0f5e15e5ac328f639b74e700602bebde8085359adacd98aff150edd2a350a21d",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a74_roadwork_bind_split.py",
+      "new": "scripts/roadwork_bind_split.py",
+      "original_sha256": "8518319ab5fb345f4d35b1776728dd6816ca0217e3b48d7fe2cfa5a8a619ea4d",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a73_review_sumo_metric.py",
+      "new": "scripts/sumo_metric_review.py",
+      "original_sha256": "49b436c4bd3376022d6586ef35858d8ecfe279b56cca198f2a4909385253fee3",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a74_sumo_replay.py",
+      "new": "scripts/sumo_sampled_replay.py",
+      "original_sha256": "6618968fca981a979d6c8acf7f2b1d1e8a1c6d8c00a72a0b376da2a418297b2a",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a75_sumo_sampled_labels.py",
+      "new": "scripts/export_sumo_sampled_labels.py",
+      "original_sha256": "8d085bee301d2afd87a0d224002ecea0e5aa768c936edf69fa62e167f8abe67e",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a75_export_factual.py",
+      "new": "scripts/export_factual_labels.py",
+      "original_sha256": "06894a80913c4184cde311a6aa18fe0404d60f6d69c1fe7d59b07821486fe5c4",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a73_carla_campaign.py",
+      "new": "scripts/carla_campaign.py",
+      "original_sha256": "dfedf0e240d09d0e305bf4b51054c753918431fbbf467b394d619c210c134021",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "script",
+      "old": "scripts/a73_native_multi_microcase.py",
+      "new": "scripts/native_multi_actor_microcase.py",
+      "original_sha256": "b2a1865322abf3c6fef3a3deb3494e7e377a961c1d7c421d9da45af64d884481",
+      "compatibility": "CLI delegation; ordinary import alias"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a60_review_carla_logs.py",
+      "original_sha256": "df8bbd32339c2af922692d4a7ede4259ee437173556d9b8c19f11cca11e584d4",
+      "reason": "historical single-run audit; preserved a60 evidence core and latest raw diagnostic",
+      "restore_to": "scripts/a60_review_carla_logs.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a64_review_carla_smoke.py",
+      "original_sha256": "b1d1572d658e31b03a07ad006cb3706b34c0e959d8b1189a73500c5f993f412c",
+      "reason": "old smoke-report entry point; core and tests remain",
+      "restore_to": "scripts/a64_review_carla_smoke.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a65_plot_carla_lane.py",
+      "original_sha256": "cc0a5b611527687d78772f97137c1a3ac37376ee67b2eac3f22e55bdf6c4c75f",
+      "reason": "historic straight-lane plot; not authoritative road geometry",
+      "restore_to": "scripts/a65_plot_carla_lane.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a65_plot_carla_smoke.py",
+      "original_sha256": "0b10efc7b2998fd5fab025d54a9d65ebc0a6bd627b36ef1ce3c2dd0073fa6b35",
+      "reason": "historic plot; not training or verifier input",
+      "restore_to": "scripts/a65_plot_carla_smoke.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a66_inventory_carla_controls.py",
+      "original_sha256": "c1c0e829264b883bbf69b0109d6e37807fca1e658b98f1bb810a1ae620d8d9be",
+      "reason": "historical smoke inventory CLI; inventory core remains",
+      "restore_to": "scripts/a66_inventory_carla_controls.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a66_review_carla_lateral.py",
+      "original_sha256": "c4025fd69969b93aa6ac60441b0f2384728547eee3d4b3c64b4b047d2a440b31",
+      "reason": "historic lateral review CLI; underlying evidence module remains",
+      "restore_to": "scripts/a66_review_carla_lateral.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a67_review_carla_combined.py",
+      "original_sha256": "e3464d3a480e7d807716ec860a816df81ea26f78a0738d3f7525ff454493fddd",
+      "reason": "old combined-control diagnostic CLI; core remains, restore for that experiment",
+      "restore_to": "scripts/a67_review_carla_combined.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a67_review_combined_repeats.py",
+      "original_sha256": "b026fe0f7cf977d5e0c7e46c703f40eaf3e82193e9aec1ee6a0fa6d2fc633cba",
+      "reason": "historic repeated combined-control CLI; core remains",
+      "restore_to": "scripts/a67_review_combined_repeats.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a71_compare_carla_brake.py",
+      "original_sha256": "c4323b1f2c176eb69f737cbe7167a2665e871ed1082aea0dd4cf989d1f5ee651",
+      "reason": "historical factor-pair comparison CLI; core remains",
+      "restore_to": "scripts/a71_compare_carla_brake.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a71_export_auxiliary_sources.py",
+      "original_sha256": "1f0d2d54efae10639b8f533d9b26770c1395b625eb1a0c606c3d9c9c82d6f523",
+      "reason": "superseded weak-source pipeline; keep normalization and current auxiliary contracts",
+      "restore_to": "scripts/a71_export_auxiliary_sources.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a71_review_native_polygon_archive_offline.py",
+      "original_sha256": "e2ec7a968ecacca1af57700a33080315b4a7f760292cedf747c787960d026b49",
+      "reason": "old byte-hash archive inspection, not actual MPFR replay; native gate remains",
+      "restore_to": "scripts/a71_review_native_polygon_archive_offline.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a71_review_waymax_idm.py",
+      "original_sha256": "b29c1ac22187219aa358f251e091567259dc376986501711344ed023606a72f1",
+      "reason": "old synthetic IDM forensic CLI; keep audit core and actual Waymax probes",
+      "restore_to": "scripts/a71_review_waymax_idm.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a72_review_parallel.py",
+      "original_sha256": "332bdb589193b44f666bf498704c34f7f626332ad7b88bd3dd9f8e52e95fcb46",
+      "reason": "hardcoded A71 result forensic review",
+      "restore_to": "scripts/a72_review_parallel.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a73_reaudit_sources.py",
+      "original_sha256": "6b115afa4a39fea6fa3154b4661b17dd7e98273c713936671c02d9796162a882",
+      "reason": "hardcoded A72 result re-review",
+      "restore_to": "scripts/a73_reaudit_sources.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/a74_carla_reaudit.py",
+      "original_sha256": "f68fb7dd7be428769e1abf745086123662db589837ea6a675ec63b7b297a1e68",
+      "reason": "old filename-specific reader; A75 raw ZIP reviewer remains; restore for old factorial reports",
+      "restore_to": "scripts/a74_carla_reaudit.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/audit_a58_results.py",
+      "original_sha256": "afe700f7f0b6362f8f7ad9c127522cf2a7069dc59cd72ceaaca0957c2fa5ebd0",
+      "reason": "hardcoded historical A57 result review",
+      "restore_to": "scripts/audit_a58_results.py"
+    },
+    {
+      "kind": "archive",
+      "old": "scripts/audit_a59_uploaded_a58.py",
+      "original_sha256": "b3cc431780a0b31cb70c25da53786661bc52333b50d6b821e33ecaaf8176a636",
+      "reason": "hardcoded historical A58 result review",
+      "restore_to": "scripts/audit_a59_uploaded_a58.py"
+    }
+  ],
+  "stable_entry_aliases": {
+    "carla_actor_trials": "a60_carla_actor_trials",
+    "normalize_511ny": "a71_normalize_511ny_csv",
+    "roadwork_visual_pipeline": "a72_roadwork_real_pipeline",
+    "waymax_scene_inventory": "a72_probe_real_waymax_scenes",
+    "sumo_corridor_probe": "probe_sumo_alternating",
+    "validate_native_regression": "validate_phase6c_a75.sh"
+  }
+}

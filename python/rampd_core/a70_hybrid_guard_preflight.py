@@ -14,7 +14,7 @@ from fractions import Fraction as Q
 import hashlib,json
 from .certificate import replay_certificate
 from .a61_hybrid_partition import ClockWorld
-from .a70_native_segmented import clock_source_digest
+from .segmented_native_post import clock_source_digest
 
 @dataclass(frozen=True)
 class AtSlabStartPermission:

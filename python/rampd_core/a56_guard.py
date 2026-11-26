@@ -7,7 +7,7 @@ certify detector coverage, or implement continuous physical Post/SC.
 from dataclasses import dataclass
 from itertools import product
 from .a54_signal import SignalController
-from .a53_rule_models import FlowSnapshot
+from .workzone_rule_models import FlowSnapshot
 from .a53b_interlock import ClearanceObservation
 
 @dataclass(frozen=True)

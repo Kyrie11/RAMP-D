@@ -490,7 +490,7 @@ def advance_sc_execution(certificate: SCResult, budget: SCExecutionBudget,
     child_time = certificate.completion_upper_s.get(next_cell_id)
     if remaining_time < 0 or child_time is None or child_time > remaining_time:
         raise SCExecutionError("CHILD_COMPLETION_EXCEEDS_INHERITED_TIME_BUDGET")
-    from .a75_rank import tighten
+    from .rank_budget import tighten
     try:
         rank, completion = tighten(parent_rank, parent_time, next_rank, child_time, elapsed=certificate.step_s, executed=True)
     except ValueError as e:
@@ -515,7 +515,7 @@ def replan_sc_execution(new_certificate: SCResult,
     new_rank = new_certificate.ranks.get(inherited.cell_id)
     if new_rank is None or new_rank > inherited.remaining_rank:
         raise SCExecutionError("REPLAN_RESETS_OR_EXCEEDS_INHERITED_RANK")
-    from .a75_rank import tighten
+    from .rank_budget import tighten
     try:
         rank, completion = tighten(inherited.remaining_rank, inherited.remaining_completion_s, new_rank, new_certificate.completion_upper_s[inherited.cell_id])
     except ValueError as e:

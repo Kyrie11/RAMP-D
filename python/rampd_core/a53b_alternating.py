@@ -6,7 +6,7 @@ or real signal-head layout. No sampled count alone can reopen the resource.
 """
 from dataclasses import dataclass, replace
 from fractions import Fraction
-from .a53_rule_models import AlternatingConfig, AlternatingState, FlowSnapshot
+from .workzone_rule_models import AlternatingConfig, AlternatingState, FlowSnapshot
 from .a53b_interlock import ClearanceObservation
 
 

@@ -7,7 +7,7 @@ rule activation/effectivity and a dataset `observed` bit from sensor awareness.
 from __future__ import annotations
 from .scene_schema import UnifiedScene
 from .phase6c import build_scene_forecast_sample
-from .a5_logged_labels import factual_joint_labels, sampled_signal_changes
+from .logged_factual_labels import factual_joint_labels, sampled_signal_changes
 
 
 def supervision_inventory(scene: UnifiedScene) -> dict:

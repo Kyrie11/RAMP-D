@@ -1,0 +1,349 @@
+path	classification	static_source_token_references	decision	docstring_scope
+python/rampd_core/__init__.py	EXISTING_SUPPORT_KEEP	14	Existing adapter/example/contract; inspect scope.	Lazy public API; native numerical operations still require MPFR.
+python/rampd_core/a53_mission.py	COMPATIBILITY_ALIAS	4	Use absolute_time_mission; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.absolute_time_mission` (A75 compatibility).
+python/rampd_core/a53_rule_models.py	COMPATIBILITY_ALIAS	8	Use workzone_rule_models; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.workzone_rule_models` (A75 compatibility).
+python/rampd_core/a53_schedule.py	COMPATIBILITY_ALIAS	5	Use permission_schedule; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.permission_schedule` (A75 compatibility).
+python/rampd_core/a53b_actor_envelope.py	COMPATIBILITY_ALIAS	2	Use actor_response_envelope; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.actor_response_envelope` (A75 compatibility).
+python/rampd_core/a53b_alternating.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Reference two-direction interlock with scoped interval clearance evidence.
+python/rampd_core/a53b_event_clock.py	COMPATIBILITY_ALIAS	3	Use event_clock_support; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.event_clock_support` (A75 compatibility).
+python/rampd_core/a53b_incident.py	COMPATIBILITY_ALIAS	1	Use incident_mechanism; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.incident_mechanism` (A75 compatibility).
+python/rampd_core/a53b_interlock.py	LEGACY_IMPLEMENTATION_KEEP	17	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Simulator-facing work-zone interlock. Not a continuous-time proof.
+python/rampd_core/a53b_occupancy.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Sufficient incumbent/no-reentry proof for static closed rectangular resources.
+python/rampd_core/a53b_ttc.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	MUTCD Part 6, Tables 6B-3/4, design guidance for scenario templates only.
+python/rampd_core/a54_message_mission.py	COMPATIBILITY_ALIAS	2	Use message_mission_compiler; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.message_mission_compiler` (A75 compatibility).
+python/rampd_core/a54_signal.py	LEGACY_IMPLEMENTATION_KEEP	8	Reference/evidence/legacy dependency; do not use for new proof without scope review.	One-lane two-way reference timing plan (MUTCD 4A.03,4F.17,4O).
+python/rampd_core/a55_motion.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Forward-only constant-acceleration, constant-curvature reference.
+python/rampd_core/a56_guard.py	LEGACY_IMPLEMENTATION_KEEP	5	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Finite tick-actuated signal support. Exact integers and rational time.
+python/rampd_core/a56_motion.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Uncertified numerical/analytic baselines for forward road-motion diagnostics.
+python/rampd_core/a57_interlock.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Fail-closed supervisor for declared planned closure controller.
+python/rampd_core/a57_lifecycle.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Physical lifecycle slices from explicit mechanism clocks, NOT 511 report rows.
+python/rampd_core/a57_motion.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Independent numeric geometric and control references; not native certificates.
+python/rampd_core/a57_native_guard.py	COMPATIBILITY_ALIAS	2	Use native_tick_guard; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.native_tick_guard` (A75 compatibility).
+python/rampd_core/a57_physical_guard.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Exact rational, forward 1-D corridor Post/guard reference (not 2-D SC).
+python/rampd_core/a58_closure_evidence.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	CARLA-ready, sampled physical closure observation contract.
+python/rampd_core/a58_cosim_contract.py	COMPATIBILITY_ALIAS	1	Use cosim_contract; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.cosim_contract` (A75 compatibility).
+python/rampd_core/a58_frames.py	COMPATIBILITY_ALIAS	1	Use vehicle_frame_conversion; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.vehicle_frame_conversion` (A75 compatibility).
+python/rampd_core/a58_jerk.py	COMPATIBILITY_ALIAS	1	Use longitudinal_jerk_reference; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.longitudinal_jerk_reference` (A75 compatibility).
+python/rampd_core/a58_native_safety.py	COMPATIBILITY_ALIAS	4	Use native_safety_obligations; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.native_safety_obligations` (A75 compatibility).
+python/rampd_core/a58_roadwork_templates.py	COMPATIBILITY_ALIAS	2	Use roadwork_templates; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.roadwork_templates` (A75 compatibility).
+python/rampd_core/a58_sumo_audit.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Independent SUMO *summary* audit, NOT physical co-sim certification.
+python/rampd_core/a58_sumo_profiles.py	COMPATIBILITY_ALIAS	2	Use sumo_stress_profiles; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.sumo_stress_profiles` (A75 compatibility).
+python/rampd_core/a59_sc_predecessor.py	COMPATIBILITY_ALIAS	1	Use conditional_sc_predecessor; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.conditional_sc_predecessor` (A75 compatibility).
+python/rampd_core/a59_sumo_forensics.py	COMPATIBILITY_ALIAS	2	Use sumo_trace_forensics; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.sumo_trace_forensics` (A75 compatibility).
+python/rampd_core/a5_finite_contract.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Phase 6C-A5/1: exact finite task-policy and observation-cover audit.
+python/rampd_core/a5_logged_labels.py	COMPATIBILITY_ALIAS	2	Use logged_factual_labels; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.logged_factual_labels` (A75 compatibility).
+python/rampd_core/a5_replay_bridge.py	COMPATIBILITY_ALIAS	9	Use native_protocol_replay; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.native_protocol_replay` (A75 compatibility).
+python/rampd_core/a5_sampled_occupancy.py	COMPATIBILITY_ALIAS	1	Use sampled_occupancy; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.sampled_occupancy` (A75 compatibility).
+python/rampd_core/a5_task_tail.py	COMPATIBILITY_ALIAS	2	Use declared_task_tail; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.declared_task_tail` (A75 compatibility).
+python/rampd_core/a60_carla_evidence.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Review CARLA 0.9.16 actor/command-response logs; never issue a certificate.
+python/rampd_core/a60_clock_resource.py	LEGACY_IMPLEMENTATION_KEEP	10	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Phase 6C-A59/1a: fail-closed model-clock and per-slab resource obligations.
+python/rampd_core/a61_carla_calibration.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A61/0: independent CARLA actor geometry and repeated-response *evidence* review.
+python/rampd_core/a61_hybrid_partition.py	LEGACY_IMPLEMENTATION_KEEP	23	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A59/1b-0: exact *declared* hybrid event partition / information gate.
+python/rampd_core/a62_carla_readiness.py	LEGACY_IMPLEMENTATION_KEEP	5	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A59/1b-1 readiness checks for CARLA calibration, *not* road safety proofs.
+python/rampd_core/a62_hybrid_obligation_ledger.py	LEGACY_IMPLEMENTATION_KEEP	4	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A59/1b-0H: complete audit *obligation inventory*, not a safety verifier.
+python/rampd_core/a63_carla_site_contract.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Conservative CARLA start-lane identity agreement, not physical lane safety.
+python/rampd_core/a64_carla_smoke_evidence.py	LEGACY_IMPLEMENTATION_KEEP	7	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A59/1b-0J: strictly descriptive, independent single CARLA control-trial audit.
+python/rampd_core/a64_hybrid_handoff.py	LEGACY_IMPLEMENTATION_KEEP	4	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A59/1b-0J: exact-rational *necessary* interval handoff checks.
+python/rampd_core/a65_carla_conformance.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A65: independent *descriptive* CARLA longitudinal conformance audit.
+python/rampd_core/a66_carla_lateral_witness.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A66: independent, descriptive CARLA lateral response / lane witness.
+python/rampd_core/a66_cosim_clock_contract.py	COMPATIBILITY_ALIAS	1	Use cosim_clock_contract; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.cosim_clock_contract` (A75 compatibility).
+python/rampd_core/a66_evidence_inventory.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A66: explicit partial CARLA evidence inventory; never mints safety labels.
+python/rampd_core/a66_hybrid_contract_binding.py	LEGACY_IMPLEMENTATION_KEEP	5	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A66: cross-artifact, world/time/protocol binding for pending hybrid proofs.
+python/rampd_core/a67_artifact_bytes_binding.py	COMPATIBILITY_ALIAS	1	Use artifact_byte_binding; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.artifact_byte_binding` (A75 compatibility).
+python/rampd_core/a67_carla_combined_diagnostics.py	LEGACY_IMPLEMENTATION_KEEP	5	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A67 independent longitudinal+lateral diagnostic of a *single* CARLA smoke.
+python/rampd_core/a67_repeat_campaign.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A67 repeated CARLA combined-control *diagnostics*, never statistical safety bounds.
+python/rampd_core/a68_affine_slab_replay.py	LEGACY_IMPLEMENTATION_KEEP	4	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A68 independent exact-rational affine slab reference checker.
+python/rampd_core/a68_guard_resource_monitor.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A68 conservative *declared* single conflict-zone admission automaton.
+python/rampd_core/a68_physical_campaign.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A68 independent CARLA *diagnostic* repetition audit.
+python/rampd_core/a68_supervision_release.py	LEGACY_IMPLEMENTATION_KEEP	4	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A68 honest eight-loss source release gate (auxiliary != safety supervision).
+python/rampd_core/a68_waymax_action_contract.py	COMPATIBILITY_ALIAS	2	Use waymax_action_contract; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.waymax_action_contract` (A75 compatibility).
+python/rampd_core/a69_affine_artifact_semantics.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A69 semantic replay of a *toy affine* Native-role JSON payload.
+python/rampd_core/a69_hybrid_joint_reference.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A69 joint rational-time reference gate: affine reach + declared Guard snapshots.
+python/rampd_core/a69_physical_factors.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A69 fail-closed one-factor CARLA brake sweep comparator (diagnostic only).
+python/rampd_core/a69_supervision_provenance.py	COMPATIBILITY_ALIAS	3	Use supervision_provenance; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.supervision_provenance` (A75 compatibility).
+python/rampd_core/a70_hybrid_guard_preflight.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A70 necessary conditions for Native-verified 6D ego tubes near a 1D resource.
+python/rampd_core/a70_native_segmented.py	COMPATIBILITY_ALIAS	2	Use segmented_native_post; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.segmented_native_post` (A75 compatibility).
+python/rampd_core/a70_physics_timecourse.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A70 independently recomputed CARLA brake-arm time-course diagnostics.
+python/rampd_core/a70_provenance_family.py	COMPATIBILITY_ALIAS	1	Use split_family_firewall; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.split_family_firewall` (A75 compatibility).
+python/rampd_core/a71_carla_factor_pairs.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A71 independently paired CARLA brake-only vs combined-maneuver comparison.
+python/rampd_core/a71_event_auxiliary.py	LEGACY_IMPLEMENTATION_KEEP	3	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A71 preliminary 511NY and ROADWork *auxiliary* source adapters.
+python/rampd_core/a71_native_polygon_geometry.py	COMPATIBILITY_ALIAS	4	Use native_polygon_geometry; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.native_polygon_geometry` (A75 compatibility).
+python/rampd_core/a71_sumo_tls_evidence.py	COMPATIBILITY_ALIAS	2	Use sumo_tls_replay; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.sumo_tls_replay` (A75 compatibility).
+python/rampd_core/a71_waymax_counterfactual_audit.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	A71 external verifier for the repo's synthetic Waymax IDM paired rollouts.
+python/rampd_core/a72_auxiliary_pretraining.py	LEGACY_IMPLEMENTATION_KEEP	2	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Reality-informed auxiliary label factory (NOT RAMP-D formal SC supervision).
+python/rampd_core/a72_incident_intervention.py	COMPATIBILITY_ALIAS	1	Use incident_intervention; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.incident_intervention` (A75 compatibility).
+python/rampd_core/a72_native_world_resource.py	COMPATIBILITY_ALIAS	2	Use native_world_resource; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.native_world_resource` (A75 compatibility).
+python/rampd_core/a72_physics_factorial.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	CARLA observed brake/steer factorial; never infer tire force or guaranteed b.
+python/rampd_core/a72_sumo_campaign.py	COMPATIBILITY_ALIAS	0	Use sumo_campaign_audit; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.sumo_campaign_audit` (A75 compatibility).
+python/rampd_core/a72_waymax_sensitivity.py	LEGACY_IMPLEMENTATION_KEEP	1	Reference/evidence/legacy dependency; do not use for new proof without scope review.	Re-evaluate lookahead ablations of an official IDM on synthetic actors.
+python/rampd_core/a73_auxiliary.py	COMPATIBILITY_ALIAS	1	Use weak_source_labels; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.weak_source_labels` (A75 compatibility).
+python/rampd_core/a73_guard_trace.py	COMPATIBILITY_ALIAS	2	Use guard_execution_trace; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.guard_execution_trace` (A75 compatibility).
+python/rampd_core/a73_joint_reference.py	COMPATIBILITY_ALIAS	2	Use finite_joint_reference; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.finite_joint_reference` (A75 compatibility).
+python/rampd_core/a73_native_context.py	COMPATIBILITY_ALIAS	3	Use native_certificate_context; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.native_certificate_context` (A75 compatibility).
+python/rampd_core/a73_native_multi_actor.py	COMPATIBILITY_ALIAS	1	Use native_multi_actor_screen; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.native_multi_actor_screen` (A75 compatibility).
+python/rampd_core/a73_physics.py	COMPATIBILITY_ALIAS	2	Use carla_run_diagnostics; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.carla_run_diagnostics` (A75 compatibility).
+python/rampd_core/a74_finite_policy_replay.py	COMPATIBILITY_ALIAS	1	Use finite_policy_replay; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.finite_policy_replay` (A75 compatibility).
+python/rampd_core/a74_successor.py	COMPATIBILITY_ALIAS	1	Use public_successor_binding; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.public_successor_binding` (A75 compatibility).
+python/rampd_core/a75_contract.py	COMPATIBILITY_ALIAS	2	Use scoped_factual_labels; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.scoped_factual_labels` (A75 compatibility).
+python/rampd_core/a75_rank.py	COMPATIBILITY_ALIAS	1	Use rank_budget; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.rank_budget` (A75 compatibility).
+python/rampd_core/a75_resource.py	COMPATIBILITY_ALIAS	1	Use affine_resource_monitor; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.affine_resource_monitor` (A75 compatibility).
+python/rampd_core/a75_wait_game.py	COMPATIBILITY_ALIAS	3	Use finite_wait_reference; keep historical imports/CLI.	Legacy import alias for :mod:`rampd_core.finite_wait_reference` (A75 compatibility).
+python/rampd_core/absolute_time_mission.py	SCOPED_REFERENCE_KEEP	2	Renamed from a53_mission; scope and schema unchanged, not a new certification.	A5/3b-2: absolute-time joint prefix/tail graph for a declared world.
+python/rampd_core/actor_response_envelope.py	SCOPED_REFERENCE_KEEP	6	Renamed from a53b_actor_envelope; scope and schema unchanged, not a new certification.	Bounded Cartesian acceleration/yaw-rate response envelope.
+python/rampd_core/affine_resource_monitor.py	SCOPED_REFERENCE_KEEP	2	Renamed from a75_resource; scope and schema unchanged, not a new certification.	Exact declared affine rectangular resource monitor. Closed-set contact is
+python/rampd_core/agents.py	CORE_KEEP	9	Paper or data contract; full integration still requires gates.	Conservative other-agent reachable tubes used by the Phase 4 verifier.
+python/rampd_core/analytic_bounds.py	CORE_KEEP	3	Paper or data contract; full integration still requires gates.	Validated analytic enclosures for integrator chains in the bicycle ODE.
+python/rampd_core/artifact_byte_binding.py	REUSABLE_ADAPTER_KEEP	1	Renamed from a67_artifact_bytes_binding; scope and schema unchanged, not a new certification.	A67 byte-authenticated, context-bound artifact inventory (not proof replay).
+python/rampd_core/backup.py	CORE_KEEP	9	Paper or data contract; full integration still requires gates.	Phase 3 finite public-law synthesis and independently replayed local evidence.
+python/rampd_core/backup_graph.py	CORE_KEEP	5	Paper or data contract; full integration still requires gates.	Executable public backup graph with fail-closed local execution guards.
+python/rampd_core/belief.py	CORE_KEEP	33	Paper or data contract; full integration still requires gates.	Finite joint belief-support abstraction for RAMP-D Phase 2.
+python/rampd_core/carla_run_diagnostics.py	REUSABLE_ADAPTER_KEEP	2	Renamed from a73_physics; scope and schema unchanged, not a new certification.	Independent per-run CARLA diagnostics, not physical calibration.
+python/rampd_core/cegar.py	CORE_KEEP	3	Paper or data contract; full integration still requires gates.	Phase 5 counterexample-guided abstraction refinement.
+python/rampd_core/certificate.py	CORE_KEEP	63	Paper or data contract; full integration still requires gates.	Versioned JSON inclusion witnesses. Replay checks do not establish safety.
+python/rampd_core/clock_ledger.py	CORE_KEEP	3	Paper or data contract; full integration still requires gates.	Phase 6C finite-run simulator synchronization observability checks.
+python/rampd_core/conditional_sc_predecessor.py	SCOPED_REFERENCE_KEEP	2	Renamed from a59_sc_predecessor; scope and schema unchanged, not a new certification.	Phase A59/0: fail-closed, *conditional* Native Post -> finite SC rank bridge.
+python/rampd_core/control.py	CORE_KEEP	62	Paper or data contract; full integration still requires gates.	Public sampled-data recovery laws (no hidden-mode input).
+python/rampd_core/cosim_clock_contract.py	SCOPED_REFERENCE_KEEP	1	Renamed from a66_cosim_clock_contract; scope and schema unchanged, not a new certification.	A66: exact-rational declared CARLA/SUMO tick and Guard interlock trace gate.
+python/rampd_core/cosim_contract.py	SCOPED_REFERENCE_KEEP	1	Renamed from a58_cosim_contract; scope and schema unchanged, not a new certification.	Exact fixed-step and single-owner co-simulation *contract*, not a bridge.
+python/rampd_core/dataset_audit.py	CORE_KEEP	5	Paper or data contract; full integration still requires gates.	Read-only Phase 6A dataset manifest and dependency audit.
+python/rampd_core/declared_task_tail.py	SCOPED_REFERENCE_KEEP	3	Renamed from a5_task_tail; scope and schema unchanged, not a new certification.	A5/2: composed proof for a declared finite, step-relative static toy world.
+python/rampd_core/event_clock_support.py	SCOPED_REFERENCE_KEEP	2	Renamed from a53b_event_clock; scope and schema unchanged, not a new certification.	Exact model-clock support and observation evidence, not a physical clock claim.
+python/rampd_core/exact_time.py	CORE_KEEP	11	Paper or data contract; full integration still requires gates.	Exact rational time versus binary64 endpoints; no epsilon matching.
+python/rampd_core/finite_game_oracle.py	CORE_KEEP	1	Paper or data contract; full integration still requires gates.	Dependency-free, exact finite public-observation game cross-check.
+python/rampd_core/finite_joint_reference.py	SCOPED_REFERENCE_KEEP	5	Renamed from a73_joint_reference; scope and schema unchanged, not a new certification.	Exact finite multi-actor reference game, independent of native dynamics.
+python/rampd_core/finite_policy_replay.py	SCOPED_REFERENCE_KEEP	1	Renamed from a74_finite_policy_replay; scope and schema unchanged, not a new certification.	Independent replay of an A73 finite translation-game candidate. No search,
+python/rampd_core/finite_wait_reference.py	SCOPED_REFERENCE_KEEP	1	Renamed from a75_wait_game; scope and schema unchanged, not a new certification.	Integrated finite reference for waiting, hidden opening time, resource
+python/rampd_core/footprint.py	CORE_KEEP	35	Paper or data contract; full integration still requires gates.	Validated outer enclosures of oriented rectangular vehicle footprints.
+python/rampd_core/forecast.py	CORE_KEEP	10	Paper or data contract; full integration still requires gates.	Prediction proposals are kept separate from Phase 4 safety evidence.
+python/rampd_core/full_verifier.py	CORE_KEEP	7	Paper or data contract; full integration still requires gates.	Phase 4 finite-support protocol verifier.
+python/rampd_core/guard_execution_trace.py	SCOPED_REFERENCE_KEEP	1	Renamed from a73_guard_trace; scope and schema unchanged, not a new certification.	Observed simulator chain audit. No physical authority inferred from readback.
+python/rampd_core/incident_intervention.py	SCOPED_REFERENCE_KEEP	1	Renamed from a72_incident_intervention; scope and schema unchanged, not a new certification.	Tie real-world operator reports to separately parameterized SIMULATED rule events.
+python/rampd_core/incident_mechanism.py	SCOPED_REFERENCE_KEEP	1	Renamed from a53b_incident; scope and schema unchanged, not a new certification.	Incident mechanism and TIM clocks; not a simulator or safety certificate.
+python/rampd_core/interval.py	CORE_KEEP	86	Paper or data contract; full integration still requires gates.	Finite closed binary64 intervals; every arithmetic bound is computed in C/MPFR.
+python/rampd_core/invariant.py	CORE_KEEP	22	Paper or data contract; full integration still requires gates.	Finite robust information-state predecessor and greatest fixed point.
+python/rampd_core/logged_factual_labels.py	REUSABLE_ADAPTER_KEEP	3	Renamed from a5_logged_labels; scope and schema unchanged, not a new certification.	Label-side factual extraction, NOT a complete 8-loss training dataset.
+python/rampd_core/longitudinal_jerk_reference.py	SCOPED_REFERENCE_KEEP	1	Renamed from a58_jerk; scope and schema unchanged, not a new certification.	Exact rational, piecewise-constant-jerk longitudinal reference.
+python/rampd_core/map_context.py	CORE_KEEP	10	Paper or data contract; full integration still requires gates.	Phase 6C-A2: dataset-faithful *descriptive* vector map and signal records.
+python/rampd_core/message_mission_compiler.py	SCOPED_REFERENCE_KEEP	1	Renamed from a54_message_mission; scope and schema unchanged, not a new certification.	Compile a finite exhaustive declared schedule/message relation into A53Mission.
+python/rampd_core/model.py	CORE_KEEP	92	Paper or data contract; full integration still requires gates.	The paper's six-state bicycle model; no implicit clipping or saturation.
+python/rampd_core/native_certificate_context.py	REUSABLE_ADAPTER_KEEP	4	Renamed from a73_native_context; scope and schema unchanged, not a new certification.	Pure context checks for serialized Native tube certificates. Mathematical
+python/rampd_core/native_multi_actor_screen.py	SCOPED_REFERENCE_KEEP	3	Renamed from a73_native_multi_actor; scope and schema unchanged, not a new certification.	Native multi-actor geometry/Guard screening with independently declared
+python/rampd_core/native_polygon_geometry.py	SCOPED_REFERENCE_KEEP	3	Renamed from a71_native_polygon_geometry; scope and schema unchanged, not a new certification.	A71 *exact-rational* conservative polygon separation from a 6D native tube.
+python/rampd_core/native_protocol_replay.py	SCOPED_REFERENCE_KEEP	9	Renamed from a5_replay_bridge; scope and schema unchanged, not a new certification.	A5/1 soundness gate: tie finite protocol branches to replayed physical tubes.
+python/rampd_core/native_safety_obligations.py	SCOPED_REFERENCE_KEEP	2	Renamed from a58_native_safety; scope and schema unchanged, not a new certification.	Safety-obligation audit BETWEEN A57 physical Post and SC.
+python/rampd_core/native_tick_guard.py	SCOPED_REFERENCE_KEEP	4	Renamed from a57_native_guard; scope and schema unchanged, not a new certification.	2-D native continuous Post to tick guard, for declared complete rosters.
+python/rampd_core/native_world_resource.py	SCOPED_REFERENCE_KEEP	1	Renamed from a72_native_world_resource; scope and schema unchanged, not a new certification.	A72 bind actual Native certificate replay to an independently reconstructed
+python/rampd_core/observations.py	CORE_KEEP	33	Paper or data contract; full integration still requires gates.	Explicit observation branches and whole-posterior aggregation.
+python/rampd_core/permission_schedule.py	SCOPED_REFERENCE_KEEP	8	Renamed from a53_schedule; scope and schema unchanged, not a new certification.	A5/3a: absolute-clock, independently declared finite permission schedule.
+python/rampd_core/phase3_examples.py	EXISTING_SUPPORT_KEEP	2	Existing adapter/example/contract; inspect scope.	Reproducible synthetic Phase 3 fixtures; not traffic-protocol simulations.
+python/rampd_core/phase4_examples.py	EXISTING_SUPPORT_KEEP	3	Existing adapter/example/contract; inspect scope.	Small deterministic Phase 4 fixtures used by tests and validation.
+python/rampd_core/phase6c.py	EXISTING_SUPPORT_KEEP	15	Existing adapter/example/contract; inspect scope.	Phase 6C-A proposal ordering and co-simulation contracts.
+python/rampd_core/phase6c_cv.py	EXISTING_SUPPORT_KEEP	2	Existing adapter/example/contract; inspect scope.	Phase 6C offline candidate interface: leakage-free baseline and *soft* ranking.
+python/rampd_core/protocol.py	CORE_KEEP	68	Paper or data contract; full integration still requires gates.	Explicit finite protocol semantics for Phase 4.
+python/rampd_core/public_successor_binding.py	SCOPED_REFERENCE_KEEP	2	Renamed from a74_successor; scope and schema unchanged, not a new certification.	Conditional multi-actor Native Post -> public successor support gate.
+python/rampd_core/rank_budget.py	REUSABLE_ADAPTER_KEEP	2	Renamed from a75_rank; scope and schema unchanged, not a new certification.	Pure arithmetic tightening of previously validated SC rank/time budgets.
+python/rampd_core/reachability.py	CORE_KEEP	25	Paper or data contract; full integration still requires gates.	Validated Picard substeps, exact dyadic scheduling and failure-only bisection.
+python/rampd_core/record_adapters.py	CORE_KEEP	10	Paper or data contract; full integration still requires gates.	Phase 6B record adapters and explicit data-clock contracts.
+python/rampd_core/refinement.py	CORE_KEEP	5	Paper or data contract; full integration still requires gates.	Conservative box refinement without inventing new observations/policy nodes.
+python/rampd_core/resources.py	CORE_KEEP	30	Paper or data contract; full integration still requires gates.	Conservative dynamic-resource and complete-footprint checks for Phase 4.
+python/rampd_core/roadwork_templates.py	REUSABLE_ADAPTER_KEEP	4	Renamed from a58_roadwork_templates; scope and schema unchanged, not a new certification.	Lossless image-level ROADWork template export; NO metric/rule labels.
+python/rampd_core/safe_continuation.py	CORE_KEEP	14	Paper or data contract; full integration still requires gates.	Finite task-winning information-state kernel for the revised RAMP-D paper.
+python/rampd_core/sampled_occupancy.py	REUSABLE_ADAPTER_KEEP	3	Renamed from a5_sampled_occupancy; scope and schema unchanged, not a new certification.	Weak, sampled geometry labels. NEVER a hard resource or safety certificate.
+python/rampd_core/sc_proof_audit.py	CORE_KEEP	1	Paper or data contract; full integration still requires gates.	Independent structural checker for the *finite conditional* SC certificate.
+python/rampd_core/scene_schema.py	CORE_KEEP	14	Paper or data contract; full integration still requires gates.	Dataset-independent scene contracts for Phase 6.
+python/rampd_core/scoped_factual_labels.py	REUSABLE_ADAPTER_KEEP	2	Renamed from a75_contract; scope and schema unchanged, not a new certification.	Scoped label contract. No generic flag can promote a sample to proof truth.
+python/rampd_core/segmented_native_post.py	SCOPED_REFERENCE_KEEP	4	Renamed from a70_native_segmented; scope and schema unchanged, not a new certification.	A70 actual MPFR/Picard *piecewise* propagation across a declared clock support.
+python/rampd_core/split_family_firewall.py	REUSABLE_ADAPTER_KEEP	1	Renamed from a70_provenance_family; scope and schema unchanged, not a new certification.	A70 lineage-family split firewall and evidence-tier inventory.
+python/rampd_core/sumo_campaign_audit.py	REUSABLE_ADAPTER_KEEP	1	Renamed from a72_sumo_campaign; scope and schema unchanged, not a new certification.	Cross-check a genuinely complete 4x3 SUMO logical signal/Guard campaign.
+python/rampd_core/sumo_stress_profiles.py	REUSABLE_ADAPTER_KEEP	1	Renamed from a58_sumo_profiles; scope and schema unchanged, not a new certification.	Explicit, reproducible SUMO stress profiles.
+python/rampd_core/sumo_tls_replay.py	REUSABLE_ADAPTER_KEEP	2	Renamed from a71_sumo_tls_evidence; scope and schema unchanged, not a new certification.	A71 offline, fail-closed SUMO TraCI *signal-state* causality replay.
+python/rampd_core/sumo_trace_forensics.py	REUSABLE_ADAPTER_KEEP	1	Renamed from a59_sumo_forensics; scope and schema unchanged, not a new certification.	A59/0 independent, streaming SUMO trace forensics (not full traffic safety).
+python/rampd_core/supervision_inventory.py	CORE_KEEP	4	Paper or data contract; full integration still requires gates.	Audit which paper losses have defensible labels in one WOMD/AV2 scene.
+python/rampd_core/supervision_provenance.py	REUSABLE_ADAPTER_KEEP	2	Renamed from a69_supervision_provenance; scope and schema unchanged, not a new certification.	A69 scenario-grouped source lineage and isolation gate.
+python/rampd_core/vehicle.py	CORE_KEEP	49	Paper or data contract; full integration still requires gates.	Explicit vehicle reference-point and geometry calibration contract.
+python/rampd_core/vehicle_frame_conversion.py	REUSABLE_ADAPTER_KEEP	1	Renamed from a58_frames; scope and schema unchanged, not a new certification.	Explicit body-centre -> rear-axle calibration and lateral-slip preflight.
+python/rampd_core/waymax_action_contract.py	REUSABLE_ADAPTER_KEEP	1	Renamed from a68_waymax_action_contract; scope and schema unchanged, not a new certification.	A68 model-interface audit: paper jerk/steer-rate -> Waymax a/kappa.
+python/rampd_core/weak_source_labels.py	REUSABLE_ADAPTER_KEEP	1	Renamed from a73_auxiliary; scope and schema unchanged, not a new certification.	Versioned weak label export, with dataset-wide route families, exact source
+python/rampd_core/workzone_rule_models.py	SCOPED_REFERENCE_KEEP	7	Renamed from a53_rule_models; scope and schema unchanged, not a new certification.	Model-specified work-zone/traffic-actuated rule mechanisms for future simulator use.
+scripts/a60_carla_actor_trials.py	EXISTING_TOOL_KEEP	8	Operational tool or historical dependency; no new promotion.	CARLA 0.9.16 isolated-actor metadata and empirical response capture on the active map.
+scripts/a61_review_physical_evidence.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Offline, independent descriptive diagnostic for A59/1a CARLA JSON.
+scripts/a62_review_carla_readiness.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Offline physical-readiness review; never requests CARLA or emits labels.
+scripts/a65_review_carla_conformance.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Read-only independent A65 brake trace conformance check.
+scripts/a68_review_parallel_tracks.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Independent A68 *descriptive* audit of three uploaded CARLA repeats.
+scripts/a69_review_three_tracks.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Independent, fail-closed A69 input audit (no simulator or safety proof).
+scripts/a70_replay_native_microcase.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Independently runnable TWO hidden worlds / 2 clock slabs native 6D replay.
+scripts/a70_review_brake_timecourses.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Independent raw 0.15/0.30/0.45 CARLA time-course diagnostics (not calibration).
+scripts/a71_audit_native_polygons.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Native MPFR/Picard certificate replay -> conservative polygon exclusion.
+scripts/a71_normalize_511ny_csv.py	EXISTING_TOOL_KEEP	2	Operational tool or historical dependency; no new promotion.	Bounded stream of 511NY roadway *report rows* to A71 auxiliary JSONL.
+scripts/a71_review_sumo_tls.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Offline independent TraCI signal state/clock audit, not physical ACK.
+scripts/a71_run_sumo_matrix.sh	EXISTING_TOOL_KEEP	0	Operational tool or historical dependency; no new promotion.	
+scripts/a72_export_auxiliary_v2.py	EXISTING_TOOL_KEEP	2	Operational tool or historical dependency; no new promotion.	Fail-closed, scalable export with per-row quarantine, not whole-batch deletion.
+scripts/a72_probe_real_waymax_scenes.py	NUMBERED_OR_REFERENCE_DIAGNOSTIC_KEEP	3	Reproducibility/probe; not training authority.	Read actual WOMD TFExample trajectories with Waymax: NO actor overwrite.
+scripts/a72_replay_native_clock_polygon.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Native proof replay bound to independently reconstructed two-world clock.
+scripts/a72_roadwork_real_pipeline.py	EXISTING_TOOL_KEEP	2	Operational tool or historical dependency; no new promotion.	ROADWork official annotation -> alignment -> GPS group split -> templates -> auxiliary.
+scripts/a73_carla_campaign.py	COMPATIBILITY_ALIAS	0	Use carla_campaign; keep historical imports/CLI.	Legacy CLI/import alias for carla_campaign.py. New callers use the semantic name.
+scripts/a73_native_multi_microcase.py	COMPATIBILITY_ALIAS	1	Use native_multi_actor_microcase; keep historical imports/CLI.	Legacy CLI/import alias for native_multi_actor_microcase.py. New callers use the semantic name.
+scripts/a73_review_sumo_metric.py	COMPATIBILITY_ALIAS	1	Use sumo_metric_review; keep historical imports/CLI.	Legacy CLI/import alias for sumo_metric_review.py. New callers use the semantic name.
+scripts/a73_roadwork_site_split.py	COMPATIBILITY_ALIAS	1	Use roadwork_site_split; keep historical imports/CLI.	Legacy CLI/import alias for roadwork_site_split.py. New callers use the semantic name.
+scripts/a73_womd_scenario_inventory.py	COMPATIBILITY_ALIAS	0	Use womd_scenario_inventory; keep historical imports/CLI.	Legacy CLI/import alias for womd_scenario_inventory.py. New callers use the semantic name.
+scripts/a74_roadwork_bind_split.py	COMPATIBILITY_ALIAS	1	Use roadwork_bind_split; keep historical imports/CLI.	Legacy CLI/import alias for roadwork_bind_split.py. New callers use the semantic name.
+scripts/a74_sumo_replay.py	COMPATIBILITY_ALIAS	0	Use sumo_sampled_replay; keep historical imports/CLI.	Legacy CLI/import alias for sumo_sampled_replay.py. New callers use the semantic name.
+scripts/a74_waymax_real_pair.py	COMPATIBILITY_ALIAS	0	Use waymax_idm_pairs; keep historical imports/CLI.	Legacy CLI/import alias for waymax_idm_pairs.py. New callers use the semantic name.
+scripts/a74_womd_format_probe.py	COMPATIBILITY_ALIAS	1	Use womd_format_probe; keep historical imports/CLI.	Legacy CLI/import alias for womd_format_probe.py. New callers use the semantic name.
+scripts/a75_export_factual.py	COMPATIBILITY_ALIAS	0	Use export_factual_labels; keep historical imports/CLI.	Legacy CLI/import alias for export_factual_labels.py. New callers use the semantic name.
+scripts/a75_reaudit.py	NUMBERED_OR_REFERENCE_DIAGNOSTIC_KEEP	0	Reproducibility/probe; not training authority.	Recompute A74 evidence from the actual archives. No simulator is run.
+scripts/a75_sumo_sampled_labels.py	COMPATIBILITY_ALIAS	0	Use export_sumo_sampled_labels; keep historical imports/CLI.	Legacy CLI/import alias for export_sumo_sampled_labels.py. New callers use the semantic name.
+scripts/audit_511ny.py	EXISTING_TOOL_KEEP	3	Operational tool or historical dependency; no new promotion.	Streaming 511NY report-lifetime inventory, NOT physical or TIM clearance labels.
+scripts/audit_a55_runtime.py	EXISTING_TOOL_KEEP	0	Operational tool or historical dependency; no new promotion.	Independent replay of uploaded/locally produced A55 JSON and SUMO trace.
+scripts/audit_a57_511ny.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Streaming stratified report timestamp quality. No automatic repair/physical labels.
+scripts/audit_a57_roadwork.py	EXISTING_TOOL_KEEP	5	Operational tool or historical dependency; no new promotion.	Annotation-only source audit and optional group-disjoint visual manifest.
+scripts/audit_a57_runtime.py	EXISTING_TOOL_KEEP	0	Operational tool or historical dependency; no new promotion.	Independent A56/A57 numeric audit of reported rollouts and raw SUMO traces.
+scripts/audit_external_rule_sources.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Inventory downloaded authoritative feed / ROADWork annotation artifacts.
+scripts/audit_phase1b.py	EXISTING_TOOL_KEEP	3	Operational tool or historical dependency; no new promotion.	Seeded RK4 falsification audit; NOT a proof or a real-vehicle experiment.
+scripts/audit_phase1d.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	High-precision random-corner falsification audit for footprint projections.
+scripts/audit_phase6_data.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Run the Phase 6A read-only dataset manifest audit.
+scripts/audit_roadwork.py	EXISTING_TOOL_KEEP	6	Operational tool or historical dependency; no new promotion.	Audit official ROADWork GPS-split scene annotations against images and labelIds.
+scripts/audit_supervision_quality.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Independent audit of bounded label inventory, not proof or training data.
+scripts/audit_wzdx_inputs.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Audit registry + flattened event CSV, not a certified rule or full schema validator.
+scripts/benchmark_phase1c.py	EXISTING_TOOL_KEEP	2	Operational tool or historical dependency; no new promotion.	Deterministic workload comparison for fixed-step and width-adaptive tubes.
+scripts/benchmark_phase1d.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Synthetic conservative swept-footprint broad/narrow-phase benchmark.
+scripts/benchmark_phase2.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Finite abstract predecessor/fixed-point microbenchmark (not physical validation).
+scripts/benchmark_phase3.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Finite local-law synthesis timing; no real-time/full-system performance claim.
+scripts/carla_actor_trials.py	STABLE_CLI_DELEGATE	0	Delegates a60_carla_actor_trials; existing semantics unchanged.	Stable command-line entry point for a60_carla_actor_trials.py; implementation kept for historical direct-file callers.
+scripts/carla_campaign.py	SCOPED_CLI_KEEP	1	Renamed from a73_carla_campaign; diagnostic/export only within documented scope.	
+scripts/check_native_ctest.py	REGRESSION_GATE_KEEP	15	Historical/current gates, preserve expectations.	Fail-closed native test discovery and execution (including old CTest).
+scripts/check_phase6c_a2_manifest.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/demo_phase1b.py	EXISTING_TOOL_KEEP	3	Operational tool or historical dependency; no new promotion.	A dynamics-only demo. No dataset, simulator, or GPU is used.
+scripts/demo_phase2.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Small finite information-state game demo; not a vehicle safety experiment.
+scripts/demo_phase3.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Local Phase 3 synthesis, closed graph, rational execution and failure audit.
+scripts/dump_a58_carla_vehicle_params.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Read-only CARLA 0.9.16 vehicle geometry and physics metadata.
+scripts/environment_report.py	EXISTING_TOOL_KEEP	4	Operational tool or historical dependency; no new promotion.	Record selected reproducibility metadata, never the full environment.
+scripts/evaluate_phase6c.py	EXISTING_TOOL_KEEP	2	Operational tool or historical dependency; no new promotion.	Phase 6C bounded real data gate (train+validation; no training yet).
+scripts/export_a58_roadwork_templates.py	EXISTING_TOOL_KEEP	2	Operational tool or historical dependency; no new promotion.	Build conservative ROADWork visual templates from A57 group-disjoint JSONL.
+scripts/export_factual_labels.py	SCOPED_CLI_KEEP	1	Renamed from a75_export_factual; diagnostic/export only within documented scope.	Build split-scoped factual rows. Inputs are inventory files, not raw protobuf.
+scripts/export_sumo_sampled_labels.py	SCOPED_CLI_KEEP	1	Renamed from a75_sumo_sampled_labels; diagnostic/export only within documented scope.	Bind A74 sampled occupancy to raw A73 net/actor trace, never promote it
+scripts/extract_roadwork_semantics.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	GPS split raw semantic extraction; train-only empirical visual composition.
+scripts/native_multi_actor_microcase.py	SCOPED_CLI_KEEP	1	Renamed from a73_native_multi_microcase; diagnostic/export only within documented scope.	Native per-actor proof, exact same clock support; one positive and one
+scripts/normalize_511ny.py	STABLE_CLI_DELEGATE	0	Delegates a71_normalize_511ny_csv; existing semantics unchanged.	Stable command-line entry point for a71_normalize_511ny_csv.py; implementation kept for historical direct-file callers.
+scripts/package_report.py	EXISTING_TOOL_KEEP	0	Operational tool or historical dependency; no new promotion.	Package the newest server acceptance report, including failed-run logs.
+scripts/package_report_phase2.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Package a Phase 2 server acceptance report, including failed-run logs.
+scripts/package_report_phase3.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Package a Phase 3 report, including diagnostics from unsuccessful runs.
+scripts/package_report_phase4.py	EXISTING_TOOL_KEEP	0	Operational tool or historical dependency; no new promotion.	Package a Phase 4 acceptance report without including native build products.
+scripts/package_report_phase5.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Package text artifacts from a Phase 5 validation directory.
+scripts/package_report_phase6a.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Package text artifacts from a Phase 6A validation directory.
+scripts/package_report_phase6b.py	EXISTING_TOOL_KEEP	2	Operational tool or historical dependency; no new promotion.	Package a Phase 6B validation report directory without touching datasets.
+scripts/probe_a58_cosim_readonly.py	EXISTING_TOOL_KEEP	0	Operational tool or historical dependency; no new promotion.	Read-only CARLA settings + isolated headless SUMO time-step preflight.
+scripts/probe_sumo_alternating.py	EXISTING_TOOL_KEEP	6	Operational tool or historical dependency; no new promotion.	Headless SUMO traffic-actuated bidirectional logical corridor experiment.
+scripts/probe_waymax.py	NUMBERED_OR_REFERENCE_DIAGNOSTIC_KEEP	1	Reproducibility/probe; not training authority.	Read-only Waymax official tf.Example ingestion and logged visualization smoke.
+scripts/probe_waymax_dynamics.py	NUMBERED_OR_REFERENCE_DIAGNOSTIC_KEEP	1	Reproducibility/probe; not training authority.	Independent numeric probe of Waymax's documented *discrete* bicycle update.
+scripts/probe_waymax_response.py	NUMBERED_OR_REFERENCE_DIAGNOSTIC_KEEP	1	Reproducibility/probe; not training authority.	Paired, synthetic straight-route test of installed Waymax IDMRoutePolicy.
+scripts/probe_wosac.py	NUMBERED_OR_REFERENCE_DIAGNOSTIC_KEEP	0	Reproducibility/probe; not training authority.	Official WOSAC API probe / explicitly nonresponsive CV baseline.
+scripts/replay_backup_graph.py	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	Replay a Phase 3 graph; never infer a real-scene/full-protocol certificate.
+scripts/replay_certificate.py	REGRESSION_GATE_KEEP	19	Historical/current gates, preserve expectations.	
+scripts/replay_invariant_certificate.py	REGRESSION_GATE_KEEP	6	Historical/current gates, preserve expectations.	Replay a Phase 2 finite abstraction candidate certificate.
+scripts/roadwork_bind_split.py	SCOPED_CLI_KEEP	1	Renamed from a74_roadwork_bind_split; diagnostic/export only within documented scope.	
+scripts/roadwork_site_split.py	SCOPED_CLI_KEEP	1	Renamed from a73_roadwork_site_split; diagnostic/export only within documented scope.	Create independent known-GPS bounded split. Entire ambiguous/near family
+scripts/roadwork_visual_pipeline.py	STABLE_CLI_DELEGATE	0	Delegates a72_roadwork_real_pipeline; existing semantics unchanged.	Stable command-line entry point for a72_roadwork_real_pipeline.py; implementation kept for historical direct-file callers.
+scripts/smoke_phase6c_cosim.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Bounded headless CARLA 0.9.16/SUMO 1.20 co-simulation smoke.
+scripts/summarize_511ny_lifetimes.py	EXISTING_TOOL_KEEP	1	Operational tool or historical dependency; no new promotion.	Validate exclusive histogram bins and derive quantile brackets, not TIM time.
+scripts/sumo_corridor_probe.py	STABLE_CLI_DELEGATE	0	Delegates probe_sumo_alternating; existing semantics unchanged.	Stable command-line entry point for probe_sumo_alternating.py; implementation kept for historical direct-file callers.
+scripts/sumo_metric_review.py	SCOPED_CLI_KEEP	2	Renamed from a73_review_sumo_metric; diagnostic/export only within documented scope.	Offline geometry review of actual SUMO raw metric trace, no field ACK or
+scripts/sumo_sampled_replay.py	SCOPED_CLI_KEEP	2	Renamed from a74_sumo_replay; diagnostic/export only within documented scope.	Two-direction sampled audit bound to the actual uploaded straight net.
+scripts/validate_a58_pure.py	REGRESSION_GATE_KEEP	2	Historical/current gates, preserve expectations.	Isolated, explicit non-native adapter test. Native proof still mandatory!
+scripts/validate_a59_pure.py	REGRESSION_GATE_KEEP	2	Historical/current gates, preserve expectations.	A59/0 run without importing optional MPFR (forensic tests only).
+scripts/validate_a5_logged_labels.py	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	Bounded, read-only label coverage audit on the real train/validation splits.
+scripts/validate_a71_pure.py	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	Run new pure audits without loading the MPFR backend; never certifies native.
+scripts/validate_a73_pure.py	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_a74_pure.py	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_a75_pure.py	REGRESSION_GATE_KEEP	2	Historical/current gates, preserve expectations.	
+scripts/validate_av2_arrow_timestamp.py	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	Real Arrow/Parquet fixture, separate from mandatory dependency-free gate.
+scripts/validate_cleanup_regression.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_native_regression.sh	STABLE_CLI_DELEGATE	0	Delegates validate_phase6c_a75.sh; existing semantics unchanged.	
+scripts/validate_phase1a.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase1b.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase1c.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase1d.sh	REGRESSION_GATE_KEEP	3	Historical/current gates, preserve expectations.	
+scripts/validate_phase2.sh	REGRESSION_GATE_KEEP	2	Historical/current gates, preserve expectations.	
+scripts/validate_phase3.sh	REGRESSION_GATE_KEEP	2	Historical/current gates, preserve expectations.	
+scripts/validate_phase4.sh	REGRESSION_GATE_KEEP	2	Historical/current gates, preserve expectations.	
+scripts/validate_phase5.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6a.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6b.sh	REGRESSION_GATE_KEEP	4	Historical/current gates, preserve expectations.	
+scripts/validate_phase6b_real.py	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	Bounded read-only WOMD/AV2 real-data validation, with strict PASS/SKIP/ERROR.
+scripts/validate_phase6c.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a2.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a3_sc.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a4.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_0.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1a.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0h.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0i.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0j.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0k.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0l.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0m.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0n.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0o.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0p.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0q.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0r.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0s.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a59_1b0t.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_2.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3b.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3b2.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3b3.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3b4.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3b5.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3b6.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3b7.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a5_3b8.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a75.sh	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	
+scripts/validate_phase6c_a_dependency_free.py	REGRESSION_GATE_KEEP	15	Historical/current gates, preserve expectations.	Run dataset/prediction/Phase 6C contract tests without the native MPFR ABI.
+scripts/validate_phase6c_pure.sh	REGRESSION_GATE_KEEP	0	Historical/current gates, preserve expectations.	
+scripts/validate_sc_discrete_only.py	REGRESSION_GATE_KEEP	1	Historical/current gates, preserve expectations.	Pure discrete SC/rank tests with a NO-CERTIFICATION value carrier.
+scripts/verify_release.py	REGRESSION_GATE_KEEP	31	Historical/current gates, preserve expectations.	Check that this release's files match its immutable published SHA-256 list.
+scripts/waymax_idm_pairs.py	SCOPED_CLI_KEEP	1	Renamed from a74_waymax_real_pair; diagnostic/export only within documented scope.	Bounded real-log initialized IDM AA/AB smoke, not causal real-world truth.
+scripts/waymax_scene_inventory.py	STABLE_CLI_DELEGATE	0	Delegates a72_probe_real_waymax_scenes; existing semantics unchanged.	Stable command-line entry point for a72_probe_real_waymax_scenes.py; implementation kept for historical direct-file callers.
+scripts/womd_format_probe.py	SCOPED_CLI_KEEP	1	Renamed from a74_womd_format_probe; diagnostic/export only within documented scope.	
+scripts/womd_scenario_inventory.py	SCOPED_CLI_KEEP	1	Renamed from a73_womd_scenario_inventory; diagnostic/export only within documented scope.	
+scripts/a60_review_carla_logs.py	ARCHIVED	0	historical single-run audit; preserved a60 evidence core and latest raw diagnostic	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a64_review_carla_smoke.py	ARCHIVED	0	old smoke-report entry point; core and tests remain	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a65_plot_carla_lane.py	ARCHIVED	0	historic straight-lane plot; not authoritative road geometry	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a65_plot_carla_smoke.py	ARCHIVED	0	historic plot; not training or verifier input	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a66_inventory_carla_controls.py	ARCHIVED	0	historical smoke inventory CLI; inventory core remains	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a66_review_carla_lateral.py	ARCHIVED	0	historic lateral review CLI; underlying evidence module remains	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a67_review_carla_combined.py	ARCHIVED	0	old combined-control diagnostic CLI; core remains, restore for that experiment	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a67_review_combined_repeats.py	ARCHIVED	0	historic repeated combined-control CLI; core remains	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a71_compare_carla_brake.py	ARCHIVED	0	historical factor-pair comparison CLI; core remains	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a71_export_auxiliary_sources.py	ARCHIVED	0	superseded weak-source pipeline; keep normalization and current auxiliary contracts	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a71_review_native_polygon_archive_offline.py	ARCHIVED	0	old byte-hash archive inspection, not actual MPFR replay; native gate remains	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a71_review_waymax_idm.py	ARCHIVED	0	old synthetic IDM forensic CLI; keep audit core and actual Waymax probes	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a72_review_parallel.py	ARCHIVED	0	hardcoded A71 result forensic review	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a73_reaudit_sources.py	ARCHIVED	0	hardcoded A72 result re-review	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/a74_carla_reaudit.py	ARCHIVED	0	old filename-specific reader; A75 raw ZIP reviewer remains; restore for old factorial reports	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/audit_a58_results.py	ARCHIVED	0	hardcoded historical A57 result review	Exact original bytes in separate archive; restore in original A75 checkout.
+scripts/audit_a59_uploaded_a58.py	ARCHIVED	0	hardcoded historical A58 result review	Exact original bytes in separate archive; restore in original A75 checkout.
+python/rampd_core/datasets/collate.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/datasets/__init__.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/datasets/split_manifest.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/datasets/rule_overlay.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/datasets/feature_contract.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/datasets/factual_dataset.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/learning/__init__.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/learning/masked_losses.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/learning/rea_encoder.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/learning/joint_decoder.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/learning/training.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/cosim_map_registration.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+scripts/prepare_factual_dataset.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+scripts/train_factual.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+scripts/check_rule_overlay.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+scripts/check_cosim_map.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+scripts/validate_learning_pilot.sh	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+tests/test_learning_pilot.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+tests/test_cosim_map_registration.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.

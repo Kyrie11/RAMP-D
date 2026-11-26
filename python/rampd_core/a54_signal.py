@@ -7,8 +7,8 @@ interval. No default universal red clearance time is assumed.
 """
 from dataclasses import dataclass, replace
 from fractions import Fraction as Q
-from .a53_schedule import exact
-from .a53_rule_models import FlowSnapshot
+from .permission_schedule import exact
+from .workzone_rule_models import FlowSnapshot
 from .a53b_interlock import ClearanceObservation
 
 @dataclass(frozen=True)

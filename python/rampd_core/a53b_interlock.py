@@ -6,8 +6,8 @@ is an independently supplied complete interval measurement, not two point sample
 """
 from dataclasses import dataclass, replace
 from fractions import Fraction
-from .a53_schedule import exact
-from .a53_rule_models import ExternalReport
+from .permission_schedule import exact
+from .workzone_rule_models import ExternalReport
 
 
 @dataclass(frozen=True)

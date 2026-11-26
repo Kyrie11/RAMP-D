@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from fractions import Fraction as Q
 from itertools import product
 from .a54_signal import SignalController
-from .a53_rule_models import FlowSnapshot
+from .workzone_rule_models import FlowSnapshot
 from .a53b_interlock import ClearanceObservation
 from .a56_guard import GuardCase,GuardParent,advance_support
 
