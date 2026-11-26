@@ -35,5 +35,6 @@ def propose(record, *, seed=7, query_steps=30):
     actors.sort(key=lambda a:(math.hypot(a['states'][k]['x']-ex,a['states'][k]['y']-ey),str(a['track_id'])))
     pub=str(t+Q(3,10)); ds=[ScheduledDelivery(str(ego_id),pub,str(t+Q(12,10)))];
     if actors: ds.append(ScheduledDelivery(str(actors[0]['track_id']),pub,str(t+Q(5,10))))
-    if len(actors)>1: ds.append(ScheduledDelivery(str(actors[1]['track_id']),pub,None))
+    # Explicitly mark every current actor; None is a declared no-delivery world, not proof of ignorance.
+    for a in actors[1:]: ds.append(ScheduledDelivery(str(a['track_id']),pub,None))
     row=replay_scheduled_world(record,event,ds,query_steps=query_steps);row.update(lane_proposal=lane,ego_id=str(ego_id),clock_prior='DECLARED_ILLUSTRATIVE_NOT_EMPIRICAL',scenario_spec_sha256=canonical_digest({'event':event.__dict__,'deliveries':[d.__dict__ for d in ds],'lane':lane}));return row

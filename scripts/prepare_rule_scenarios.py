@@ -24,11 +24,12 @@ def draw(record,row,path):
     ax.scatter([0],[0],c='blue',s=40,label='Ego at cutoff');ax.set(xlim=(-60,60),ylim=(-60,60),aspect='equal',xlabel='World X offset (m)',ylabel='World Y offset (m)',title=f"{m['scenario_id']} | geometry proposal only");ax.legend(loc='upper right',fontsize=7);fig.tight_layout();fig.savefig(path,dpi=130);plt.close(fig)
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--manifest',required=True);p.add_argument('--output',required=True);p.add_argument('--limit',type=int,default=5);p.add_argument('--plots',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--manifest',required=True);p.add_argument('--output',required=True);p.add_argument('--limit',type=int,default=5);p.add_argument('--plots',action='store_true');p.add_argument('--split',choices=('training','validation','all'),default='all');a=p.parse_args()
     if not 1<=a.limit<=20:p.error('limit 1..20')
     from itertools import islice
     out=Path(a.output);out.mkdir(parents=True,exist_ok=False); rows=[]; rejected=[]
-    for record in islice(stream_records(json.loads(Path(a.manifest).read_text())),a.limit):
+    records=stream_records(json.loads(Path(a.manifest).read_text()))
+    for record in islice((r for r in records if a.split=='all' or r['scene']['manifest']['split']==a.split),a.limit):
         try: row=propose(record)
         except ValueError as e: rejected.append({'scenario_id':record['scene']['manifest']['scenario_id'],'reason':str(e)});continue
         rows.append(row)

@@ -68,3 +68,6 @@ The final planner, complete Native multi-actor SafeTube/Succ/SC integration, syn
 
 ## Phase7A follow-up
 See [follow-up scope](docs/PHASE7A_FOLLOWUP.md). Fixed query-grid factual features, CV initialization and epoch-zero selection, future-only incident schedule replay, isolated event-clock likelihood. No simulator response or SC authorization.
+
+## Phase7A / 7B response checkpoint
+See `docs/PHASE7A_FOLLOWUP.md`. Optional `--objective radial_laplace`, `--selection ade`, fixed-validation training extension, projected longitudinal rule-response diagnostic (`scripts/run_rule_response.py`). No full-scene CF/physical/SC authorization. Same development version; earlier scripts remain compatible.

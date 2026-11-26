@@ -205,3 +205,47 @@ def test_lane_proposal(source):
     for a in r['scene']['tracks']:
         a['states'].append(dict(a['states'][-1],timestamp=1.1,observed=False))
     p=propose(r);assert p['lane_proposal']['lane_id']=='10';assert p['joint_counterfactual_mask'] is False;assert p['teacher_schedule']['physical_activation'] is None
+
+# Likelihood and metric separation; no new active task head.
+def test_radial_laplace_proper_shared_density():
+    y=torch.zeros(1,2,1,2);v=torch.ones(1,2,1,dtype=torch.bool);x=torch.zeros(1,2,2,1,2,requires_grad=True)
+    with torch.no_grad():x[0,0,1,0,0]=4.;x[0,1,0,0,0]=4.
+    p=dict(logits=torch.zeros(1,2),xy=x);l=joint_nll(p,y,v,family='radial_laplace');assert l.item()==pytest.approx(math.log(2*math.pi)+2.);l.backward();assert torch.isfinite(x.grad).all()
+    with pytest.raises(ValueError):joint_nll(p,y,v,family='unsupported')
+
+def test_wrong_logit_shape_rejected():
+    with pytest.raises(ValueError,match='shape'):joint_nll(dict(logits=torch.zeros(1,1),xy=torch.zeros(1,2,1,1,2)),torch.zeros(1,1,1,2),torch.ones(1,1,1,dtype=torch.bool))
+
+def test_cv_cache_mutation_rejected(source):
+    f=features(source)[0];f['baseline_cv'][1][0][0]+=1
+    with pytest.raises(ValueError,match='CV baseline'):collate([f])
+
+def test_event_inactive_nonfinite_no_gradient():
+    from rampd_core.learning.event_loss import event_clock_nll
+    x=torch.tensor([[0.,0.],[float('nan'),float('nan')]],requires_grad=True);a=torch.tensor([[True,False],[False,False]]);k=torch.tensor([True,False]);l=event_clock_nll(x,a,k);assert l.item()==pytest.approx(math.log(2));l.backward();assert torch.equal(x.grad[1],torch.zeros(2))
+    with pytest.raises(ValueError):event_clock_nll(x,torch.tensor([[True,False],[True,False]]),torch.ones(2,dtype=torch.bool))
+
+def test_selection_ade_and_grad_groups(source):
+    fs=features(source);tr=[dict(f,training_allowed=True) for f in fs if f['split']=='training'];va=[dict(f,training_allowed=False) for f in fs if f['split']=='validation'];_,r=fit(tr,va,epochs=2,d=16,modes=2,neighbors=4,objective='radial_laplace',selection='ade');assert r['checkpoint_validation']['top1_ADE_m']<=r['history'][0]['validation']['top1_ADE_m']+1e-7;assert set(r['history'][1]['grad_group_max'])=={'encoder','candidate','decoder','mode_logits'}
+
+def test_replay_requires_full_recipient_roster(source):
+    from rampd_core.datasets.rule_overlay import ScheduledDelivery,replay_scheduled_world
+    e,r=overlay(source,generation='.2',effective_on='.4',issue='.25',receipt=None)
+    with pytest.raises(ValueError,match='incomplete'):replay_scheduled_world(r,e,[ScheduledDelivery('1','.3','.6')])
+
+
+def test_extend_manifest_keeps_validation_and_train(source):
+    from rampd_core.datasets.split_manifest import extend_training_manifest
+    root,raw,reader,decoder,base=source;path=next(p for p in raw if p.parent.name=='training');raw[path].append(b'training_extra')
+    m=extend_training_manifest(base,train_limit=3,reader=reader,decoder=decoder)
+    assert m['records'][:len(base['records'])]==base['records'];assert len(m['records'])==5;assert m['records'][-1]['scenario_id']=='training_extra';assert len(list(stream_records(m,reader=reader,decoder=decoder)))==5
+    with pytest.raises(ValueError):extend_training_manifest(base,train_limit=1,reader=reader,decoder=decoder)
+
+
+def test_radial_selection_uses_radial_likelihood(source):
+    fs=features(source);tr=[dict(f,training_allowed=True) for f in fs if f['split']=='training'];va=[dict(f,training_allowed=False) for f in fs if f['split']=='validation'];_,r=fit(tr,va,epochs=1,d=16,modes=2,neighbors=4,objective='radial_laplace',selection='nll');assert r['selection_metric']=='radial_nll_per_knot';assert 'joint_nll_per_knot' in r['checkpoint_validation']
+
+
+def test_joint_unlabelled_scene_logits_not_used():
+    y=torch.zeros(2,1,1,2);v=torch.tensor([[[True]],[[False]]]);xy=torch.zeros(2,1,1,1,2,requires_grad=True);logits=torch.tensor([[0.],[float('nan')]],requires_grad=True)
+    l=joint_nll(dict(logits=logits,xy=xy),y,v);assert l.item()==pytest.approx(math.log(2*math.pi));l.backward();assert logits.grad[1,0]==0 and xy.grad[1].abs().sum()==0

@@ -21,4 +21,8 @@ def collate(rows):
         if r['actor_ids'][0]!=r['ego_id'] or len(set(r['actor_ids']))!=a or any(r['targets']['valid'][0]): raise ValueError('ego/target identity')
         hist[b,:a]=torch.tensor(i['history']); cat[b,:a]=torch.tensor(i['category']); maps[b,:m]=torch.tensor(i['map']); av[b,:a]=True; mv[b,:m]=True
         cand[b]=torch.tensor(r['candidate']['path']); dt[b]=torch.tensor(i['forecast_dt']); target[b,:a]=torch.tensor(r['targets']['xy']); valid[b,:a]=torch.tensor(r['targets']['valid']); cv[b,:a]=torch.tensor(r['baseline_cv'])
+    # Independent CV reconstruction: a corrupted cached baseline cannot change comparisons.
+    expected_cv=hist[:,:,-1,:2][:,:,None,:]+hist[:,:,-1,4:6][:,:,None,:]*dt[:,None,:,None]
+    if not torch.allclose(cv[av],expected_cv[av],rtol=1e-5,atol=2e-4): raise ValueError('cached CV baseline mismatch')
+    if not all(torch.isfinite(x).all() for x in (hist,cat,maps,cand,dt)): raise ValueError('nonfinite public input')
     return dict(inputs=dict(history=hist,category=cat,map=maps,actor_mask=av,map_mask=mv,dt=dt),candidate=cand,target=target,valid=valid,cv=cv)

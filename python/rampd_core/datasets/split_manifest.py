@@ -91,3 +91,26 @@ def stream_records(manifest, *, reader=_iter_tfrecord, decoder=decode):
             found.add(i)
             yield parse_womd_scenario_proto(s, source_file=path, record_index=i, record_sha256=digest, split=split).to_dict()
         if found != set(wanted): raise ValueError('manifest record missing')
+
+
+def extend_training_manifest(base, *, train_limit, max_shards=10, reader=_iter_tfrecord, decoder=decode):
+    """Grow a training pilot while preserving the validation and existing train identity.
+    Original byte identities are checked again by stream_records at prepare time.
+    """
+    counts=validate_manifest(base)
+    if type(train_limit) is not int or train_limit<counts['training'] or max_shards<1:raise ValueError('cannot shrink base training roster')
+    root=Path(base['root']).resolve(); records=[dict(r) for r in base['records']]; remaining=train_limit-counts['training']
+    seen_id={r['scenario_id'] for r in records};seen_hash={r['record_sha256'] for r in records};seen_loc={(r['shard'],r['record_index']) for r in records}
+    if remaining:
+        files=_shards(root,'training');k=min(max_shards,len(files));files=[files[i*(len(files)-1)//(k-1)] for i in range(k)] if k>1 else files[:1]
+        for j,path in enumerate(files):
+            if not remaining:break
+            quota=(remaining+len(files)-j-1)//(len(files)-j); rel=path.relative_to(root).as_posix();added=0
+            for index,raw in enumerate(reader(path)):
+                if (rel,index) in seen_loc:continue
+                s=decoder(raw); digest=hashlib.sha256(raw).hexdigest()
+                if s.scenario_id in seen_id or digest in seen_hash:raise ValueError('duplicate or cross-split identity while extending')
+                records.append(dict(split='training',scenario_id=s.scenario_id,shard=rel,record_index=index,record_sha256=digest));seen_loc.add((rel,index));seen_id.add(s.scenario_id);seen_hash.add(digest);remaining-=1;added+=1
+                if added>=quota:break
+        if remaining:raise ValueError(f'training extension missing {remaining} records')
+    out=dict(base,records=records,base_manifest_sha256=canonical_digest(base));validate_manifest(out);return out

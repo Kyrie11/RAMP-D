@@ -84,6 +84,7 @@ def replay_scheduled_world(record,event,deliveries,*,query_steps=30):
     if not deliveries or len({d.recipient for d in deliveries})!=len(deliveries): raise ValueError('unique recipient deliveries required')
     if len({ _time(d.publication) for d in deliveries})!=1: raise ValueError('one report publication clock required')
     valid_roster={str(a['track_id']) for a in s['tracks'] if a['states'][m['current_time_index']]['valid'] is True}
+    if {d.recipient for d in deliveries} != valid_roster: raise ValueError('incomplete current recipient roster')
     for d in deliveries:
         d.validate(event)
         if d.recipient not in valid_roster: raise ValueError('recipient outside current valid roster')

@@ -668,6 +668,20 @@
     "status": "LOCAL_SOFTWARE_AND_VALIDATION_DIAGNOSTIC_PASS_REAL_TRAINING_PENDING",
     "version": "1.0.0.dev0"
   },
+  "phase7a_response_checkpoint": {
+    "active_training_heads": [
+      "joint"
+    ],
+    "cached_projected_accepted": 1,
+    "cached_projected_full_horizon": 0,
+    "counterfactual_training_authorized": false,
+    "full_sc": false,
+    "new_raw_validation_projected_accepted": 0,
+    "physical_resource": false,
+    "status": "LOCAL_FACTUAL_REPLAY_AND_PROJECTED_DIAGNOSTIC",
+    "uploaded_checkpoint_replay": 2,
+    "version": "1.0.0.dev0"
+  },
   "release": "0.9.22",
   "requires_carla": false,
   "requires_dataset": false,
