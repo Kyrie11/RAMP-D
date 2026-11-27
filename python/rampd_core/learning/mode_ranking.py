@@ -5,8 +5,9 @@ import torch
 from torch import nn
 
 FEATURE_DIM=11
+MOTION_FEATURE_DIM=17
 
-def ranking_inputs(pred,inputs):
+def ranking_inputs(pred,inputs,*,motion=False):
     h=inputs['history'];av=inputs['actor_mask'].clone();av[:,0]=False
     cur=h[:,:,-1];t=inputs['dt'][:,None,:,None];cv=cur[:,:,None,:2]+cur[:,:,None,4:6]*t
     xy=torch.cat((pred['xy'],cv[:,None]),dim=1)
@@ -21,6 +22,14 @@ def ranking_inputs(pred,inputs):
         (slow.sum(-1)/av.sum(-1).clamp_min(1))[:,None].expand(B,K),
         (v*av).sum(-1)[:,None].expand(B,K)/av.sum(-1).clamp_min(1)[:,None]/15,
         ((res[:,:,:,-1]*av[:,None]).sum(-1)/av.sum(-1).clamp_min(1)[:,None])), -1)
+    if motion:
+        from .rea_encoder import damped_acceleration_baseline,motion_features
+        ca=damped_acceleration_baseline(inputs); dca=(xy-ca[:,None]).norm(dim=-1)
+        mf=motion_features(h,inputs['actor_mask']); lead=(mf[...,8]>.5)&av
+        # Error proxies relative to two different history-only priors, not truth.
+        f=torch.cat((f,torch.stack((avg(dca,slow),avg(dca,moving),avg(res,lead),avg(res,av&~lead),
+            (mf[...,5].abs()*av).sum(-1)[:,None].expand(B,K)/av.sum(-1,keepdim=True).clamp_min(1),
+            (mf[...,8]*av).sum(-1)[:,None].expand(B,K)/av.sum(-1,keepdim=True).clamp_min(1)),dim=-1)),dim=-1)
     return f,xy
 
 def geometric_teacher(xy,target,valid,temperature_m=.2):
@@ -30,6 +39,6 @@ def geometric_teacher(xy,target,valid,temperature_m=.2):
     return (-ade/temperature_m).softmax(-1),active,ade
 
 class SceneRanker(nn.Module):
-    def __init__(self):
-        super().__init__();self.score=nn.Sequential(nn.Linear(FEATURE_DIM,24),nn.SiLU(),nn.Linear(24,1))
+    def __init__(self,feature_dim=FEATURE_DIM):
+        super().__init__();self.score=nn.Sequential(nn.Linear(feature_dim,24),nn.SiLU(),nn.Linear(24,1))
     def forward(self,f):return self.score(f).squeeze(-1)

@@ -46,14 +46,25 @@ def motion_features(h, actor_mask):
     return feat*actor_mask[...,None]
 
 class FactualSceneEncoder(nn.Module):
-    def __init__(self,d=64,neighbors=16,motion_context=False):
+    def __init__(self,d=64,neighbors=16,motion_context=False,local_history=False):
         super().__init__(); self.hist=nn.Sequential(nn.Linear(HISTORY_DIM,d),nn.SiLU(),nn.Linear(d,d)); self.agent=nn.Linear(2*d+len(CATEGORIES),d); self.ego_type=nn.Parameter(torch.zeros(d)); self.map=nn.Sequential(nn.Linear(MAP_DIM,d),nn.SiLU(),nn.Linear(d,d)); self.aa=NeighborAttention(d,neighbors); self.am=NeighborAttention(d,neighbors)
-        self.motion_context=motion_context
+        self.motion_context=motion_context; self.local_history=local_history
+        if local_history: self.pose=nn.Linear(4,d)
         if motion_context: self.motion=nn.Sequential(nn.Linear(11,d),nn.SiLU(),nn.Linear(d,d))
     def forward(self,inputs):
         h=inputs['history']; mask=h[...,9:10]; x=h.clone(); x[...,:2]/=30.; x[...,4:6]/=15.; x[...,6:8]/=5.
+        if self.local_history:
+            # Current actor-centered history, retaining global pose through current token.
+            cur=h[:,:,-1]; delta=h[...,:2]-cur[:,:,None,:2]
+            c=cur[...,3,None]; sn=cur[...,2,None]
+            x[...,0]=(delta[...,0]*c+delta[...,1]*sn)/10
+            x[...,1]=(-delta[...,0]*sn+delta[...,1]*c)/10
+            x[...,2]=h[...,2]*c-h[...,3]*sn; x[...,3]=h[...,3]*c+h[...,2]*sn
+            x[...,4]=(h[...,4]*c+h[...,5]*sn)/15
+            x[...,5]=(-h[...,4]*sn+h[...,5]*c)/15
         enc=self.hist(x)*mask; pooled=enc.sum(-2)/mask.sum(-2).clamp_min(1.)
         a=self.agent(torch.cat((pooled,enc[:,:,-1],inputs['category']),-1)); ego_marker=torch.zeros_like(a); ego_marker[:,0]=self.ego_type; a=a+ego_marker
+        if self.local_history: a=a+self.pose(torch.cat((h[:,:,-1,:2]/30,h[:,:,-1,2:4]),-1))
         if self.motion_context: a=a+self.motion(motion_features(h,inputs['actor_mask']))
         m=inputs['map']; m_scaled=m.clone(); m_scaled[...,:6]/=30.; mp=self.map(m_scaled)
         pos=h[:,:,-1,:2]; av=inputs['actor_mask']; mv=inputs['map_mask']
@@ -72,3 +83,27 @@ def historical_acceleration_baseline(inputs, *, max_accel=3.0):
     a=torch.where(valid[...,None],a,0.);a=a.sum(-2)/valid.sum(-1,keepdim=True).clamp_min(1)
     a=a*(max_accel/a.norm(dim=-1,keepdim=True).clamp_min(max_accel))
     t=inputs['dt'][:,None,:,None];return cur[:,:,None,:2]+cur[:,:,None,4:6]*t+.5*a[:,:,None]*t.square()
+
+
+def damped_acceleration_baseline(inputs, *, decay_s=.5, max_accel=3.):
+    """Integrate a(t)=a_hist exp(-t/tau), a history-only diagnostic baseline."""
+    if not math.isfinite(decay_s) or decay_s<=0: raise ValueError('decay_s')
+    cv=inputs['history'][:,:,-1,:2][:,:,None]+inputs['history'][:,:,-1,4:6][:,:,None]*inputs['dt'][:,None,:,None]
+    ca=historical_acceleration_baseline(inputs,max_accel=max_accel)
+    t=inputs['dt'][:,None,:,None]
+    # CA residual is .5*a*t². Integral of exponentially decaying a is
+    # a*tau²*(t/tau + expm1(-t/tau)), evaluated stably for positive t.
+    scale=2*decay_s**2*(t/decay_s+torch.expm1(-t/decay_s))/t.square().clamp_min(1e-8)
+    return cv+(ca-cv)*scale
+
+
+def motion_state_features(inputs):
+    """History-only weak-state features. Geometry proxies, not true intent."""
+    h=inputs['history']; av=inputs['actor_mask']; cur=h[:,:,-1]
+    features=motion_features(h,av)
+    # Stop-sign proximity is not a lane association or signal phase.
+    m=inputs['map']; stop=inputs['map_mask'] & (m[...,11]>.5)
+    dist=torch.cdist(cur[...,:2],m[...,4:6]).masked_fill(~stop[:,None],float('inf')).amin(-1)
+    found=torch.isfinite(dist)
+    extra=torch.stack((found.float(),torch.where(found,dist.clamp(max=60)/60,0.),(h[...,9]>.5).float().mean(-1)),dim=-1)
+    return torch.cat((features,extra,inputs['category']),-1)*av[...,None]

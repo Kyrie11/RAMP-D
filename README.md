@@ -79,3 +79,10 @@ See `docs/PHASE7A_FOLLOWUP.md`. Optional `--objective radial_laplace`, `--select
 - [Optional manuscript evaluation-metric clarifications](docs/metrics_proposed.diff)
 
 Motion-context, residual-gate and query-mode flags are isolated. Formal SC and physical resource labels remain unauthorized.
+
+## Current Phase7AB motion / response checkpoint
+
+- [Acceptance and actual evidence](docs/PHASE7AB_MOTION_RESPONSE_ACCEPTANCE.md)
+- [Server runbook](docs/PHASE7AB_MOTION_RESPONSE_RUNBOOK.md)
+
+Optional actor-local history, CV anchor and shared per-mode scorer; independent weak motion and damped CA diagnostics, fresh official development manifest, projected rule sensor/response clocks and 2D sampled ribbon diagnostics. No formal SC or real counterfactual authorization.

@@ -52,3 +52,26 @@ def mode_diagnostics(pred,target,valid,*,family='gaussian',sigma=1.,tie_m=1e-5):
         ent=lambda q:float(-(q*q.clamp_min(1e-30).log()).sum())
         out.append(dict(prior=prior.tolist(),posterior=posterior.tolist(),top=top,oracle=int(sq.argmin()),pairwise_mean_m=sum(spread)/len(spread) if spread else 0.,valid_knots=int(n[b]),density_family=family,likelihood_oracle=int(energy.argmin()),geometric_oracle=int(ade.argmin()),geometric_ties=ties,geometric_top_in_ties=top in ties,geometric_rank_informative=len(ties)==1 and len(prior)>1,top1_oracle_ADE_gap_m=float(ade[top]-ade.min()),prior_entropy=ent(prior),posterior_entropy=ent(posterior),prior_posterior_brier_proxy=float((prior-posterior).square().sum())))
     return out
+
+
+def weak_motion_targets(inputs,target,valid):
+    """Offline observed-motion proxies, NOT parking/queue/intent labels.
+    Only complete future windows; ego excluded by the factual validity mask.
+    Two independent conditional binary tasks: low-speed start and moving deceleration.
+    """
+    if target.shape[:-1]!=valid.shape or valid.dtype!=torch.bool or target.shape[-1]!=2 or target.shape[-2]<6: raise ValueError('weak motion target shape')
+    h=inputs['history'];cur=h[:,:,-1]; speed=cur[...,4:6].norm(dim=-1)
+    full=valid.all(-1)&inputs['actor_mask']; full=full.clone();full[:,0]=False
+    safe=torch.where(valid[...,None],target,cur[:,:,None,:2]); displacement=(safe-cur[:,:,None,:2]).norm(dim=-1).amax(-1)
+    t=inputs['dt'];elapsed=t[:,-1]-t[:,-6]
+    if (elapsed<=0).any():raise ValueError('weak motion query time')
+    end_speed=(safe[:,:,-1]-safe[:,:,-6]).norm(dim=-1)/elapsed[:,None]
+    y=torch.stack((displacement>=.5, end_speed<=speed-1.),-1)
+    m=torch.stack((full&(speed<.3),full&(speed>=1.)), -1)
+    return y,m
+
+
+def weak_motion_bce(logits,target,valid):
+    if logits.shape!=target.shape or target.shape!=valid.shape or valid.dtype!=torch.bool or target.dtype!=torch.bool:raise ValueError('weak motion mask')
+    if not valid.any():return None
+    return torch.nn.functional.binary_cross_entropy_with_logits(logits[valid],target[valid].float())

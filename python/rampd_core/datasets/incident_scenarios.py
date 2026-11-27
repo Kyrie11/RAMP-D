@@ -50,7 +50,7 @@ def propose(record, *, seed=7, query_steps=30, clock_profile='nominal'):
     row=replay_scheduled_world(record,event,ds,query_steps=query_steps);row.update(lane_proposal=lane,ego_id=str(ego_id),clock_profile=clock_profile,clock_prior='DECLARED_ILLUSTRATIVE_NOT_EMPIRICAL',scenario_spec_sha256=canonical_digest({'event':event.__dict__,'deliveries':[d.__dict__ for d in ds],'lane':lane}));return row
 
 
-def extend_unique_route(record, lane, *, max_lanes=12, join_tolerance_m=.10, alignment_min=.90):
+def extend_unique_route(record, lane, *, max_lanes=12, join_tolerance_m=.10, alignment_min=.90, prepend=False):
     """Map-only route; terminate at branching, missing topology, sharp join or cycle.
     Not route intent, lane membership, or a physical resource certificate.
     """
@@ -84,4 +84,49 @@ def extend_unique_route(record, lane, *, max_lanes=12, join_tolerance_m=.10, ali
         joins.append(dict(from_lane=current,to_lane=nxt,gap_m=gap,alignment=align))
         start=total+gap; total=start+length(q);line=np.concatenate((line,q[1:] if gap==0 else q),axis=0)
         segments.append(dict(lane_id=nxt,start_m=start,end_m=total));current=nxt
-    return dict(lane,centerline=line.tolist(),centerline_length_m=length(line),route_segments=segments,route_joins=joins,route_stop=stop,scope='DECLARED_UNIQUE_SUCCESSOR_CENTERLINE_NOT_RESOURCE_POLYGON')
+    back_stop='NOT_REQUESTED'
+    if prepend:
+        back_stop='MAX_LANES'
+        while len(segments)<max_lanes:
+            first=segments[0]['lane_id']; f=lanes[first]; preds=list(map(str,f.get('predecessors',[])))
+            if len(preds)!=1: back_stop='BRANCH_OR_NO_PREDECESSOR';break
+            prev=preds[0]
+            if prev in {v['lane_id'] for v in segments}:back_stop='CYCLE';break
+            if prev not in lanes:back_stop='MISSING_PREDECESSOR';break
+            g=lanes[prev]; q=points(g)
+            if len(q)<2 or not np.isfinite(q).all():back_stop='INVALID_PREDECESSOR';break
+            # Do not assume intent at an upstream fork either.
+            if list(map(str,g.get('successors',[])))!=[first]:back_stop='BRANCH_OR_NONRECIPROCAL';break
+            if f.get('attributes',{}).get('lane_type')!=g.get('attributes',{}).get('lane_type'):back_stop='LANE_TYPE_CHANGE';break
+            gap=float(np.linalg.norm(q[-1]-line[0]));align=float(tangent(q,True)@tangent(line,False))
+            if gap>join_tolerance_m or align<alignment_min:back_stop='GEOMETRIC_JOIN_REJECTED';break
+            ln=length(q);shift=ln+gap
+            segments=[dict(lane_id=prev,start_m=0.,end_m=ln)]+[dict(x,start_m=x['start_m']+shift,end_m=x['end_m']+shift) for x in segments]
+            joins.insert(0,dict(from_lane=prev,to_lane=first,gap_m=gap,alignment=align));line=np.concatenate((q,line[1:] if gap==0 else line),axis=0)
+    # Recompute original ego arc after prepending; no future route inference.
+    ego_arc=lane.get('ego_arc_m')
+    if ego_arc is not None:ego_arc+=next(x['start_m'] for x in segments if x['lane_id']==str(lane['lane_id']))
+    return dict(lane,centerline=line.tolist(),centerline_length_m=length(line),ego_arc_m=ego_arc,route_segments=segments,route_joins=joins,route_stop=stop,upstream_stop=back_stop,scope='DECLARED_UNIQUE_SUCCESSOR_CENTERLINE_NOT_RESOURCE_POLYGON')
+
+
+def resource_applicability(spec, *, straight_turn_deg=15.):
+    """Map-centerline-only candidate check. Never promotes a rule to legal scope.
+    Distinguishes scenario types that require additional geometry/controller facts.
+    """
+    c=spec['closure']; start,end=float(c['start']),float(c['end']);line=np.asarray(spec['lane']['centerline'],float)
+    if line.ndim!=2 or line.shape[1]!=2 or len(line)<2 or not np.isfinite(line).all():raise ValueError('route geometry')
+    lens=np.linalg.norm(np.diff(line,axis=0),axis=1);arc=np.r_[0.,np.cumsum(lens)]
+    if not 0<=start<end<=arc[-1]+1e-8:raise ValueError('resource outside route')
+    directions=np.diff(line,axis=0)[(lens>1e-6)&(arc[:-1]<end+5)&(arc[1:]>start-5)]
+    if not len(directions):raise ValueError('resource tangent missing')
+    u=directions/np.linalg.norm(directions,axis=1)[:,None]
+    # Cumulative change, not merely the largest discretization turn.
+    angle=float(np.degrees(np.arccos(np.clip((u[1:]*u[:-1]).sum(-1),-1,1))).sum()) if len(u)>1 else 0.
+    ids=[str(x['lane_id']) for x in spec['lane'].get('route_segments',[]) if x['end_m']>start and x['start_m']<end]
+    if not ids and 'lane_id' in spec['lane']:ids=[str(spec['lane']['lane_id'])]
+    segments=spec['lane'].get('route_segments',[]); joins=spec['lane'].get('route_joins',[])
+    gap_in_scope=any(j['gap_m']>1e-8 and start<segments[k+1]['start_m'] and end>segments[k]['end_m'] for k,j in enumerate(joins) if k+1<len(segments))
+    return dict(scope='CENTERLINE_APPLICABILITY_NOT_LEGAL_OR_PHYSICAL_PROOF',resource_lane_ids=ids,turn_deg_in_buffer=angle,resource_crosses_approximate_join=gap_in_scope,
+        centerline_straight_closure_candidate=bool(angle<=straight_turn_deg and not gap_in_scope),
+        type_requirements={'LANE_CLOSURE':'NEEDS_LANE_BOUNDARY_AND_LEGAL_EXIT_OR_REROUTE','TEMPORARY_SPEED_LIMIT':'NEEDS_LANE_SCOPE_SPEED_VALUE_AND_COMPLIANCE_MODEL','ALTERNATING_DIRECTION':'NEEDS_SHARED_2D_RESOURCE_OPPOSING_ROUTES_INTERLOCK_CLEARANCE','STOP_SLOW':'NEEDS_VISIBLE_CONTROL_STATION_AND_AUTHORIZED_DIRECTION'},
+        physical_resource_verified=False,formal_sc=False)

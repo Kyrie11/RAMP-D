@@ -291,3 +291,48 @@ def test_scene_ranker_geometry_only_no_actor_switch(source):
     from rampd_core.learning.mode_ranking import ranking_inputs,geometric_teacher,SceneRanker
     b=collate(features(source)[:2]);m=FactualJointModel(d=16,modes=3,neighbors=4);p=m(b['inputs'],b['candidate']);f,xy=ranking_inputs(p,b['inputs']);assert f.shape==(2,4,11) and torch.isfinite(f).all();assert torch.allclose(xy[:,-1],b['cv'],atol=2e-4)
     q,eligible,ade=geometric_teacher(xy,b['target'],b['valid']);q2,_,_=geometric_teacher(xy,b['target']+10,b['valid']);assert not torch.equal(q,q2);assert torch.equal(f,ranking_inputs(p,b['inputs'])[0]);r=SceneRanker();l=-(q.detach()*r(f.detach()).log_softmax(-1)).sum(-1)[eligible].mean();l.backward();assert r.score[-1].weight.grad.abs().sum()>0
+
+
+def test_fresh_validation_excludes_old_and_keeps_training(source):
+    from rampd_core.datasets.split_manifest import replace_validation_manifest
+    root,raw,read,decode,m=source;raw[root/'validation'/'part.tfrecord'] += [b'validation2',b'validation3']
+    q=replace_validation_manifest(m,validation_limit=2,reader=read,decoder=decode)
+    assert [r for r in q['records'] if r['split']=='training']==[r for r in m['records'] if r['split']=='training']
+    assert [r['scenario_id'] for r in q['records'] if r['split']=='validation']==['validation2','validation3']
+    assert len(q['excluded_validation_records'])==2
+    q['records'][0]['scenario_id']='validation0'
+    with pytest.raises(ValueError,match='prior validation'):validate_manifest(q)
+
+
+def test_local_history_cv_anchor_and_shared_scorer(source):
+    b=collate(features(source)[:2]);m=FactualJointModel(d=16,modes=3,neighbors=4,motion_context=True,local_history=True,anchor_cv=True,trajectory_modes=True)
+    pred=m(b['inputs'],b['candidate']);assert torch.allclose(pred['xy'][:,0],b['cv'],atol=2e-4)
+    assert torch.isfinite(pred['xy']).all() and torch.isfinite(pred['logits']).all()
+    loss=joint_nll(pred,b['target'],b['valid'],family='radial_laplace');loss.backward();assert m.trajectory_score[-1].weight.grad is not None and m.encoder.pose.weight.grad is not None
+    with pytest.raises(ValueError):FactualJointModel(modes=1,anchor_cv=True)
+
+
+def test_mode_scorer_permutation_equivariant(source):
+    b=collate(features(source)[:2]);m=FactualJointModel(d=16,modes=3,neighbors=4,motion_context=True,local_history=True,trajectory_modes=True);m.eval()
+    order=[2,0,1]
+    with torch.no_grad():
+        p=m(b['inputs'],b['candidate']);m.mode.copy_(m.mode[order]);q=m(b['inputs'],b['candidate'])
+    assert torch.allclose(p['xy'][:,order],q['xy'],atol=1e-6) and torch.allclose(p['logits'][:,order],q['logits'],atol=1e-6)
+
+
+def test_weak_motion_proxies_masks_and_no_future_inputs(source):
+    from rampd_core.learning.masked_losses import weak_motion_targets,weak_motion_bce
+    from rampd_core.learning.rea_encoder import motion_state_features
+    b=collate(features(source)[:2]);i=b['inputs'];x=motion_state_features(i);assert x.shape[-1]==19
+    target=torch.zeros(2,3,6,2);valid=torch.ones(2,3,6,dtype=torch.bool);valid[:,0]=False;valid[0,1,-1]=False
+    i=dict(i,dt=torch.arange(1,7).float()[None].expand(2,6)/10)
+    y,m=weak_motion_targets(i,target,valid);assert not m[:,0].any() and not m[0,1].any();y2,m2=weak_motion_targets(i,target+10,valid);assert torch.equal(x,motion_state_features(i)) and torch.equal(m,m2)
+    logits=torch.zeros_like(y,dtype=torch.float32,requires_grad=True);l=weak_motion_bce(logits,y,m);assert l is not None;l.backward();assert logits.grad[~m].abs().sum()==0
+
+
+def test_damped_ca_and_motion_ranker(source):
+    from rampd_core.learning.rea_encoder import damped_acceleration_baseline,historical_acceleration_baseline
+    from rampd_core.learning.mode_ranking import ranking_inputs,SceneRanker,MOTION_FEATURE_DIM
+    b=collate(features(source)[:2]);i=b['inputs'];p=damped_acceleration_baseline(i);ca=historical_acceleration_baseline(i)
+    assert torch.all((p-b['cv']).norm(dim=-1)<=(ca-b['cv']).norm(dim=-1)+1e-5)
+    m=FactualJointModel(d=16,modes=3);r=m(i,b['candidate']);f,xy=ranking_inputs(r,i,motion=True);assert f.shape[-1]==MOTION_FEATURE_DIM and torch.isfinite(f).all();assert SceneRanker(MOTION_FEATURE_DIM)(f).shape==(2,4)

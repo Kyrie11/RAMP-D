@@ -4,9 +4,9 @@ import argparse,json,sys
 from pathlib import Path
 from itertools import islice
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'python'))
-from rampd_core.datasets.incident_response import from_record,from_feature_and_proposal,paired,audit_pair
+from rampd_core.datasets.incident_response import from_record,from_feature_and_proposal,paired,audit_pair,reaction_evidence,reconfigure_projected_pair
 from rampd_core.datasets.split_manifest import stream_records
-from rampd_core.datasets.incident_scenarios import CLOCK_PROFILES
+from rampd_core.datasets.incident_scenarios import CLOCK_PROFILES,resource_applicability
 
 def plot_pair(pair,path):
     import matplotlib
@@ -51,10 +51,14 @@ def plot_route_bev(pair,path,record=None):
 
 
 def main():
-    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--manifest');g.add_argument('--inventory');g.add_argument('--cache');p.add_argument('--proposals');p.add_argument('--limit',type=int,default=5);p.add_argument('--steps',type=int,default=60);p.add_argument('--plots',action='store_true');p.add_argument('--extend-route',action='store_true',help='unique map successor chain, raw records only');p.add_argument('--output',required=True);p.add_argument('--clock-profile',choices=tuple(CLOCK_PROFILES),default='nominal');a=p.parse_args()
+    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--manifest');g.add_argument('--inventory');g.add_argument('--cache');g.add_argument('--pair-input',help='audited existing pairs; reconfigure declared subscene, not raw replay');p.add_argument('--proposals');p.add_argument('--limit',type=int,default=5);p.add_argument('--steps',type=int,default=60);p.add_argument('--plots',action='store_true');p.add_argument('--extend-route',action='store_true',help='unique map successor chain, raw records only');p.add_argument('--output',required=True);p.add_argument('--clock-profile',choices=tuple(CLOCK_PROFILES),default='nominal');p.add_argument('--prepend-route',action='store_true');p.add_argument('--recipient-policy',choices=('all_current_nearest','projected_nearest'),default='all_current_nearest');p.add_argument('--visual-range',type=float);p.add_argument('--reaction-delay');p.add_argument('--physical-on');p.add_argument('--physical-off');a=p.parse_args()
     if not 1<=a.limit<=100 or not 1<=a.steps<=200:p.error('bounded pilot only')
     if bool(a.cache)!=bool(a.proposals):p.error('--cache and --proposals must be supplied together')
     if a.cache and a.clock_profile!='nominal':p.error('cached mode uses bound proposal clock, not overrides')
+    if a.cache and (a.recipient_policy!='all_current_nearest' or a.prepend_route):p.error('cached proposal roster cannot be reassigned')
+    if a.pair_input and (a.extend_route or a.prepend_route or a.clock_profile!='nominal'):p.error('existing pairs preserve topology and clock profile')
+    if (a.physical_on is None)!=(a.physical_off is None) or (a.physical_on is not None and a.visual_range is None):p.error('physical window requires both times and visual proxy')
+    if a.prepend_route and not a.extend_route:p.error('prepend requires extend-route')
     if a.cache and a.extend_route:p.error('--extend-route requires raw map topology')
     if a.cache:
         from rampd_core.datasets.factual_dataset import load_cache
@@ -64,18 +68,28 @@ def main():
         def construct(p):
             if p['family_id'] not in rows:raise ValueError('proposal not in cache')
             row=rows[p['family_id']];collate([row]);return from_feature_and_proposal(row,p)
+    elif a.pair_input:
+        records=((p['spec']['family_id'],p) for p in map(json.loads,Path(a.pair_input).read_text().splitlines()))
+        construct=lambda p:reconfigure_projected_pair(p,recipient_policy='projected_nearest' if a.recipient_policy=='projected_nearest' else 'preserve')
     else:
         raw=stream_records(json.loads(Path(a.manifest).read_text())) if a.manifest else iter(json.loads(Path(a.inventory).read_text())['records'])
-        records=((r['scene']['manifest']['scenario_id'],r) for r in raw);construct=lambda r:from_record(r,extend_route=a.extend_route,clock_profile=a.clock_profile)
+        records=((r['scene']['manifest']['scenario_id'],r) for r in raw);construct=lambda r:from_record(r,extend_route=a.extend_route,clock_profile=a.clock_profile,prepend_route=a.prepend_route,recipient_policy=a.recipient_policy)
     out=Path(a.output);out.mkdir(parents=True,exist_ok=False);ok=[];bad=[]
     with (out/'pairs.jsonl').open('w') as f:
         for sid,record in islice(records,a.limit):
-            try:r=paired(construct(record),steps=a.steps)
+            try:
+                spec=construct(record)
+                if a.reaction_delay is not None:spec['reaction_delay_s']=a.reaction_delay
+                if a.visual_range is not None:
+                    # Explicit scenario assumption: visibility interval coincides with
+                    # legal effectivity in THIS experiment, not a physical ACK.
+                    spec['observation_model']=dict(physical_on=a.physical_on or spec['closure']['effective_on'],physical_off=a.physical_off or spec['closure']['effective_off'],range_m=a.visual_range)
+                r=paired(spec,steps=a.steps)
             except ValueError as exc:bad.append(dict(scenario_id=sid,reason=str(exc)));continue
-            r['trace_audit']=audit_pair(r)
+            r['trace_audit']=audit_pair(r);r['reaction_evidence']=reaction_evidence(r);r['resource_applicability']=resource_applicability(r['spec'])
             if not r['trace_audit']['ok']:bad.append(dict(scenario_id=sid,reason='trace consistency failed',errors=r['trace_audit']['errors']));continue
             if a.plots:
                 plot_pair(r,out/(sid+'.png'));plot_route_bev(r,out/(sid+'_bev.png'),record if not a.cache else None)
-            f.write(json.dumps(r,allow_nan=False)+'\n');ok.append(dict(family_id=r['spec']['family_id'],actors=len(r['spec']['vehicles']),excluded=len(r['spec']['excluded_current']),aa_equal=r['aa_equal'],trace_audit=r['trace_audit'],ego_intervention=r['ego_intervention'],rule_intervention=r['rule_intervention'],alternative_response=r['alternative_response'],runs={k:dict(stop=v['stop'],violations=len(v['violations'])) for k,v in r['runs'].items()}))
+            f.write(json.dumps(r,allow_nan=False)+'\n');ok.append(dict(family_id=r['spec']['family_id'],actors=len(r['spec']['vehicles']),excluded=len(r['spec']['excluded_current']),aa_equal=r['aa_equal'],resource_applicability=r['resource_applicability'],trace_audit=r['trace_audit'],ego_intervention=r['ego_intervention'],rule_intervention=r['rule_intervention'],alternative_response=r['alternative_response'],runs={k:dict(stop=v['stop'],violations=len(v['violations'])) for k,v in r['runs'].items()}))
     (out/'summary.json').write_text(json.dumps(dict(accepted=ok,rejected=bad,formal_sc=False,training_allowed=False),indent=2)+'\n');print('accepted',len(ok),'rejected',len(bad));return 0 if ok else 4
 if __name__=='__main__':raise SystemExit(main())

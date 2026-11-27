@@ -68,3 +68,39 @@ def test_scoped_projected_labels_never_authorize():
 def test_task_stop_time_distinguishes_unknown():
     from rampd_core.task_wait_metrics import task_stop_metrics
     r=task_stop_metrics([dict(t0=0,t1=.5,pending=True,speed_mps=.0,resource_status='BLOCKED'),dict(t0=.5,t1=1.5,pending=True,speed_mps=.1,resource_status='UNKNOWN'),dict(t0=1.5,t1=2,pending=True,speed_mps=0.,resource_status='AVAILABLE'),dict(t0=2,t1=3,pending=False,speed_mps=0.,resource_status='AVAILABLE')]);assert r['task_stop_s']==2 and r['blocked_stop_s']==.5 and r['available_stop_s']==.5 and r['unknown_resource_stop_s']==1
+
+
+def test_sensor_and_reaction_delay_no_hidden_control_update():
+    from rampd_core.datasets.incident_response import audit_pair,reaction_evidence
+    s=spec();s['receipts']={i:None for i in s['receipts']};s['observation_model']=dict(physical_on='.8',physical_off='4',range_m=25.);s['reaction_delay_s']='.3'
+    p=paired(s);assert audit_pair(p)['ok'];a=p['runs']['A'];n=p['runs']['NO_EVENT'];d=reaction_evidence(p)['A']['e'];assert d['message_available_at_tick'] is None and Q(d['first_local_positive_tick'])==Q('.8');assert Q(d['first_control_difference_vs_no_event_tick'])>=Q('1.1')
+    for f,g in zip(a['frames'],n['frames']):
+        if Q(f['t'])<=Q('1.1'):assert f['state']==g['state']
+    q=copy.deepcopy(p);q['runs']['A']['frames'][1]['public']['e']['local_blocked']=True;assert not audit_pair(q)['ok']
+
+
+def test_absent_event_not_right_censored_onset():
+    from rampd_core.datasets.projected_labels import export_pair
+    p=paired(spec());n=next(r for r in export_pair(p) if r['run']=='NO_EVENT');assert not n['declared_event']['onset']['known'] and n['declared_event']['onset']['kind']=='UNKNOWN'
+
+
+def test_route_prepend_and_scope_geometry():
+    from rampd_core.datasets.incident_scenarios import extend_unique_route,resource_applicability
+    def lane(i,a,b,pre,succ):return dict(feature_id=i,kind='lane',vertices=[dict(x=a,y=0.),dict(x=b,y=0.)],predecessors=pre,successors=succ,attributes={'lane_type':'2'})
+    r={'scene':{'map_context':{'primitives':[lane('p',-20,0,[],['a']),lane('a',0,20,['p'],['b']),lane('b',20,40,['a'],[])]}}}
+    q=extend_unique_route(r,dict(lane_id='a',centerline=[[0,0],[20,0]],ego_arc_m=5.),prepend=True);assert q['centerline_length_m']==60 and q['ego_arc_m']==25 and [v['lane_id'] for v in q['route_segments']]==['p','a','b']
+    a=resource_applicability(dict(lane=q,closure={'start':27,'end':35}));assert a['centerline_straight_closure_candidate'] and not a['physical_resource_verified']
+
+
+def test_projected_2d_labels_scope():
+    pytest.importorskip('shapely')
+    from rampd_core.datasets.projected_labels import sampled_projected_2d
+    s=spec();s['lane']['centerline']=[[0,0],[120,0]];p=paired(s);g=sampled_projected_2d(p,{'e':1.9,'f':1.9,'l':1.9});assert g['counts']['interior']>0 and g['counts']['separated']>0 and g['counts']['disagreement']==0 and not g['training_allowed']
+    with pytest.raises(ValueError):sampled_projected_2d(p,{'e':1.9})
+
+
+def test_entry_time_value_replayed():
+    from rampd_core.datasets.incident_response import audit_pair
+    s=spec();s['receipts']={i:None for i in s['receipts']};p=paired(s);assert audit_pair(p)['ok']
+    q=copy.deepcopy(p);v=next(x for x in q['runs']['A']['violations'] if x['kind']=='CLOSED_ENTRY');v['entry_time_s']+=.05
+    assert not audit_pair(q)['ok']

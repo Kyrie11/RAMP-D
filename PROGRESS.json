@@ -696,6 +696,20 @@
     "uploaded_checkpoint_replay": 2,
     "version": "1.0.0.dev0"
   },
+  "phase7ab_motion_response": {
+    "active_heads": [
+      "joint"
+    ],
+    "formal_sc": false,
+    "local_specialized_tests": 76,
+    "local_training_replays": 6,
+    "new_pair_audits": 70,
+    "new_validation_raw_server_pending": true,
+    "old_checkpoint_replays": 6,
+    "old_pair_audits": 115,
+    "physical_resource_verified": false,
+    "status": "LOCAL_DIAGNOSTIC_PASS_NOT_NATIVE_OR_FULL_WORLD"
+  },
   "release": "0.9.22",
   "requires_carla": false,
   "requires_dataset": false,
