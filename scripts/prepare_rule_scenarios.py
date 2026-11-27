@@ -4,7 +4,7 @@ import argparse,json,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'python'))
 from rampd_core.datasets.split_manifest import stream_records
-from rampd_core.datasets.incident_scenarios import propose
+from rampd_core.datasets.incident_scenarios import propose,CLOCK_PROFILES
 
 def draw(record,row,path):
     import matplotlib
@@ -24,13 +24,13 @@ def draw(record,row,path):
     ax.scatter([0],[0],c='blue',s=40,label='Ego at cutoff');ax.set(xlim=(-60,60),ylim=(-60,60),aspect='equal',xlabel='World X offset (m)',ylabel='World Y offset (m)',title=f"{m['scenario_id']} | geometry proposal only");ax.legend(loc='upper right',fontsize=7);fig.tight_layout();fig.savefig(path,dpi=130);plt.close(fig)
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--manifest',required=True);p.add_argument('--output',required=True);p.add_argument('--limit',type=int,default=5);p.add_argument('--plots',action='store_true');p.add_argument('--split',choices=('training','validation','all'),default='all');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--manifest',required=True);p.add_argument('--output',required=True);p.add_argument('--limit',type=int,default=5);p.add_argument('--plots',action='store_true');p.add_argument('--split',choices=('training','validation','all'),default='all');p.add_argument('--clock-profile',choices=tuple(CLOCK_PROFILES),default='nominal');a=p.parse_args()
     if not 1<=a.limit<=20:p.error('limit 1..20')
     from itertools import islice
     out=Path(a.output);out.mkdir(parents=True,exist_ok=False); rows=[]; rejected=[]
     records=stream_records(json.loads(Path(a.manifest).read_text()))
     for record in islice((r for r in records if a.split=='all' or r['scene']['manifest']['split']==a.split),a.limit):
-        try: row=propose(record)
+        try: row=propose(record,clock_profile=a.clock_profile)
         except ValueError as e: rejected.append({'scenario_id':record['scene']['manifest']['scenario_id'],'reason':str(e)});continue
         rows.append(row)
         if a.plots: draw(record,row,out/(row['family_id']+'.png'))

@@ -45,3 +45,26 @@ def test_cached_proposal_binding_before_geometry():
     from rampd_core.datasets.split_manifest import canonical_digest
     e=dict(scenario_id='a',record_sha256='0'*64,lane_id='10');lane={'lane_id':'10'};d=[];p=dict(binding={'event':e},lane_proposal=lane,deliveries=d,scenario_spec_sha256=canonical_digest(dict(event=e,deliveries=d,lane=lane)),family_id='a',source_digest='0'*64,split='training',ego_id='e',decision_time='1')
     with pytest.raises(ValueError,match='identity'):from_feature_and_proposal({'scenario_id':'wrong'},p)
+
+
+def test_unique_route_stops_at_branch_and_no_extrapolation():
+    from rampd_core.datasets.incident_scenarios import extend_unique_route
+    def lane(i,x,y,prev,succ):return dict(kind='lane',feature_id=i,vertices=[dict(x=x,y=0),dict(x=y,y=0)],predecessors=prev,successors=succ,attributes={'lane_type':'2'})
+    r=dict(scene=dict(map_context=dict(primitives=[lane('a',0,20,[],['b']),lane('b',20,50,['a'],['c','d']),lane('c',50,70,['b'],[]),lane('d',50,80,['b'],[])])))
+    q=extend_unique_route(r,dict(lane_id='a',centerline=[[0,0],[20,0]]));assert q['centerline_length_m']==50 and q['route_stop']=='BRANCH_OR_NO_SUCCESSOR';assert [x['lane_id'] for x in q['route_segments']]==['a','b']
+    r['scene']['map_context']['primitives'][1]['vertices'][0]['x']=21;q=extend_unique_route(r,dict(lane_id='a',centerline=[[0,0],[20,0]]));assert q['centerline_length_m']==20 and q['route_stop']=='GEOMETRIC_JOIN_REJECTED'
+
+
+def test_trace_ledger_and_delta_mutations():
+    from rampd_core.datasets.incident_response import audit_pair
+    s=spec();s['receipts']={k:None for k in s['receipts']};p=paired(s);assert audit_pair(p)['ok'];q=copy.deepcopy(p);q['runs']['B']['violations']=[];assert not audit_pair(q)['ok'];q=copy.deepcopy(p);q['ego_intervention']['other_m']+=1;assert not audit_pair(q)['ok'];q=copy.deepcopy(p);q['runs']['B']['stop']='MODEL_ROUTE_END';assert not audit_pair(q)['ok']
+
+
+def test_scoped_projected_labels_never_authorize():
+    from rampd_core.datasets.projected_labels import export_pair
+    p=paired(spec());rows=export_pair(p);assert len(rows)==6 and all(not r['training_allowed'] and not any(r['heads'].values()) for r in rows);assert next(r for r in rows if r['run']=='NO_EVENT')['declared_event']['exists'] is False;assert all(r['physical_execution'] is None for r in rows)
+
+
+def test_task_stop_time_distinguishes_unknown():
+    from rampd_core.task_wait_metrics import task_stop_metrics
+    r=task_stop_metrics([dict(t0=0,t1=.5,pending=True,speed_mps=.0,resource_status='BLOCKED'),dict(t0=.5,t1=1.5,pending=True,speed_mps=.1,resource_status='UNKNOWN'),dict(t0=1.5,t1=2,pending=True,speed_mps=0.,resource_status='AVAILABLE'),dict(t0=2,t1=3,pending=False,speed_mps=0.,resource_status='AVAILABLE')]);assert r['task_stop_s']==2 and r['blocked_stop_s']==.5 and r['available_stop_s']==.5 and r['unknown_resource_stop_s']==1

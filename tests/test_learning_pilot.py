@@ -249,3 +249,45 @@ def test_radial_selection_uses_radial_likelihood(source):
 def test_joint_unlabelled_scene_logits_not_used():
     y=torch.zeros(2,1,1,2);v=torch.tensor([[[True]],[[False]]]);xy=torch.zeros(2,1,1,1,2,requires_grad=True);logits=torch.tensor([[0.],[float('nan')]],requires_grad=True)
     l=joint_nll(dict(logits=logits,xy=xy),y,v);assert l.item()==pytest.approx(math.log(2*math.pi));l.backward();assert logits.grad[1,0]==0 and xy.grad[1].abs().sum()==0
+
+
+def test_motion_context_and_query_isolation(source):
+    from rampd_core.learning.rea_encoder import motion_features,historical_acceleration_baseline
+    b=collate(features(source)[:2]);i=b['inputs'];m=FactualJointModel(d=16,modes=3,neighbors=4,motion_context=True,soft_gate=True,query_modes=True)
+    z=motion_features(i['history'],i['actor_mask']);assert z.shape[-1]==11 and torch.isfinite(z).all()
+    enc=m.encode_scene(i);p=m.decode_candidate(i,enc,b['candidate']);q=m.decode_candidate(i,enc,b['candidate']+1)
+    assert torch.equal(enc,m.encode_scene(i));assert not torch.equal(p['logits'],q['logits']);assert not torch.equal(p['xy'],q['xy'])
+    assert historical_acceleration_baseline(i).shape==b['cv'].shape
+    l=joint_nll(p,b['target'],b['valid']);l.backward();assert m.gate.weight.grad is not None and m.query_logits[-1].weight.grad is not None
+
+
+def test_motion_context_cv_init_and_gradient(source):
+    fs=features(source);tr=[dict(f,training_allowed=True) for f in fs if f['split']=='training'];va=[dict(f,training_allowed=False) for f in fs if f['split']=='validation'];_,r=fit(tr,va,epochs=1,d=16,modes=3,neighbors=4,motion_context=True,soft_gate=True,query_modes=True)
+    assert r['history'][0]['validation']['top1_ADE_m']==pytest.approx(r['history'][0]['validation']['cv_ADE_m'],abs=1e-7)
+
+
+def test_geometric_ties_not_class_accuracy():
+    from rampd_core.learning.masked_losses import mode_diagnostics
+    y=torch.zeros(1,1,1,2);v=torch.ones(1,1,1,dtype=torch.bool);p=dict(logits=torch.tensor([[0.,2.,1.]]),xy=torch.zeros(1,3,1,1,2));r=mode_diagnostics(p,y,v)[0]
+    assert r['geometric_ties']==[0,1,2] and not r['geometric_rank_informative'] and r['geometric_top_in_ties']
+    p['xy'][0,1,0,0,0]=2.;r=mode_diagnostics(p,y,v,family='radial_laplace')[0];assert r['likelihood_oracle']==0 and r['top1_oracle_ADE_gap_m']==2.
+
+
+def test_distinct_planned_actual_messages(source):
+    from rampd_core.datasets.rule_overlay import ScheduledDelivery
+    e,_=overlay(source,receipt=None,announce_window=True,planned_on='.15',planned_off='3',effective_on='.9')
+    d=ScheduledDelivery('a','.16','.2');m=d.public_view(e,'.3')['received_messages'][0];assert m['announced_window']==['.15','3'];assert not e.teacher_active('.3');assert '.9' not in str(m)
+
+
+def test_discrete_clock_support_and_event_gradients():
+    from rampd_core.datasets.rule_overlay import clock_bin_target
+    from rampd_core.learning.event_loss import event_clock_nll
+    es=['0','.5','1','2'];a=clock_bin_target(es,kind='EXACT',value='.5');b=clock_bin_target(es,kind='RIGHT_CENSORED',value='.75');c=clock_bin_target(es,kind='UNKNOWN')
+    assert a['allowed']==[False,True,False,False];assert b['allowed']==[False,True,True,True] and b['coarsened'];assert not c['known']
+    x=torch.zeros(3,4,requires_grad=True);loss=event_clock_nll(x,torch.tensor([r['allowed'] for r in [a,b,c]]),torch.tensor([r['known'] for r in [a,b,c]]));loss.backward();assert x.grad[2].abs().sum()==0 and x.grad[0].abs().sum()>0
+
+
+def test_scene_ranker_geometry_only_no_actor_switch(source):
+    from rampd_core.learning.mode_ranking import ranking_inputs,geometric_teacher,SceneRanker
+    b=collate(features(source)[:2]);m=FactualJointModel(d=16,modes=3,neighbors=4);p=m(b['inputs'],b['candidate']);f,xy=ranking_inputs(p,b['inputs']);assert f.shape==(2,4,11) and torch.isfinite(f).all();assert torch.allclose(xy[:,-1],b['cv'],atol=2e-4)
+    q,eligible,ade=geometric_teacher(xy,b['target'],b['valid']);q2,_,_=geometric_teacher(xy,b['target']+10,b['valid']);assert not torch.equal(q,q2);assert torch.equal(f,ranking_inputs(p,b['inputs'])[0]);r=SceneRanker();l=-(q.detach()*r(f.detach()).log_softmax(-1)).sum(-1)[eligible].mean();l.backward();assert r.score[-1].weight.grad.abs().sum()>0

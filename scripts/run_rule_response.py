@@ -6,6 +6,7 @@ from itertools import islice
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'python'))
 from rampd_core.datasets.incident_response import from_record,from_feature_and_proposal,paired,audit_pair
 from rampd_core.datasets.split_manifest import stream_records
+from rampd_core.datasets.incident_scenarios import CLOCK_PROFILES
 
 def plot_pair(pair,path):
     import matplotlib
@@ -29,10 +30,32 @@ def plot_pair(pair,path):
     ax.set(xlabel='Relative decision time (s)',ylabel='Projected center arc (m)',title=spec['family_id']+' | model diagnostic, not real trajectory')
     ax.legend(fontsize=8);fig.tight_layout();fig.savefig(path,dpi=140);plt.close(fig)
 
+def plot_route_bev(pair,path,record=None):
+    """Actual mapped centerline and projected scope. Not a lane polygon."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import numpy as np
+    spec=pair['spec'];lane=spec['lane'];line=np.asarray(lane['centerline'],float);arc=np.r_[0.,np.cumsum(np.linalg.norm(np.diff(line,axis=0),axis=1))];c=spec['closure'];fig,ax=plt.subplots(figsize=(9,6))
+    if record is not None and 'scene' in record:
+        for f in record['scene']['map_context']['primitives']:
+            if f['kind'] in ('lane','road_line','road_edge') and f['vertices']:
+                ax.plot([v['x'] for v in f['vertices']],[v['y'] for v in f['vertices']],color='0.83',lw=.6)
+        k=record['scene']['manifest']['current_time_index'];excluded={x[0] for x in spec['excluded_current']};points=[a['states'][k] for a in record['scene']['tracks'] if str(a['track_id']) in excluded and a['states'][k]['valid']]
+        if points:ax.scatter([x['x'] for x in points],[x['y'] for x in points],c='0.5',s=12,label='Excluded current actors')
+    ax.plot(line[:,0],line[:,1],color='tab:blue',lw=2,label='Mapped route centerline')
+    q=np.linspace(c['start'],c['end'],60);ax.plot(np.interp(q,arc,line[:,0]),np.interp(q,arc,line[:,1]),color='tab:orange',lw=5,label='Declared closure arc (not polygon)')
+    for a in spec['vehicles']:
+        z=a['s'];x,y=np.interp(z,arc,line[:,0]),np.interp(z,arc,line[:,1]);ax.scatter([x],[y],c='tab:green' if a['id']==spec['ego_id'] else 'tab:red',s=30);ax.annotate(a['id'],(x,y),fontsize=8)
+    ax.set(xlim=(line[:,0].min()-15,line[:,0].max()+15),ylim=(line[:,1].min()-15,line[:,1].max()+15),aspect='equal',xlabel='World X (m)',ylabel='World Y (m)',title=spec['family_id']+' | projected model only');ax.legend(fontsize=8);fig.tight_layout();fig.savefig(path,dpi=140);plt.close(fig)
+
+
 def main():
-    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--manifest');g.add_argument('--inventory');g.add_argument('--cache');p.add_argument('--proposals');p.add_argument('--limit',type=int,default=5);p.add_argument('--steps',type=int,default=60);p.add_argument('--plots',action='store_true');p.add_argument('--output',required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--manifest');g.add_argument('--inventory');g.add_argument('--cache');p.add_argument('--proposals');p.add_argument('--limit',type=int,default=5);p.add_argument('--steps',type=int,default=60);p.add_argument('--plots',action='store_true');p.add_argument('--extend-route',action='store_true',help='unique map successor chain, raw records only');p.add_argument('--output',required=True);p.add_argument('--clock-profile',choices=tuple(CLOCK_PROFILES),default='nominal');a=p.parse_args()
     if not 1<=a.limit<=100 or not 1<=a.steps<=200:p.error('bounded pilot only')
     if bool(a.cache)!=bool(a.proposals):p.error('--cache and --proposals must be supplied together')
+    if a.cache and a.clock_profile!='nominal':p.error('cached mode uses bound proposal clock, not overrides')
+    if a.cache and a.extend_route:p.error('--extend-route requires raw map topology')
     if a.cache:
         from rampd_core.datasets.factual_dataset import load_cache
         from rampd_core.datasets.collate import collate
@@ -43,7 +66,7 @@ def main():
             row=rows[p['family_id']];collate([row]);return from_feature_and_proposal(row,p)
     else:
         raw=stream_records(json.loads(Path(a.manifest).read_text())) if a.manifest else iter(json.loads(Path(a.inventory).read_text())['records'])
-        records=((r['scene']['manifest']['scenario_id'],r) for r in raw);construct=from_record
+        records=((r['scene']['manifest']['scenario_id'],r) for r in raw);construct=lambda r:from_record(r,extend_route=a.extend_route,clock_profile=a.clock_profile)
     out=Path(a.output);out.mkdir(parents=True,exist_ok=False);ok=[];bad=[]
     with (out/'pairs.jsonl').open('w') as f:
         for sid,record in islice(records,a.limit):
@@ -51,7 +74,8 @@ def main():
             except ValueError as exc:bad.append(dict(scenario_id=sid,reason=str(exc)));continue
             r['trace_audit']=audit_pair(r)
             if not r['trace_audit']['ok']:bad.append(dict(scenario_id=sid,reason='trace consistency failed',errors=r['trace_audit']['errors']));continue
-            if a.plots:plot_pair(r,out/(sid+'.png'))
+            if a.plots:
+                plot_pair(r,out/(sid+'.png'));plot_route_bev(r,out/(sid+'_bev.png'),record if not a.cache else None)
             f.write(json.dumps(r,allow_nan=False)+'\n');ok.append(dict(family_id=r['spec']['family_id'],actors=len(r['spec']['vehicles']),excluded=len(r['spec']['excluded_current']),aa_equal=r['aa_equal'],trace_audit=r['trace_audit'],ego_intervention=r['ego_intervention'],rule_intervention=r['rule_intervention'],alternative_response=r['alternative_response'],runs={k:dict(stop=v['stop'],violations=len(v['violations'])) for k,v in r['runs'].items()}))
     (out/'summary.json').write_text(json.dumps(dict(accepted=ok,rejected=bad,formal_sc=False,training_allowed=False),indent=2)+'\n');print('accepted',len(ok),'rejected',len(bad));return 0 if ok else 4
 if __name__=='__main__':raise SystemExit(main())

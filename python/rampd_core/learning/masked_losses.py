@@ -35,14 +35,20 @@ def metric_sums(pred,target,valid,cv):
 
 
 @torch.no_grad()
-def mode_diagnostics(pred,target,valid):
-    """Per eligible scene, actual mode spread and Gaussian posterior responsibilities."""
+def mode_diagnostics(pred,target,valid,*,family='gaussian',sigma=1.,tie_m=1e-5):
+    """Scene-shared rankings; responsibilities refer to the declared density only.
+    Near-tied geometric modes do not constitute a correct/incorrect class label.
+    """
+    if family not in ('gaussian','radial_laplace') or sigma<=0:raise ValueError('mode density')
     mask=valid[:,None,:,:,None]; y=torch.where(valid[...,None],target,0.)
     xy=torch.where(mask,pred['xy'],0.); n=valid.sum((1,2)); out=[]
     for b in range(len(n)):
         if not n[b]: continue
-        err=(xy[b]-y[b,None]).square().sum((1,2,3))
-        prior=pred['logits'][b].softmax(-1); posterior=(pred['logits'][b].log_softmax(-1)-err/2).softmax(-1)
+        e=(xy[b]-y[b,None]).norm(dim=-1); sq=e.square().sum((1,2)); ade=e.sum((1,2))/n[b]
+        energy=sq/(2*sigma*sigma) if family=='gaussian' else e.sum((1,2))/sigma
+        prior=pred['logits'][b].softmax(-1); posterior=(pred['logits'][b].log_softmax(-1)-energy).softmax(-1)
         spread=[float((xy[b,i]-xy[b,j]).norm(dim=-1).sum()/n[b]) for i in range(len(prior)) for j in range(i)]
-        out.append(dict(prior=prior.tolist(),posterior=posterior.tolist(),top=int(prior.argmax()),oracle=int(err.argmin()),pairwise_mean_m=sum(spread)/len(spread) if spread else 0.,valid_knots=int(n[b])))
+        top=int(prior.argmax()); ties=(ade<=ade.min()+tie_m).nonzero().flatten().tolist()
+        ent=lambda q:float(-(q*q.clamp_min(1e-30).log()).sum())
+        out.append(dict(prior=prior.tolist(),posterior=posterior.tolist(),top=top,oracle=int(sq.argmin()),pairwise_mean_m=sum(spread)/len(spread) if spread else 0.,valid_knots=int(n[b]),density_family=family,likelihood_oracle=int(energy.argmin()),geometric_oracle=int(ade.argmin()),geometric_ties=ties,geometric_top_in_ties=top in ties,geometric_rank_informative=len(ties)==1 and len(prior)>1,top1_oracle_ADE_gap_m=float(ade[top]-ade.min()),prior_entropy=ent(prior),posterior_entropy=ent(posterior),prior_posterior_brier_proxy=float((prior-posterior).square().sum())))
     return out

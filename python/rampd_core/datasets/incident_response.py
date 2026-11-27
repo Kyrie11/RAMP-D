@@ -7,7 +7,7 @@ from fractions import Fraction as Q
 from itertools import combinations
 import math
 import numpy as np
-from .incident_scenarios import lane_proposal
+from .incident_scenarios import lane_proposal, extend_unique_route, CLOCK_PROFILES
 from .split_manifest import canonical_digest
 
 @dataclass(frozen=True)
@@ -63,14 +63,23 @@ def _projected_spec(meta, lane, current, eid):
     closure=Closure(start,start+8.)
     others=sorted((a for a in vehicles if a.id!=eid),key=lambda a:(abs(a.s-e.s),a.id))
     receipts={eid:'1.2'}; receipts.update({a.id:('0.5' if j%2==0 else None) for j,a in enumerate(others)})
-    return dict(**meta,ego_id=eid,lane=lane,vehicles=[asdict(a) for a in vehicles],excluded_current=excluded,receipts=receipts,closure=asdict(closure))
+    scope_lanes=[x['lane_id'] for x in lane.get('route_segments',[dict(lane_id=lane['lane_id'],start_m=0.,end_m=L)]) if x['end_m']>=start and x['start_m']<=start+8.]
+    return dict(**meta,ego_id=eid,lane=lane,vehicles=[asdict(a) for a in vehicles],excluded_current=excluded,receipts=receipts,closure=asdict(closure),closure_lane_ids=scope_lanes)
 
 
-def from_record(record):
+def from_record(record, *, extend_route=False, clock_profile="nominal"):
     """Restrictive 1-D projection, never a lane-membership or resource proof."""
-    s=record['scene']; m=s['manifest']; k=m['current_time_index']; idx=m['metadata']['source_track_indices'].index(m['metadata']['sdc_track_index']); eid=str(s['tracks'][idx]['track_id']); lane=lane_proposal(record,max_distance=1.25,min_length=25.)
+    s=record['scene']; m=s['manifest']; k=m['current_time_index']; idx=m['metadata']['source_track_indices'].index(m['metadata']['sdc_track_index']); eid=str(s['tracks'][idx]['track_id']); lane=lane_proposal(record,max_distance=1.25,min_length=2. if extend_route else 25.,min_ahead=0. if extend_route else 10.,min_alignment=.9 if extend_route else .7)
+    if extend_route: lane=extend_unique_route(record,lane)
     current=[(str(a['track_id']),a['category'],a['states'][k]) for a in s['tracks'] if a['states'][k]['valid'] is True]
-    return _projected_spec(dict(family_id=m['scenario_id'],split=m['split'],source_digest=record['record_sha256'],cutoff=str(Q(str(m['timestamps'][k]))),scope='WOMD_INITIALIZED_PROJECTED_SUBSCENE_NOT_FULL_WORLD'),lane,current,eid)
+    spec=_projected_spec(dict(family_id=m['scenario_id'],split=m['split'],source_digest=record['record_sha256'],cutoff=str(Q(str(m['timestamps'][k]))),scope='WOMD_INITIALIZED_PROJECTED_SUBSCENE_NOT_FULL_WORLD'),lane,current,eid)
+    if clock_profile not in CLOCK_PROFILES:raise ValueError('unknown clock profile')
+    cp=CLOCK_PROFILES[clock_profile]; c=spec['closure']; c.update({key:cp[key] for key in ('generation','issue','publication','planned_on','planned_off','effective_on','effective_off')});Closure(**c).validate()
+    # Full current recipient roster, independent of projected actor inclusion.
+    ego=next(st for i,_,st in current if i==eid); others=sorted((z for z in current if z[0]!=eid),key=lambda z:(math.hypot(z[2]['x']-ego['x'],z[2]['y']-ego['y']),z[0]))
+    all_rec={eid:cp['ego_receipt']};all_rec.update({a[0]:(cp['other_receipt'] if j==0 else None) for j,a in enumerate(others)})
+    spec.update(receipts={v['id']:all_rec[v['id']] for v in spec['vehicles']},all_current_receipts=all_rec,clock_profile=clock_profile,schedule_source='DECLARED_RAW_PROFILE')
+    return spec
 
 
 def from_feature_and_proposal(row, proposal):
@@ -87,7 +96,22 @@ def from_feature_and_proposal(row, proposal):
         px,py,sn,cs,vx,vy,l,w=q[:8]
         current.append((str(aid),'vehicle' if cat[0]==1 else 'other',dict(x=x+c*px-s*py,y=y+s*px+c*py,heading=yaw+math.atan2(sn,cs),vx=c*vx-s*vy,vy=s*vx+c*vy,length=l)))
     meta=dict(family_id=row['scenario_id'],split=row['split'],source_digest=row['source_digest'],cutoff=proposal['decision_time'],scope='CACHE_AND_PROPOSAL_PROJECTED_SUBSCENE_NOT_RAW_REPLAY',source_proposal_digest=digest,cache_actors_dropped=row['stats']['actors_dropped'])
-    return _projected_spec(meta,lane,current,str(row['ego_id']))
+    spec=_projected_spec(meta,lane,current,str(row['ego_id']))
+    # Replay the supplied proposal, not a newly sampled recipient schedule.
+    from .rule_overlay import RuleOverlay,ScheduledDelivery
+    ev=RuleOverlay(**event)
+    if ev.kind!='LANE_CLOSURE' or not ev.announce_window or ev.receipt is not None:raise ValueError('unsupported proposal rule semantics')
+    cutoff=Q(proposal['decision_time']); deliveries=[ScheduledDelivery(**d) for d in proposal['deliveries']]
+    if Q(ev.generation)<cutoff or not deliveries or len({d.recipient for d in deliveries})!=len(deliveries) or len({Q(d.publication) for d in deliveries})!=1:raise ValueError('proposal clock/roster')
+    for d in deliveries:d.validate(ev)
+    rec={d.recipient:None if d.receipt is None else str(Q(d.receipt)-cutoff) for d in deliveries}
+    ids={v['id'] for v in spec['vehicles']}
+    if not set(map(str,row['actor_ids']))<=rec.keys():raise ValueError('proposal missing cached current recipient')
+    if not ids<=rec.keys():raise ValueError('proposal missing projected recipient')
+    rel=lambda t:str(Q(t)-cutoff)
+    cl=Closure(spec['closure']['start'],spec['closure']['end'],rel(ev.generation),rel(ev.issue),rel(deliveries[0].publication),rel(ev.announced_window()[0]),rel(ev.announced_window()[1]),rel(ev.effective_on),rel(ev.effective_off));cl.validate()
+    spec.update(closure=asdict(cl),receipts={i:rec[i] for i in sorted(ids)},schedule_source='BOUND_PROPOSAL',all_current_receipts=rec,unprojected_recipient_count=len(rec)-len(ids))
+    return spec
 
 
 def rollout(spec, *, event=True, ego_brake=False, steps=60, dt='0.1', response='nominal'):
@@ -143,7 +167,7 @@ def rollout(spec, *, event=True, ego_brake=False, steps=60, dt='0.1', response='
         snap=snapshot(tn);snap['controls_from_previous']=controls;snap['entered_since_previous']=sorted(set(snap['occupied'])-current_occ);snap['cleared_since_previous']=sorted(current_occ-set(snap['occupied']));frames.append(snap)
         if any(v['kind']=='SAMPLED_OR_ORDER_CROSSING' and v['t'][-1]==str(tn) for v in violations):stop='MODEL_COLLISION_OR_ORDER_CROSSING';break
         if any(s+l/2>L+1e-8 for s,v,l in state.values()):stop='MODEL_ROUTE_END';break
-    return dict(event=event,ego_brake=ego_brake,response=response,frames=frames,violations=violations,stop=stop,decision_dt=str(h),off_grid_receipt_semantics='AVAILABLE_AT_NEXT_CONTROL_TICK',actual_clock_used_only_in_monitor=True,physical_verified=False,formal_sc=False)
+    return dict(event=event,ego_brake=ego_brake,response=response,frames=frames,violations=violations,stop=stop,decision_dt=str(h),off_grid_receipt_semantics='AVAILABLE_AT_NEXT_CONTROL_TICK',actual_clock_used_only_in_monitor=True,physical_verified=False,formal_sc=False,requested_steps=steps)
 
 
 def paired(spec,steps=60):
@@ -160,8 +184,13 @@ def audit_pair(pair):
     """
     spec=pair['spec']; c=Closure(**spec['closure']);c.validate(); errors=[]; ids={a['id'] for a in spec['vehicles']}; rec=spec['receipts']
     if pair['spec_sha256']!=canonical_digest(spec):errors.append('SPEC_HASH')
+    if 'all_current_receipts' in spec:
+        full=spec['all_current_receipts'];expected=ids|{x[0] for x in spec['excluded_current']}
+        if not expected<=full.keys() or any(rec[i]!=full[i] for i in ids):errors.append('FULL_RECIPIENT_ROSTER')
+        if any(x is not None and Q(x)<Q(c.publication) for x in full.values()):errors.append('RECEIPT_BEFORE_PUBLICATION')
     if set(pair['runs'])!={'A','AA','B','NO_EVENT','CAUTIOUS_A','CAUTIOUS_B'}:return dict(ok=False,errors=['RUN_ROSTER'],scope='TRACE_CONSISTENCY_ONLY')
     for name,run in pair['runs'].items():
+        expected_violations=[]
         expected_event=name!='NO_EVENT';expected_brake=name in ('B','CAUTIOUS_B');expected_response='cautious' if name.startswith('CAUTIOUS') else 'nominal'
         if (run['event'],run['ego_brake'],run['response'])!=(expected_event,expected_brake,expected_response):errors.append(name+':INTERVENTION')
         prev=None; h=Q(run['decision_dt']);frames=run['frames']
@@ -189,8 +218,39 @@ def audit_pair(pair):
                     # Trapezoid on moving duration; independent of integration expression.
                     moving_d=d if ac>=0 or v0+ac*d>=0 else v0/(-ac)
                     if abs(s1-s0-(v0+v_expected)*moving_d/2)>1e-8 or abs(v1-v_expected)>1e-8 or l0!=l1:errors.append(name+':KINEMATIC_REPLAY')
+                # Independently reconstruct entry time by monotone bisection,
+                # rather than the quadratic root used by the simulator.
+                for a in ids:
+                    s0,v0,l0=prev['state'][a];s1,v1,l1=f['state'][a];ac=ctrl[a]
+                    if expected_event and s0+l0/2<c.start<=s1+l1/2:
+                        lo,hi=0.,d
+                        for _ in range(60):
+                            mid=(lo+hi)/2; md=min(mid,v0/(-ac)) if ac<0 else mid
+                            if s0+(v0+max(0.,v0+ac*md))*md/2+l0/2<c.start:lo=mid
+                            else:hi=mid
+                        te=float(t-h)+(lo+hi)/2; on,off=float(Q(c.effective_on)),float(Q(c.effective_off))
+                        kind='ENTRY_CLOCK_BOUNDARY_UNKNOWN' if min(abs(te-on),abs(te-off))<=1e-8 else ('CLOSED_ENTRY' if on<te<off else None)
+                        if kind:expected_violations.append((str(t-h),str(t),kind,a))
+                for u,w in combinations(sorted(ids),2):
+                    su,_,lu=prev['state'][u];sw,_,lw=prev['state'][w];nu=f['state'][u][0];nw=f['state'][w][0]
+                    if abs(nu-nw)<=(lu+lw)/2 or (su-sw)*(nu-nw)<=0:kind='SAMPLED_OR_ORDER_CROSSING'
+                    elif max(su-lu/2,sw-lw/2)<=min(nu+lu/2,nw+lw/2):kind='POSSIBLE_SWEPT_OVERLAP'
+                    else:kind=None
+                    if kind:expected_violations.append((str(t-h),str(t),kind,u,w))
                 if sorted(set(occ)-set(prev['occupied']))!=f['entered_since_previous'] or sorted(set(prev['occupied'])-set(occ))!=f['cleared_since_previous']:errors.append(name+':OCCUPANCY_TRANSITION')
             prev=f
+        ledger=[(*v['t'],v['kind'],*([v['actor']] if 'actor' in v else v['actors'])) for v in run['violations']]
+        if sorted(ledger)!=sorted(expected_violations):errors.append(name+':VIOLATION_LEDGER')
+        L=spec['lane']['centerline_length_m'];last=frames[-1]
+        if any(v[2]=='SAMPLED_OR_ORDER_CROSSING' and v[1]==last['t'] for v in expected_violations):want_stop='MODEL_COLLISION_OR_ORDER_CROSSING'
+        elif any(x+l/2>L+1e-8 for x,v,l in last['state'].values()):want_stop='MODEL_ROUTE_END'
+        else:want_stop='HORIZON'
+        if run['stop']!=want_stop or (want_stop=='HORIZON' and 'requested_steps' in run and len(frames)!=run['requested_steps']+1):errors.append(name+':STOP_REASON')
+    for key,left,right in [('ego_intervention','A','B'),('rule_intervention','NO_EVENT','A'),('alternative_response','CAUTIOUS_A','CAUTIOUS_B')]:
+        frames=list(zip(pair['runs'][left]['frames'],pair['runs'][right]['frames']));eid=spec['ego_id'];delta=pair[key]
+        if not frames:errors.append(key+':NO_COMMON_FRAMES');continue
+        ds={i:max(abs(f['state'][i][0]-g['state'][i][0]) for f,g in frames) for i in ids}
+        if delta['common_frames']!=len(frames) or set(delta['per_actor'])!=ids or any(abs(delta['per_actor'][i]-ds[i])>1e-8 for i in ids) or abs(delta['ego_m']-ds[eid])>1e-8 or abs(delta['other_m']-max((v for i,v in ds.items() if i!=eid),default=0.))>1e-8:errors.append(key+':DELTA')
     a,b,aa=(pair['runs'][k] for k in ('A','B','AA'))
     if a!=aa or pair['aa_equal'] is not True:errors.append('AA_REPRODUCTION')
     for f,g in zip(a['frames'],b['frames']):

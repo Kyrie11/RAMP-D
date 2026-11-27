@@ -71,3 +71,11 @@ See [follow-up scope](docs/PHASE7A_FOLLOWUP.md). Fixed query-grid factual featur
 
 ## Phase7A / 7B response checkpoint
 See `docs/PHASE7A_FOLLOWUP.md`. Optional `--objective radial_laplace`, `--selection ade`, fixed-validation training extension, projected longitudinal rule-response diagnostic (`scripts/run_rule_response.py`). No full-scene CF/physical/SC authorization. Same development version; earlier scripts remain compatible.
+
+## Current Phase7AB motion / rule checkpoint
+
+- [Acceptance and actual evidence](docs/PHASE7AB_MOTION_RULE_ACCEPTANCE.md)
+- [Server runbook](docs/PHASE7AB_MOTION_RULE_RUNBOOK.md)
+- [Optional manuscript evaluation-metric clarifications](docs/metrics_proposed.diff)
+
+Motion-context, residual-gate and query-mode flags are isolated. Formal SC and physical resource labels remain unauthorized.

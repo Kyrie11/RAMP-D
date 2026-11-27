@@ -28,12 +28,19 @@ class RuleOverlay:
     authority: str
     seed: int
     announce_window: bool = False
+    planned_on: str | None = None
+    planned_off: str | None = None
     def __post_init__(self):
         if (not all((self.scenario_id,self.event_id,self.lane_id,self.authority)) or self.kind not in KINDS
             or len(self.record_sha256)!=64 or any(c not in '0123456789abcdef' for c in self.record_sha256)
             or type(self.seed) is not int or type(self.announce_window) is not bool): raise ValueError('invalid event identity')
         g,on,off,i=map(_time,(self.generation,self.effective_on,self.effective_off,self.issue))
         if not g<=on<off or i<g or (self.receipt is not None and _time(self.receipt)<i): raise ValueError('invalid scheduled-rule/message clocks')
+        if (self.planned_on is None)!=(self.planned_off is None):raise ValueError('incomplete planned window')
+        if self.planned_on is not None and not g<=_time(self.planned_on)<_time(self.planned_off):raise ValueError('invalid planned window')
+    def announced_window(self):
+        # Legacy records declare coincidence; new records separate plan and truth.
+        return [self.planned_on,self.planned_off] if self.planned_on is not None else [self.effective_on,self.effective_off]
     def bind(self, record):
         s=record['scene']; m=s['manifest']; mc=s.get('map_context') or {}
         if m['scenario_id']!=self.scenario_id or record['record_sha256']!=self.record_sha256 or mc.get('scenario_id')!=self.scenario_id or mc.get('coordinate_frame')!=m['coordinate_frame']:
@@ -48,7 +55,7 @@ class RuleOverlay:
         # No event identity, timestamps, lane or type before receipt. Silence is not negative evidence.
         if self.receipt is None or _time(self.receipt)>t: return {'received_messages': []}
         msg=dict(event_id=self.event_id,lane_id=self.lane_id,kind=self.kind,authority=self.authority,issue=self.issue,receipt=self.receipt)
-        if self.announce_window: msg['announced_window']=[self.effective_on,self.effective_off]
+        if self.announce_window: msg['announced_window']=self.announced_window()
         return {'received_messages':[msg]}  # actual effectivity not inferred from message
     def teacher_active(self, t):
         return _time(self.effective_on)<=_time(t)<_time(self.effective_off)
@@ -67,7 +74,7 @@ class ScheduledDelivery:
         self.validate(event)
         if self.receipt is None or _time(self.receipt)>_time(cutoff): return {'received_messages': []}
         msg=dict(event_id=event.event_id,lane_id=event.lane_id,kind=event.kind,authority=event.authority,issue=event.issue,publication=self.publication,receipt=self.receipt)
-        if event.announce_window: msg['announced_window']=[event.effective_on,event.effective_off]
+        if event.announce_window: msg['announced_window']=event.announced_window()
         return {'received_messages':[msg]}
 
 
@@ -95,4 +102,26 @@ def replay_scheduled_world(record,event,deliveries,*,query_steps=30):
         rows.append(dict(time=str(t),public_by_recipient={d.recipient:d.public_view(event,t) for d in deliveries},teacher=dict(rule_active=event.teacher_active(t),rule_generated=t>=_time(event.generation),physical_execution='UNKNOWN',response='NOT_RUN')))
     # No event is a separate declared alternative, never a deduction from silence.
     no_event=[dict(time=str(t),public_by_recipient={d.recipient:{'received_messages':[]} for d in deliveries},teacher=dict(rule_active=False,rule_generated=False,physical_execution='UNKNOWN',response='NOT_RUN')) for t in ticks]
-    return dict(schema='rampd.scheduled_rule_replay.v1',binding=binding,decision_time=str(cutoff),split=m['split'],family_id=m['scenario_id'],source_digest=record['record_sha256'],deliveries=[dict(d.__dict__) for d in deliveries],worlds={'EVENT':rows,'NO_EVENT':no_event},teacher_schedule=dict(generation=event.generation,effective_on=event.effective_on,effective_off=event.effective_off,issue=event.issue,publication=deliveries[0].publication,physical_activation=None,physical_clearance=None,first_local_detection=None),scope='DECLARED_SYNTHETIC_SCHEDULE_NOT_SIMULATOR_RESPONSE',event_training_allowed=False,joint_counterfactual_mask=False,formal_sc=False)
+    return dict(schema='rampd.scheduled_rule_replay.v1',binding=binding,decision_time=str(cutoff),split=m['split'],family_id=m['scenario_id'],source_digest=record['record_sha256'],deliveries=[dict(d.__dict__) for d in deliveries],worlds={'EVENT':rows,'NO_EVENT':no_event},teacher_schedule=dict(generation=event.generation,planned_on=event.announced_window()[0],planned_off=event.announced_window()[1],effective_on=event.effective_on,effective_off=event.effective_off,issue=event.issue,publication=deliveries[0].publication,physical_activation=None,physical_clearance=None,first_local_detection=None),scope='DECLARED_SYNTHETIC_SCHEDULE_NOT_SIMULATOR_RESPONSE',event_training_allowed=False,joint_counterfactual_mask=False,formal_sc=False)
+
+
+def clock_bin_target(edges, *, kind, value=None):
+    """Discrete/coarsened clock evidence, not continuous-time censor likelihood.
+    Bins [edge_j, edge_{j+1}), plus tail >= last edge. Exact clocks must be
+    relative to a declared origin. An off-grid censor is conservatively coarsened.
+    """
+    es=[_time(x) for x in edges]
+    if len(es)<2 or es[0]!=0 or any(a>=b for a,b in zip(es,es[1:])):raise ValueError('clock bin edges')
+    if kind=='UNKNOWN':
+        if value is not None:raise ValueError('unknown clock has no value')
+        return dict(known=False,allowed=[False]*len(es),kind=kind,coarsened=False)
+    if kind=='EXACT':
+        x=_time(value); allowed=[a<=x<b for a,b in zip(es,es[1:])]+[x>=es[-1]]; coarse=False
+    elif kind=='INTERVAL':
+        lo,hi=map(_time,value)
+        if lo>=hi:raise ValueError('empty time interval')
+        allowed=[max(a,lo)<min(b,hi) for a,b in zip(es,es[1:])]+[hi>es[-1]];coarse=lo not in es or hi not in es
+    elif kind=='RIGHT_CENSORED':
+        x=_time(value);allowed=[b>x for b in es[1:]]+[True];coarse=x not in es and x<es[-1]
+    else:raise ValueError('unknown evidence kind')
+    return dict(known=True,allowed=allowed,kind=kind,coarsened=coarse)
