@@ -79,12 +79,17 @@ def from_record(record, *, extend_route=False, clock_profile="nominal", prepend_
     cp=CLOCK_PROFILES[clock_profile]; c=spec['closure']; c.update({key:cp[key] for key in ('generation','issue','publication','planned_on','planned_off','effective_on','effective_off')});Closure(**c).validate()
     # Full current recipient roster, independent of projected actor inclusion.
     ego=next(st for i,_,st in current if i==eid); others=sorted((z for z in current if z[0]!=eid),key=lambda z:(math.hypot(z[2]['x']-ego['x'],z[2]['y']-ego['y']),z[0]))
-    if recipient_policy not in ('all_current_nearest','projected_nearest'):raise ValueError('recipient policy')
+    if recipient_policy not in ('all_current_nearest','projected_nearest','route_equipped'):raise ValueError('recipient policy')
     if recipient_policy=='projected_nearest':
         e=next(v for v in spec['vehicles'] if v['id']==eid)
         selected=min((v for v in spec['vehicles'] if v['id']!=eid),key=lambda v:(abs(v['s']-e['s']),v['id']))['id']
     else:selected=others[0][0] if others else None
     all_rec={eid:cp['ego_receipt']};all_rec.update({a[0]:(cp['other_receipt'] if a[0]==selected else None) for a in others})
+    if recipient_policy=='route_equipped':
+        from .rule_lifecycle import route_equipped_recipients
+        cohort=route_equipped_recipients([v['id'] for v in spec['vehicles']],eid,source_digest=spec['source_digest'],other_receipt=cp['other_receipt'],ego_receipt=cp['ego_receipt'])
+        all_rec={i:cohort.get(i) for i in all_rec}
+        spec['recipient_model']=dict(probability=.5,seed=7,scope='DECLARED_ROUTE_EQUIPMENT_NOT_EMPIRICAL')
     spec.update(receipts={v['id']:all_rec[v['id']] for v in spec['vehicles']},all_current_receipts=all_rec,clock_profile=clock_profile,schedule_source='DECLARED_RAW_PROFILE',recipient_policy=recipient_policy)
     return spec
 
@@ -324,10 +329,15 @@ def reconfigure_projected_pair(pair, *, recipient_policy='preserve'):
     if not audit_pair(pair)['ok']:raise ValueError('source pair inconsistent')
     spec=copy.deepcopy(pair['spec']); spec['parent_spec_sha256']=pair['spec_sha256']
     if recipient_policy=='preserve':return spec
-    if recipient_policy!='projected_nearest' or spec.get('schedule_source')!='DECLARED_RAW_PROFILE' or spec.get('clock_profile') not in CLOCK_PROFILES:raise ValueError('reconfiguration requires declared raw profile')
+    if recipient_policy not in ('projected_nearest','route_equipped') or spec.get('schedule_source')!='DECLARED_RAW_PROFILE' or spec.get('clock_profile') not in CLOCK_PROFILES:raise ValueError('reconfiguration requires declared raw profile')
     full=spec['all_current_receipts']; eid=spec['ego_id'];e=next(v for v in spec['vehicles'] if v['id']==eid)
     target=min((v for v in spec['vehicles'] if v['id']!=eid),key=lambda v:(abs(v['s']-e['s']),v['id']))['id']
     cp=CLOCK_PROFILES[spec['clock_profile']]
     spec['all_current_receipts']={i:(cp['ego_receipt'] if i==eid else cp['other_receipt'] if i==target else None) for i in full}
+    if recipient_policy=='route_equipped':
+        from .rule_lifecycle import route_equipped_recipients
+        cohort=route_equipped_recipients(list(spec['receipts']),eid,source_digest=spec['source_digest'],other_receipt=cp['other_receipt'],ego_receipt=cp['ego_receipt'])
+        spec['all_current_receipts']={i:cohort.get(i) for i in full}
+        spec['recipient_model']=dict(probability=.5,seed=7,scope='DECLARED_ROUTE_EQUIPMENT_NOT_EMPIRICAL')
     spec['receipts']={i:spec['all_current_receipts'][i] for i in spec['receipts']};spec['recipient_policy']=recipient_policy
     return spec

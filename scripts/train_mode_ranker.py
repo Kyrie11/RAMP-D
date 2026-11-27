@@ -13,7 +13,7 @@ from rampd_core.learning.training import fit
 from rampd_core.learning.mode_ranking import SceneRanker,ranking_inputs,geometric_teacher,FEATURE_DIM,MOTION_FEATURE_DIM
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--cache',required=True);p.add_argument('--output',required=True);p.add_argument('--base-epochs',type=int,default=3);p.add_argument('--rank-epochs',type=int,default=60);p.add_argument('--calibration-families',type=int,default=40);p.add_argument('--seed',type=int,default=7);p.add_argument('--threads',type=int,default=2);p.add_argument('--base-run',help='reuse frozen base and its recorded family split');p.add_argument('--rank-features',choices=('legacy','motion'),default='legacy');a=p.parse_args();torch.set_num_threads(a.threads)
+    p=argparse.ArgumentParser();p.add_argument('--cache',required=True);p.add_argument('--output',required=True);p.add_argument('--base-epochs',type=int,default=3);p.add_argument('--rank-epochs',type=int,default=60);p.add_argument('--calibration-families',type=int,default=40);p.add_argument('--seed',type=int,default=7);p.add_argument('--threads',type=int,default=2);p.add_argument('--base-run',help='reuse frozen base and its recorded family split');p.add_argument('--rank-features',choices=('legacy','motion'),default='legacy');p.add_argument('--base-local-factual',action='store_true',help='use frozen Phase7A architecture for a newly split base training run');a=p.parse_args();torch.set_num_threads(a.threads)
     sets,s=load_cache(a.cache);tr=sorted(sets['training'],key=lambda x:x['scenario_id']);va=sets['validation'];random.Random(a.seed).shuffle(tr);n=a.calibration_families
     if not 1<=n<len(tr) or a.base_epochs<1 or a.rank_epochs<1:p.error('insufficient training families or epochs')
     calibration,base=tr[:n],tr[n:];ids=lambda x:[r['scenario_id'] for r in x]
@@ -37,7 +37,10 @@ def main():
         replay=evaluate(model,inner,settings['batch_size'],include_radial=settings.get('objective')=='radial_laplace')
         if max(abs(replay[k]-report['checkpoint_validation'][k]) for k in replay)>1e-5:raise ValueError('frozen base replay mismatch')
     else:
-        model,report=fit(base,inner,epochs=a.base_epochs,batch_size=4,seed=a.seed,modes=3,motion_context=True,soft_gate=True,query_modes=True,selection='nll')
+        if a.base_local_factual:
+            model,report=fit(base,inner,epochs=a.base_epochs,batch_size=4,seed=a.seed,modes=3,motion_context=True,local_history=True,objective='radial_laplace',selection='nll')
+        else:
+            model,report=fit(base,inner,epochs=a.base_epochs,batch_size=4,seed=a.seed,modes=3,motion_context=True,soft_gate=True,query_modes=True,selection='nll')
     model.eval();out=Path(a.output);out.mkdir(parents=True,exist_ok=False)
     @torch.no_grad()
     def collect(rows):

@@ -104,3 +104,78 @@ def test_entry_time_value_replayed():
     s=spec();s['receipts']={i:None for i in s['receipts']};p=paired(s);assert audit_pair(p)['ok']
     q=copy.deepcopy(p);v=next(x for x in q['runs']['A']['violations'] if x['kind']=='CLOSED_ENTRY');v['entry_time_s']+=.05
     assert not audit_pair(q)['ok']
+
+
+def test_no_delivery_is_not_conditional_clock():
+    from rampd_core.datasets.projected_labels import export_pair
+    s=spec();s['receipts']['f']=None;s['receipts']['e']='10';r=next(x for x in export_pair(paired(s)) if x['run']=='A')
+    assert r['declared_delivery_target']=={'e':True,'f':False,'l':False}
+    assert r['message_clock_evidence']['f']['kind']=='UNKNOWN' and r['message_clock_evidence']['e']['kind']=='RIGHT_CENSORED'
+    assert not any(r['heads'].values())
+
+
+def test_versioned_notice_and_cancel_not_physical_ack():
+    from rampd_core.datasets.rule_lifecycle import Notice,public_notices
+    a=Notice('event','agency',1,'LANE_CLOSURE',('lane',),'0.1','0.2','1','4')
+    b=Notice('event','agency',2,'LANE_CLOSURE',('lane',),'1','1.1','1','4',cancelled=True)
+    ds=[dict(authority='agency',event_id='event',version=1,recipient='e',receipt='3'),dict(authority='agency',event_id='event',version=2,recipient='e',receipt='2'),dict(authority='agency',event_id='event',version=1,recipient='f',receipt='0.3')]
+    assert public_notices([a,b],ds,'e','1')==[]
+    for t in ('2','4'):
+        v=public_notices([a,b],ds,'e',t)[0];assert v['version']==2 and v['cancelled'] and 'effective_off' not in v and 'physical_ack' not in v
+    assert public_notices([a,b],ds,'f','4')[0]['version']==1
+    ds[0]['receipt']='0.1'
+    with pytest.raises(ValueError,match='receipt before'):public_notices([a,b],ds,'e','4')
+
+
+def test_speed_and_direction_payloads_and_device_cohort():
+    from rampd_core.datasets.rule_lifecycle import Notice,route_equipped_recipients
+    from dataclasses import replace
+    n=Notice('event','agency',1,'TEMPORARY_SPEED_LIMIT',('lane',),'0.1','0.2','1','4',speed_limit_mps=5.)
+    n.validate()
+    with pytest.raises(ValueError):replace(n,speed_limit_mps=None).validate()
+    with pytest.raises(ValueError):replace(n,kind='ALTERNATING_DIRECTION',speed_limit_mps=None).validate()
+    kwargs=dict(source_digest='a'*64,other_receipt='1',ego_receipt=None)
+    x=route_equipped_recipients(['e','a','b'],'e',**kwargs);y=route_equipped_recipients(['b','e','a'],'e',**kwargs);assert x==y
+    assert route_equipped_recipients(['e','a'],'e',probability=0.,**kwargs)=={'e':None,'a':None}
+
+
+def test_route_integrity_rejects_false_join():
+    pytest.importorskip('shapely')
+    from rampd_core.datasets.incident_scenarios import route_integrity
+    lane=dict(lane_id='a',centerline=[[0.,0.],[20.,0.],[40.,0.]],centerline_length_m=40.,route_segments=[dict(lane_id='a',start_m=0.,end_m=20.),dict(lane_id='b',start_m=20.,end_m=40.)],route_joins=[dict(from_lane='a',to_lane='b',gap_m=0.,alignment=1.)]);assert route_integrity(lane)['ok']
+    lane['route_joins'][0]['gap_m']=.05;assert not route_integrity(lane)['ok']
+
+
+def test_shared_resource_interlock_version_and_unknown():
+    from rampd_core.shared_resource_controller import SharedResourceController,SignalCommand
+    c=SharedResourceController({'a':'A','b':'B'},clearance_ticks=1,green_ticks=1);free={'a':False,'b':False};red=SignalCommand(0,'RED')
+    assert c.step(0,free,prior_swept_empty=None,ack=red)['permit'] is None
+    r=c.step(1,free,prior_swept_empty=True,ack=red);assert r['command']=={'version':1,'direction':'A'} and r['permit'] is None
+    assert c.step(2,free,prior_swept_empty=True,ack=red)['permit'] is None
+    assert c.step(3,free,prior_swept_empty=True,ack=SignalCommand(1,'A'))['permit']=='A'
+    r=c.step(4,{'a':True,'b':None},prior_swept_empty=False,ack=SignalCommand(1,'A'));assert r['permit'] is None and r['command']['direction']=='RED'
+    with pytest.raises(ValueError):c.step(5,{'a':False},prior_swept_empty=True,ack=None)
+
+
+def test_shared_resource_complete_and_tamper_labels():
+    from rampd_core.datasets.shared_resource_scenario import simulate,audit
+    from rampd_core.datasets.shared_resource_labels import release
+    from rampd_core.datasets.split_manifest import canonical_digest
+    a=simulate();b=simulate(ego_wait_ticks=12);assert a==simulate() and a!=b
+    for r in (a,b):
+        x=audit(r);assert x['ok'] and x['completed'] and all(x['entries'].values()) and all(x['exits'].values())
+    z=release(a,split='training');assert z and z[0]['model_training_allowed'] and not z[0]['real_world_training_allowed'] and not any(z[0]['formal_heads'].values())
+    q=copy.deepcopy(a);q['frames'][0]['controller']['permit']='A';q['digest']=canonical_digest({k:v for k,v in q.items() if k!='digest'});assert not audit(q)['ok']
+    with pytest.raises(ValueError):release(q,split='training')
+
+
+def test_declared_heads_reject_family_and_permission_leak():
+    from rampd_core.datasets.shared_resource_scenario import simulate
+    from rampd_core.datasets.shared_resource_labels import release
+    from rampd_core.learning.resource_pilot import fit_head
+    from rampd_core.datasets.split_manifest import canonical_digest
+    tr=release(simulate(seed=0),split='training');va=release(simulate(seed=1),split='validation')
+    with pytest.raises(ValueError,match='family'):fit_head(tr,release(simulate(seed=0),split='validation'),'event',epochs=1)
+    q=copy.deepcopy(tr);q[0]['real_world_training_allowed']=True;q[0]['digest']=canonical_digest({k:v for k,v in q[0].items() if k!='digest'})
+    with pytest.raises(ValueError,match='permission'):fit_head(q,va,'event',epochs=1)
+    _,r=fit_head(tr,va,'event',epochs=1);assert r['formal_sc'] is False and r['validation_rows']==len(va)

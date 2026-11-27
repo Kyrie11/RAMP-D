@@ -75,3 +75,20 @@ def weak_motion_bce(logits,target,valid):
     if logits.shape!=target.shape or target.shape!=valid.shape or valid.dtype!=torch.bool or target.dtype!=torch.bool:raise ValueError('weak motion mask')
     if not valid.any():return None
     return torch.nn.functional.binary_cross_entropy_with_logits(logits[valid],target[valid].float())
+
+
+def scene_mode_quality_loss(logits, xy, target, valid, *, temperature_m=.2, tie_m=.01):
+    """Auxiliary scene-level geometric score, NOT a likelihood or latent truth.
+    Detached trajectories and targets; no loss for nearly indistinguishable modes.
+    One shared scene mode and one scene weight, independent of knot count.
+    """
+    if not math.isfinite(temperature_m) or temperature_m<=0 or not math.isfinite(tie_m) or tie_m<0:raise ValueError('mode quality temperature/tie')
+    if valid.dtype!=torch.bool or target.shape[:-1]!=valid.shape or xy.ndim!=5 or xy.shape[2:]!=target.shape[1:] or xy.shape[0]!=target.shape[0] or logits.shape!=xy.shape[:2]:raise ValueError('mode quality shapes')
+    with torch.no_grad():
+        n=valid.sum((1,2)); y=torch.where(valid[...,None],target,0.); p=torch.where(valid[:,None,:,:,None],xy.detach(),0.)
+        ade=(p-y[:,None]).norm(dim=-1).sum((2,3))/n[:,None].clamp_min(1)
+        active=(n>0)&(ade.amax(-1)-ade.amin(-1)>tie_m)
+        if not active.any():return None
+        q=(-ade[active]/temperature_m).softmax(-1)
+    if not torch.isfinite(logits[active]).all() or not torch.isfinite(q).all():raise ValueError('nonfinite mode quality')
+    return -(q*logits[active].log_softmax(-1)).sum(-1).mean()

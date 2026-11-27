@@ -86,3 +86,8 @@ Motion-context, residual-gate and query-mode flags are isolated. Formal SC and p
 - [Server runbook](docs/PHASE7AB_MOTION_RESPONSE_RUNBOOK.md)
 
 Optional actor-local history, CV anchor and shared per-mode scorer; independent weak motion and damped CA diagnostics, fresh official development manifest, projected rule sensor/response clocks and 2D sampled ribbon diagnostics. No formal SC or real counterfactual authorization.
+
+## Current Phase7AB factual freeze / shared resource checkpoint
+
+See `docs/PHASE7AB_FACTUAL_FREEZE_ACCEPTANCE.md` and `docs/PHASE7AB_FACTUAL_FREEZE_RUNBOOK.md`.
+Factual architecture candidate: motion-context + actor-local history + CV residual + radial Laplace; preserve older flags/checkpoints. New optional scene-level mode-quality auxiliary (default off), extended factual audit, route geometry ledger, versioned report/declared device cohort, projected evidence v2. Executable declared affine 2D shared corridor and separate model-domain Event/Occupancy/Observation head pilot; no real simulator or Native SC claim.

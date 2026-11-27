@@ -6,7 +6,7 @@ from itertools import islice
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'python'))
 from rampd_core.datasets.incident_response import from_record,from_feature_and_proposal,paired,audit_pair,reaction_evidence,reconfigure_projected_pair
 from rampd_core.datasets.split_manifest import stream_records
-from rampd_core.datasets.incident_scenarios import CLOCK_PROFILES,resource_applicability
+from rampd_core.datasets.incident_scenarios import CLOCK_PROFILES,resource_applicability,route_integrity
 
 def plot_pair(pair,path):
     import matplotlib
@@ -51,7 +51,7 @@ def plot_route_bev(pair,path,record=None):
 
 
 def main():
-    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--manifest');g.add_argument('--inventory');g.add_argument('--cache');g.add_argument('--pair-input',help='audited existing pairs; reconfigure declared subscene, not raw replay');p.add_argument('--proposals');p.add_argument('--limit',type=int,default=5);p.add_argument('--steps',type=int,default=60);p.add_argument('--plots',action='store_true');p.add_argument('--extend-route',action='store_true',help='unique map successor chain, raw records only');p.add_argument('--output',required=True);p.add_argument('--clock-profile',choices=tuple(CLOCK_PROFILES),default='nominal');p.add_argument('--prepend-route',action='store_true');p.add_argument('--recipient-policy',choices=('all_current_nearest','projected_nearest'),default='all_current_nearest');p.add_argument('--visual-range',type=float);p.add_argument('--reaction-delay');p.add_argument('--physical-on');p.add_argument('--physical-off');a=p.parse_args()
+    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--manifest');g.add_argument('--inventory');g.add_argument('--cache');g.add_argument('--pair-input',help='audited existing pairs; reconfigure declared subscene, not raw replay');p.add_argument('--proposals');p.add_argument('--limit',type=int,default=5);p.add_argument('--steps',type=int,default=60);p.add_argument('--plots',action='store_true');p.add_argument('--extend-route',action='store_true',help='unique map successor chain, raw records only');p.add_argument('--output',required=True);p.add_argument('--clock-profile',choices=tuple(CLOCK_PROFILES),default='nominal');p.add_argument('--prepend-route',action='store_true');p.add_argument('--recipient-policy',choices=('all_current_nearest','projected_nearest','route_equipped'),default='all_current_nearest');p.add_argument('--visual-range',type=float);p.add_argument('--reaction-delay');p.add_argument('--physical-on');p.add_argument('--physical-off');p.add_argument('--strict-route',action='store_true',help='reject inconsistent/self-crossing polyline ledger; requires shapely');a=p.parse_args()
     if not 1<=a.limit<=100 or not 1<=a.steps<=200:p.error('bounded pilot only')
     if bool(a.cache)!=bool(a.proposals):p.error('--cache and --proposals must be supplied together')
     if a.cache and a.clock_profile!='nominal':p.error('cached mode uses bound proposal clock, not overrides')
@@ -70,7 +70,7 @@ def main():
             row=rows[p['family_id']];collate([row]);return from_feature_and_proposal(row,p)
     elif a.pair_input:
         records=((p['spec']['family_id'],p) for p in map(json.loads,Path(a.pair_input).read_text().splitlines()))
-        construct=lambda p:reconfigure_projected_pair(p,recipient_policy='projected_nearest' if a.recipient_policy=='projected_nearest' else 'preserve')
+        construct=lambda p:reconfigure_projected_pair(p,recipient_policy=a.recipient_policy if a.recipient_policy!='all_current_nearest' else 'preserve')
     else:
         raw=stream_records(json.loads(Path(a.manifest).read_text())) if a.manifest else iter(json.loads(Path(a.inventory).read_text())['records'])
         records=((r['scene']['manifest']['scenario_id'],r) for r in raw);construct=lambda r:from_record(r,extend_route=a.extend_route,clock_profile=a.clock_profile,prepend_route=a.prepend_route,recipient_policy=a.recipient_policy)
@@ -84,6 +84,9 @@ def main():
                     # Explicit scenario assumption: visibility interval coincides with
                     # legal effectivity in THIS experiment, not a physical ACK.
                     spec['observation_model']=dict(physical_on=a.physical_on or spec['closure']['effective_on'],physical_off=a.physical_off or spec['closure']['effective_off'],range_m=a.visual_range)
+                if a.strict_route:
+                    geometry=route_integrity(spec['lane'])
+                    if not geometry['ok']:raise ValueError('route ledger: '+str(geometry['errors']))
                 r=paired(spec,steps=a.steps)
             except ValueError as exc:bad.append(dict(scenario_id=sid,reason=str(exc)));continue
             r['trace_audit']=audit_pair(r);r['reaction_evidence']=reaction_evidence(r);r['resource_applicability']=resource_applicability(r['spec'])

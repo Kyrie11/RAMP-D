@@ -3,7 +3,7 @@ import math, random
 import torch
 from ..datasets.collate import collate
 from .joint_decoder import FactualJointModel
-from .masked_losses import joint_nll,metric_sums
+from .masked_losses import joint_nll,metric_sums,scene_mode_quality_loss
 
 def _batches(rows,batch_size,order=None):
     order=list(range(len(rows))) if order is None else order
@@ -27,7 +27,8 @@ def evaluate(model,rows,batch_size=2,device='cpu',*,include_radial=False):
     if include_radial:result['radial_nll_per_knot']=radial/n
     return result
 
-def fit(train,val,*,epochs=10,batch_size=2,seed=7,d=64,modes=3,neighbors=16,lr=.001,device='cpu',freeze_encoder=False,diagnostic_overfit=False,residual_init="cv",objective="gaussian",selection="nll",weight_decay=.01,motion_context=False,soft_gate=False,query_modes=False,local_history=False,anchor_cv=False,trajectory_modes=False):
+def fit(train,val,*,epochs=10,batch_size=2,seed=7,d=64,modes=3,neighbors=16,lr=.001,device='cpu',freeze_encoder=False,diagnostic_overfit=False,residual_init="cv",objective="gaussian",selection="nll",weight_decay=.01,motion_context=False,soft_gate=False,query_modes=False,local_history=False,anchor_cv=False,trajectory_modes=False,mode_quality_weight=0.,mode_quality_temperature=.2):
+    if not math.isfinite(mode_quality_weight) or mode_quality_weight<0 or not math.isfinite(mode_quality_temperature) or mode_quality_temperature<=0: raise ValueError('mode quality configuration')
     if objective not in ('gaussian','radial_laplace') or selection not in ('nll','ade') or not math.isfinite(weight_decay) or weight_decay<0: raise ValueError('objective/selection/decay')
     if not train or not val or epochs<1 or batch_size<1 or not math.isfinite(lr) or lr<=0: raise ValueError('training configuration')
     if any(r['split']!='training' or r.get('training_allowed') is not True for r in train) or any(r['split']!='validation' or r.get('training_allowed') is not False for r in val): raise ValueError('split/authorization')
@@ -46,18 +47,24 @@ def fit(train,val,*,epochs=10,batch_size=2,seed=7,d=64,modes=3,neighbors=16,lr=.
     best=history[0]['train' if diagnostic_overfit else 'validation'][key]
     best_state={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}; best_epoch=0
     for epoch in range(1,epochs+1):
-        model.train(); order=list(range(len(train)));rng.shuffle(order); grad=[]; loss_sum=0.; loss_n=0; group_grad={}
+        model.train(); order=list(range(len(train)));rng.shuffle(order); grad=[]; loss_sum=0.; loss_n=0; group_grad={}; quality_sum=0.; quality_batches=0
         for b in _batches(train,batch_size,order):
             b=to_device(b,device); optimizer.zero_grad(set_to_none=True); pred=model(b['inputs'],b['candidate']); loss=joint_nll(pred,b['target'],b['valid'],family=objective)
             if loss is None: continue
             if not torch.isfinite(loss): raise ValueError('nonfinite loss')
-            loss.backward(); nk=int(b['valid'].sum()); loss_sum+=float(loss.detach())*nk; loss_n+=nk
+            nk=int(b['valid'].sum()); loss_sum+=float(loss.detach())*nk; loss_n+=nk
+            # Separate diagnostic term; no change to declared density or NLL evaluation.
+            if mode_quality_weight:
+                quality=scene_mode_quality_loss(pred['logits'],pred['xy'],b['target'],b['valid'],temperature_m=mode_quality_temperature)
+                if quality is not None:
+                    quality_sum+=float(quality.detach());quality_batches+=1;loss=loss+mode_quality_weight*quality
+            loss.backward()
             for name,module in [('encoder',model.encoder),('candidate',model.candidate),('decoder',model.decode),('mode_logits',model.trajectory_score if trajectory_modes else (model.query_logits if query_modes else model.logits))]:
                 g=math.sqrt(sum(float(p.grad.detach().square().sum()) for p in module.parameters() if p.grad is not None)); group_grad[name]=max(group_grad.get(name,0.),g)
             norm=torch.nn.utils.clip_grad_norm_(model.parameters(),5.,error_if_nonfinite=True); grad.append(float(norm)); optimizer.step()
         if not grad: raise ValueError('no active training loss')
         tm=eval_rows(train); vm=eval_rows(val)
-        history.append(dict(epoch=epoch,train=tm,validation=vm,grad_norm_max=max(grad),grad_group_max=group_grad,optimization_batch_objective_per_knot=loss_sum/loss_n))
+        history.append(dict(epoch=epoch,train=tm,validation=vm,grad_norm_max=max(grad),grad_group_max=group_grad,optimization_batch_objective_per_knot=loss_sum/loss_n,mode_quality_batch_mean=quality_sum/quality_batches if quality_batches else None,mode_quality_active_batches=quality_batches))
         criterion=(tm if diagnostic_overfit else vm)[key]
         if criterion<best:
             best=criterion; best_epoch=epoch; best_state={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
@@ -68,4 +75,4 @@ def fit(train,val,*,epochs=10,batch_size=2,seed=7,d=64,modes=3,neighbors=16,lr=.
         initial=history[0]['train']; floor=math.log(2*math.pi)
         excess0=max(initial['joint_nll_per_knot']-floor,0.); excess1=max(checkpoint_train['joint_nll_per_knot']-floor,0.)
         overfit_pass=bool((excess0>1e-6 and excess1<=.8*excess0) or (checkpoint_train['top1_ADE_m']<=.8*initial['top1_ADE_m']) or (initial['top1_ADE_m']<=.05 and checkpoint_train['top1_ADE_m']<=.05))
-    return model,dict(checkpoint_training=checkpoint_train,overfit_diagnostic_pass=overfit_pass,active_heads=['joint'],inactive_heads=['event','occupancy','observation','viability','margin','deadline','causal'],seed=seed,settings=dict(d=d,modes=modes,neighbors=neighbors,epochs=epochs,batch_size=batch_size,lr=lr,freeze_encoder=freeze_encoder,diagnostic_overfit=diagnostic_overfit,device=device,residual_init=residual_init,objective=objective,selection=selection,weight_decay=weight_decay,motion_context=motion_context,soft_gate=soft_gate,query_modes=query_modes,local_history=local_history,anchor_cv=anchor_cv,trajectory_modes=trajectory_modes),best_epoch=best_epoch,history=history,checkpoint_validation=eval_rows(val),scope='PILOT_FACTUAL_NOT_COUNTERFACTUAL_NOT_SC',selection_metric=key,training_objective=objective,gaussian_metrics_fixed_sigma_m=1.0)
+    return model,dict(checkpoint_training=checkpoint_train,overfit_diagnostic_pass=overfit_pass,active_heads=['joint'],inactive_heads=['event','occupancy','observation','viability','margin','deadline','causal'],seed=seed,settings=dict(d=d,modes=modes,neighbors=neighbors,epochs=epochs,batch_size=batch_size,lr=lr,freeze_encoder=freeze_encoder,diagnostic_overfit=diagnostic_overfit,device=device,residual_init=residual_init,objective=objective,selection=selection,weight_decay=weight_decay,motion_context=motion_context,soft_gate=soft_gate,query_modes=query_modes,local_history=local_history,anchor_cv=anchor_cv,trajectory_modes=trajectory_modes,mode_quality_weight=mode_quality_weight,mode_quality_temperature=mode_quality_temperature),best_epoch=best_epoch,history=history,checkpoint_validation=eval_rows(val),scope='PILOT_FACTUAL_NOT_COUNTERFACTUAL_NOT_SC',selection_metric=key,training_objective=objective,gaussian_metrics_fixed_sigma_m=1.0)

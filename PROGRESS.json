@@ -696,6 +696,26 @@
     "uploaded_checkpoint_replay": 2,
     "version": "1.0.0.dev0"
   },
+  "phase7ab_factual_freeze": {
+    "formal_sc": false,
+    "fresh_full_cache_locally_available": false,
+    "isolated_declared_heads": [
+      "event",
+      "occupancy",
+      "observation"
+    ],
+    "local_specialized_tests": 85,
+    "old_rule_pair_reaudit": 100,
+    "old_rule_pair_reexecution": 100,
+    "physical_simulator_verified": false,
+    "shared_affine_runs": 24,
+    "status": "FACTUAL_DEV_ARCHITECTURE_FREEZE_SHARED_AFFINE_MODEL_ONLY",
+    "training_head_performance_gate_passed": false,
+    "uploaded_training_scenes": 493,
+    "uploaded_validation_scenes": 99,
+    "uploaded_weight_hash_pass": 6,
+    "version": "1.0.0.dev0"
+  },
   "phase7ab_motion_response": {
     "active_heads": [
       "joint"

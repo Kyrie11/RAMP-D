@@ -336,3 +336,21 @@ def test_damped_ca_and_motion_ranker(source):
     b=collate(features(source)[:2]);i=b['inputs'];p=damped_acceleration_baseline(i);ca=historical_acceleration_baseline(i)
     assert torch.all((p-b['cv']).norm(dim=-1)<=(ca-b['cv']).norm(dim=-1)+1e-5)
     m=FactualJointModel(d=16,modes=3);r=m(i,b['candidate']);f,xy=ranking_inputs(r,i,motion=True);assert f.shape[-1]==MOTION_FEATURE_DIM and torch.isfinite(f).all();assert SceneRanker(MOTION_FEATURE_DIM)(f).shape==(2,4)
+
+
+def test_scene_mode_quality_is_detached_and_scene_normalized():
+    from rampd_core.learning.masked_losses import scene_mode_quality_loss
+    logits=torch.zeros(1,2,requires_grad=True);xy=torch.zeros(1,2,2,3,2,requires_grad=True);xy.data[:,1]=1.;y=torch.zeros(1,2,3,2);v=torch.ones(1,2,3,dtype=torch.bool)
+    l=scene_mode_quality_loss(logits,xy,y,v);l.backward();assert xy.grad is None and logits.grad[0,0]<0<logits.grad[0,1]
+    assert scene_mode_quality_loss(logits,xy[:,:1].expand_as(xy),y,v) is None
+    l2=scene_mode_quality_loss(logits,xy.repeat(1,1,2,1,1),y.repeat(1,2,1,1),v.repeat(1,2,1));assert torch.allclose(l,l2)
+
+
+def test_local_rotation_preserves_pose_and_decoder_frame(source):
+    # Test local rotation analytically, not network-wide SE(2) equivariance.
+    from rampd_core.learning.rea_encoder import FactualSceneEncoder
+    b=collate(features(source)[:1]);i=b['inputs'];h=i['history'];a=1;h[0,a,-1,2]=1.;h[0,a,-1,3]=0.;h[0,a,-2,:2]=h[0,a,-1,:2]+torch.tensor([0.,-2.]);model=FactualSceneEncoder(16,4,True,True);captured={}
+    def hook(m,args):captured['history']=args[0].detach().clone()
+    handle=model.hist[0].register_forward_pre_hook(hook);model(i);handle.remove();assert torch.allclose(captured['history'][0,a,-2,:2],torch.tensor([-.2,0.]),atol=1e-6)
+    assert torch.allclose(captured['history'][0,a,-1,:2],torch.zeros(2))
+    m=FactualJointModel(16,3,4,motion_context=True,local_history=True);torch.nn.init.zeros_(m.decode[-1].weight);m.decode[-1].bias.data.copy_(torch.tensor([1.,0.]));q=m(i,b['candidate']);d=q['xy'][0,0,a]-b['cv'][0,a];assert torch.allclose(d[:,0],torch.zeros_like(d[:,0]),atol=1e-6);assert torch.allclose(d[:,1],i['dt'][0],atol=1e-6)

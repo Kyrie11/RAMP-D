@@ -130,3 +130,29 @@ def resource_applicability(spec, *, straight_turn_deg=15.):
         centerline_straight_closure_candidate=bool(angle<=straight_turn_deg and not gap_in_scope),
         type_requirements={'LANE_CLOSURE':'NEEDS_LANE_BOUNDARY_AND_LEGAL_EXIT_OR_REROUTE','TEMPORARY_SPEED_LIMIT':'NEEDS_LANE_SCOPE_SPEED_VALUE_AND_COMPLIANCE_MODEL','ALTERNATING_DIRECTION':'NEEDS_SHARED_2D_RESOURCE_OPPOSING_ROUTES_INTERLOCK_CLEARANCE','STOP_SLOW':'NEEDS_VISIBLE_CONTROL_STATION_AND_AUTHORIZED_DIRECTION'},
         physical_resource_verified=False,formal_sc=False)
+
+
+def route_integrity(lane):
+    """Check declared route ledger against its actual polyline, not raw topology.
+    Nonzero joins remain approximate. A self-crossing route is not eligible for
+    unique longitudinal projection. No guarantee of downstream route intent.
+    """
+    from shapely.geometry import LineString
+    line=np.asarray(lane['centerline'],float)
+    if line.ndim!=2 or line.shape[1]!=2 or len(line)<2 or not np.isfinite(line).all():raise ValueError('invalid polyline')
+    lengths=np.linalg.norm(np.diff(line,axis=0),axis=1); L=float(lengths.sum());seg=lane.get('route_segments',[dict(lane_id=lane['lane_id'],start_m=0.,end_m=L)]);joins=lane.get('route_joins',[])
+    errors=[]
+    if not math.isclose(L,float(lane['centerline_length_m']),abs_tol=1e-6,rel_tol=1e-9):errors.append('LENGTH')
+    if not LineString(line).is_simple:errors.append('SELF_INTERSECTION')
+    if len({str(s['lane_id']) for s in seg})!=len(seg) or len(joins)!=len(seg)-1:errors.append('ROSTER')
+    if abs(seg[0]['start_m'])>1e-6 or abs(seg[-1]['end_m']-L)>1e-6 or any(s['end_m']<=s['start_m'] for s in seg):errors.append('ARCLENGTH')
+    arc=np.r_[0.,np.cumsum(lengths)]
+    for i,j in enumerate(joins):
+        if i+1>=len(seg):break
+        a,b=seg[i:i+2];gap=b['start_m']-a['end_m'];u=np.argmin(abs(arc-a['end_m']));v=np.argmin(abs(arc-b['start_m']))
+        if str(j['from_lane'])!=str(a['lane_id']) or str(j['to_lane'])!=str(b['lane_id']) or gap< -1e-8 or abs(gap-j['gap_m'])>1e-6 or max(abs(arc[u]-a['end_m']),abs(arc[v]-b['start_m']))>1e-6 or abs(np.linalg.norm(line[u]-line[v])-j['gap_m'])>1e-6:errors.append('JOIN_LEDGER')
+        before=np.flatnonzero((lengths>1e-6)&(np.arange(len(lengths))<u));after=np.flatnonzero((lengths>1e-6)&(np.arange(len(lengths))>=v))
+        if not len(before) or not len(after):errors.append('JOIN_TANGENT');continue
+        ii,jj=before[-1],after[0];alignment=float((line[ii+1]-line[ii])@(line[jj+1]-line[jj])/(lengths[ii]*lengths[jj]))
+        if abs(alignment-j['alignment'])>1e-6 or alignment<.9-1e-8 or gap>.1+1e-8:errors.append('JOIN_TANGENT')
+    return dict(ok=not errors,errors=sorted(set(errors)),length_m=L,joins=len(joins),approximate_joins=sum(j['gap_m']>1e-8 for j in joins),scope='POLYLINE_LEDGER_NOT_RAW_TOPOLOGY_OR_PHYSICAL_ROUTE')
