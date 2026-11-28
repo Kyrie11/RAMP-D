@@ -135,3 +135,52 @@ def finite_teacher(openings=(5,7),horizon=14):
         waits=[w for w in range(h+1) if rank(root,h,w) is not None] if r is not None else []
         rows.append(dict(horizon=h,viable=r is not None,rank=r,forced_wait_ticks_max=max(waits) if waits else None,finite_negative_complete=r is None))
     return dict(scope='EXACT_FINITE_WAIT_GO_REFERENCE_ONLY',openings=list(openings),rows=rows,analytic_edges_checked=len(checked),formal_sc=False,training_allowed=False,deadline_is_not_ICG=True)
+
+
+def finite_criticality(openings=(5,7),horizon=14):
+    """Exact leave-one-world action/continuation impact on reachable beliefs.
+    Only for this enumerated WAIT/GO game; not a probability estimator, geometric
+    ranker, native SC teacher, or formal ICG deadline. No learning authorization.
+    """
+    if len(openings)<2 or len(set(openings))!=len(openings) or any(type(o) is not int or not 1<=o<=19 for o in openings) or type(horizon) is not int or not 1<=horizon<=20:raise ValueError('finite criticality context')
+    checked=set();root=frozenset((o,0,0,(),Q(0)) for o in openings)
+    def children(B,u):
+        out={};safe=True
+        for s in B:
+            a=analytic_step(s,u);b=step(s,u);checked.add((s,u))
+            if a!=b:raise ValueError('independent finite transition disagreement')
+            if a is None:safe=False;continue
+            o,c=a;out.setdefault(o,set()).add(c)
+        return {o:frozenset(v) for o,v in out.items()} if safe else {}
+    @lru_cache(None)
+    def rank(B,h):
+        if all(terminal(s) for s in B):return 0
+        if h<=0:return None
+        r=actions(B,h);return min(r.values()) if r else None
+    @lru_cache(None)
+    def actions(B,h):
+        if h<=0 or all(terminal(s) for s in B):return {}
+        r={}
+        for u in ACTIONS:
+            c=children(B,u)
+            if c:
+                v=[rank(q,h-1) for q in c.values()]
+                if all(x is not None for x in v):r[u]=1+max(v)
+        return r
+    pending=[(root,horizon,())];visited=set();rows=[]
+    while pending:
+        B,h,prefix=pending.pop(0)
+        if (B,h) in visited:continue
+        visited.add((B,h));full=actions(B,h);fr=rank(B,h)
+        if len(B)>1 and h>0 and not all(terminal(s) for s in B):
+            impacts=[]
+            for opening in sorted({s[0] for s in B}):
+                reduced=frozenset(s for s in B if s[0]!=opening)
+                if not reduced:continue
+                alt=actions(reduced,h);rr=rank(reduced,h)
+                impacts.append(dict(removed_opening=opening,added_viable_actions=sorted(set(alt)-set(full)),removed_viable_actions=sorted(set(full)-set(alt)),viability_changes=(rr is None)!=(fr is None),rank_before=fr,rank_after=rr,critical=alt!=full or rr!=fr))
+            rows.append(dict(t=horizon-h,x=next(iter(B))[2],remaining=h,prefix=list(prefix),hidden_openings=sorted({s[0] for s in B}),viable_actions=full,rank=fr,impacts=impacts))
+        if h>0 and not all(terminal(s) for s in B):
+            for u in ACTIONS:
+                for o,c in children(B,u).items():pending.append((c,h-1,prefix+((u,o),)))
+    return dict(scope='EXACT_FINITE_WAIT_GO_LEAVE_ONE_WORLD_ONLY',openings=list(openings),horizon=horizon,rows=rows,beliefs_checked=len(visited),analytic_edges_checked=len(checked),critical_beliefs=sum(any(i['critical'] for i in r['impacts']) for r in rows),formal_sc=False,training_allowed=False,deadline_is_not_ICG=True)

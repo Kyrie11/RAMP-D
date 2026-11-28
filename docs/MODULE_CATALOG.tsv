@@ -347,3 +347,10 @@ scripts/check_cosim_map.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see P
 scripts/validate_learning_pilot.sh	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
 tests/test_learning_pilot.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
 tests/test_cosim_map_registration.py	PHASE7A_PILOT_KEEP	NA	Stable functional module; see PHASE7A_PILOT.md.	Scoped factual learning or registration preflight.
+python/rampd_core/learning/relation_context.py	EXISTING_SUPPORT_KEEP	0	Typed relation or independent source/evaluation gate.	Phase7BC model-domain pilot; no formal or real-world authorization.
+scripts/run_relation_pilot.py	EXISTING_SUPPORT_KEEP	0	Typed relation or independent source/evaluation gate.	Phase7BC model-domain pilot; no formal or real-world authorization.
+scripts/replay_relation_pilot.py	EXISTING_SUPPORT_KEEP	0	Typed relation or independent source/evaluation gate.	Phase7BC model-domain pilot; no formal or real-world authorization.
+scripts/audit_delivery_collection.py	EXISTING_SUPPORT_KEEP	0	Typed relation or independent source/evaluation gate.	Phase7BC model-domain pilot; no formal or real-world authorization.
+scripts/check_route_hypotheses.py	EXISTING_SUPPORT_KEEP	0	Typed relation or independent source/evaluation gate.	Phase7BC model-domain pilot; no formal or real-world authorization.
+scripts/evaluate_frozen_factual.py	EXISTING_SUPPORT_KEEP	0	Typed relation or independent source/evaluation gate.	Phase7BC model-domain pilot; no formal or real-world authorization.
+tests/test_relation_context.py	EXISTING_SUPPORT_KEEP	0	Typed relation or independent source/evaluation gate.	Phase7BC model-domain pilot; no formal or real-world authorization.

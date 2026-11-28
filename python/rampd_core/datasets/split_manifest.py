@@ -78,12 +78,16 @@ def build_manifest(root, *, train_limit=5, validation_limit=5, max_shards=2, rea
     validate_manifest(manifest)
     return manifest
 
-def stream_records(manifest, *, reader=_iter_tfrecord, decoder=decode):
+def stream_records(manifest, *, reader=_iter_tfrecord, decoder=decode, selected_ids=None):
     from ..record_adapters import parse_womd_scenario_proto
     validate_manifest(manifest)
     root = Path(manifest['root']).resolve()
     groups = {}
+    if selected_ids is not None:
+        selected_ids=set(selected_ids)
+        if not selected_ids or not selected_ids<={r['scenario_id'] for r in manifest['records']}:raise ValueError('selected ids absent from manifest')
     for row in manifest['records']:
+        if selected_ids is not None and row['scenario_id'] not in selected_ids:continue
         groups.setdefault((row['split'],row['shard']), {})[row['record_index']] = row
     for (split, rel), wanted in groups.items():
         path = root / rel
@@ -152,3 +156,16 @@ def replace_validation_manifest(base, *, validation_limit, max_shards=20, reader
     if remaining:raise ValueError(f'fresh validation missing {remaining} records')
     out=dict(base,records=records,excluded_validation_records=old,previous_manifest_sha256=canonical_digest(base),validation_policy='FRESH_OFFICIAL_DEVELOPMENT_EXCLUDING_PREVIOUS_DIAGNOSTIC_IDS')
     validate_manifest(out);return out
+
+
+def validate_external_evaluation(original,external):
+    """Exact-record split gate for a frozen external validation-only evaluation.
+    Excludes all prior train/validation/previously inspected records. Does not
+    imply geographical or recording-family isolation.
+    """
+    validate_manifest(original);validate_manifest(external)
+    prior=original['records']+original.get('excluded_validation_records',[])
+    ids={r['scenario_id'] for r in prior};hashes={r['record_sha256'] for r in prior};loc={(r['shard'],r['record_index']) for r in prior}
+    rows=[r for r in external['records'] if r['split']=='validation']
+    if any(r['scenario_id'] in ids or r['record_sha256'] in hashes or (r['shard'],r['record_index']) in loc for r in rows):raise ValueError('external evaluation overlaps original/development record')
+    return dict(validation_records=len(rows),scope='EXACT_RECORD_DISJOINT_NOT_GEOGRAPHIC_FAMILY_PROOF')

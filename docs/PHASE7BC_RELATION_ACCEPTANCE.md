@@ -1,0 +1,32 @@
+# Phase7BC relation — local acceptance and boundaries
+
+## Actual observations
+- Factual server audit: 99 development scenes, 88,435 knots, checkpoint replay reported by server. ADE .3474666 versus CV .4993327, DCA .4589186 (previous matching report). Near-static future start 1,590 knots: .86103 versus .93472 CV; no-start 47,310: .02589 versus .02106 CV. The slow error excess is +257.61 m summed knots; +228.49 no-start, -117.17 start, +146.29 remaining slow. Frozen Agent Token start AP .40381 versus Motion .29119, combined .44576; decel AP .84103 versus .81558. Mode mean vote AP .1530/.7850. No new factual raw cache or actual latest factual weight replay in this environment. No identified intent.
+- Delivery 20 common families × 3 coverages: all 60 pair ledgers and exact declared rollout reexecution passed; 13 complete six-second families each, 76 projected actors and 702 excluded. Recipients 0/33/56; A closure entry violations 3/2/2; complete-family substantive rule other response 7/7/8. 59 route joins; uploaded source audit exists but none of these 20 raw source records match locally available old 5-record inventory. No independent full raw rebind. Added manifest source recheck and projected initialization binding.
+- Uploaded shared transition: 24 runs, 3816 one-step rows, 3648 transition rows; heterogeneous: 32 runs, 5088 one-step rows, 4864 transition rows; 4 protocol shift runs, 608 rows. Source reexecution and regenerated labels identical. Frozen transition weights replay maximum error 1.2e-7. Finite WAIT/GO report same. No actual SUMO/CARLA.
+
+## New model-domain results
+60 runs, 9 spacing families: 36 train runs 5,472 rows, 18 matched holdout runs 2,736 rows, 6 shifted runs 912 rows. Train green/clear (12,2),(16,3),(20,2), heldout (24,4), with two coupled intervention profiles. Six train / three validation initial families only; related temporal rows not IID. Public duration configuration assumed disclosed; other actor receipt, private ACK and future action not used. 15 epochs seed 7 CPU. Independent head models, not integrated full REA. Flat, uniform typed fusion and gated typed fusion are not parameter-matched. See replay report for corrected baselines. Initial age baseline erroneously used raw counts as logits; corrected to log normalized counts and replayed all 12 weights, model metrics unchanged.
+
+| Head | Matched best comparator | Matched candidate | Shift strong comparator | Shift candidate |
+|---|---|---|---|---|
+| Event NLL | protocol age 1.0675 | flat .9150 / gated .9198 | age 1.7677 | gated .9129 |
+| Occupancy BCE | CV .1033 | uniform .0378 / gated .0427 | CV .1009 | gated .0410 |
+| Observation NLL | protocol age 1.2005 | gated 1.0062 | age 1.8648 | gated .9394 |
+| Start BCE | public context .0919 | flat .04525 | public context .1213 | flat .05719 |
+
+Matched/shift gated Event AP .9515/.8872, conditional time MAE 1.0805/1.3235 ticks. Observation AP .9738/.9457, time MAE 1.4374/1.5302 ticks; matched protocol-age time MAE 1.4284, not improved. Occupancy gated change AP .9350/.9407. Start flat AP .9715/.9561; no-neighbor .9344/.9095; no-resource .9338/.9257; gated .9181/.8802. Hiding public durations lowers gated Event AP to .8981/.7890, Observation .9343/.8549. These are deterministic toy behavior model results, not real WOMD start improvements; no claim of an optimal attention architecture. Keep simplest winner for pilot. Public protocol age baseline fallback is pooled when exact protocol bin unseen. Marked transition fields are evaluation-only.
+
+## Engineering and remaining gates
+- Prefix-only public feature builder, typed masks, adaptive source weighting with raw-motion bypass; optional zero-initialized public context bridge on frozen factual model. No genuine map/awareness encoder or shared training yet. New data domain masks stay closed to real and formal heads. Source weights are not causal explanations.
+- Bounded map-only alternatives: 36 across five old normalized records, 7 unexplored prefixes, 3 rejected self-intersecting/source edges; only one old longitudinal accepted initial spec reconstructed. No claim longer raw fact horizon or complete route support.
+- Sampled polygon occupancy: touching counted; unknown roster or uncertain boundary remains unknown. Sampled empty never produces swept clearance. Real simulator and Native SC are blocked.
+- Exact finite leave-one-world diagnostic: 237 visited beliefs across 3 opening sets; 424 distinct per-instance edge checks, 18 ambiguous beliefs with at least one changed viable-action/rank set. Example openings 5,7 at t=5 under five WAIT/SILENCE: full common viable set {WAIT}, rank 7; omitting opening 7 adds GO and rank 5. This is not full ICG or real safety.
+- New external factual evaluation exact-record overlap gate and frozen evaluation CLI. No fresh raw WOMD cache here; not run on new real data. Full driving/geo split still pending.
+- Original manuscript and C++ unchanged. Actual Native CMake failed MPFR/GMP development headers. No native interval fallback or real simulator verification. Formal Joint/Viability/Margin/Deadline/Causal etc authorization remains scoped exactly as prior release; no newly opened formal teacher labels.
+
+## Next exit
+1. Reproduce 3 seeds and heldout protocol families; compare conditional time and state marks, don't only compare accuracy. Preserve negative results and simplest adequate module. Need actual mixed physical scenarios, independent source map and roster.
+2. Physical shared resource: common polygon, version-bound command/ACK, complete actor footprints, clear-slab independent evidence, entry/stay/exit audit. Keep no-delivery/delay and failed responses. At least a few diverse actual runs before scale; challenge distribution not prevalence estimate.
+3. Full REA: actual public Resource/Rule/Information data, inferred Awareness (not true receipt), sparse per-agent/source relation, no current-cycle refined commitment feedback. Validate zero-context equivalence and no-leak counterexamples. Add weak start head only if real frozen-context probe + trajectory errors improve without decel degradation.
+4. Math teacher: true finite branch option task then representative Native 6D safe tube / public successor union / accepting tail / rank, independent replay. Only authorize exact model domain positives/complete negatives, unknown mask. Deadline same prefix separation/deferral intervals, not wait proxy.

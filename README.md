@@ -94,3 +94,6 @@ Factual architecture candidate: motion-context + actor-local history + CV residu
 
 ## Current Phase7BC transition / finite-reference checkpoint
 See `docs/PHASE7BC_TRANSITION_ACCEPTANCE.md` and `docs/PHASE7BC_TRANSITION_RUNBOOK.md`. Frozen fact model unchanged; optional frozen token probe, source topology check, controlled recipient coverage, full-window transition heads, heterogeneous delayed release and heldout protocol timing, independently cross-checked finite WAIT/GO teacher. No physical simulator or full Native SC authorization.
+
+## Phase7BC relation
+All new outputs under `reports/phase7bc_relation/`. See `docs/PHASE7BC_RELATION_RUNBOOK.md` and `docs/PHASE7BC_RELATION_ACCEPTANCE.md`. Frozen factual model preserved; typed public source query pilot, corrected protocol-age baselines, marked transition evidence, source-bound delivery recheck, finite world-criticality and sampled polygon bridge. No real-world or Native SC authorization.

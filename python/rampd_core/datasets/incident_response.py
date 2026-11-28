@@ -341,3 +341,27 @@ def reconfigure_projected_pair(pair, *, recipient_policy='preserve', recipient_p
         spec['recipient_model']=dict(probability=recipient_probability,seed=recipient_seed,scope='DECLARED_ROUTE_EQUIPMENT_NOT_EMPIRICAL')
     spec['receipts']={i:spec['all_current_receipts'][i] for i in spec['receipts']};spec['recipient_policy']=recipient_policy
     return spec
+
+
+def verify_projected_source(record,spec):
+    """Reconstruct route and initial projection from original normalized record.
+    A manifest reader can independently verify raw byte digest before this call.
+    No source support is inferred from a stored source_route_audit field.
+    """
+    from .incident_scenarios import verify_route_source
+    s=record['scene'];m=s['manifest'];k=m['current_time_index'];idx=m['metadata']['source_track_indices'].index(m['metadata']['sdc_track_index']);eid=str(s['tracks'][idx]['track_id'])
+    meta=dict(family_id=m['scenario_id'],split=m['split'],source_digest=record['record_sha256'],cutoff=str(Q(str(m['timestamps'][k]))),scope=spec['scope'])
+    errors=[]
+    if any(spec.get(key)!=val for key,val in meta.items()) or spec['ego_id']!=eid:errors.append('SOURCE_IDENTITY')
+    geo=verify_route_source(record,spec['lane']);errors.extend(geo['errors'])
+    current=[(str(a['track_id']),a['category'],a['states'][k]) for a in s['tracks'] if a['states'][k]['valid'] is True]
+    # Recompute proposal distance independently instead of trusting its metadata.
+    ego=next(st for i,_,st in current if i==eid);_,dist,alignment,_=project(spec['lane']['centerline'],[ego['x'],ego['y']],ego['heading'])
+    lane=dict(spec['lane'],ego_distance_m=dist)
+    if dist>1.25 or alignment<.9:errors.append('EGO_PROJECTION')
+    try:
+        expected=_projected_spec(meta,lane,current,eid)
+        if any(expected[key]!=spec.get(key) for key in ('vehicles','excluded_current','projected_widths','closure_lane_ids')):errors.append('SOURCE_PROJECTION')
+        if any(expected['closure'][key]!=spec['closure'][key] for key in ('start','end')):errors.append('SOURCE_CLOSURE_SCOPE')
+    except ValueError:errors.append('SOURCE_PROJECTION_REJECTED')
+    return dict(ok=not errors,errors=sorted(set(errors)),route=geo,scope='NORMALIZED_RAW_INITIALIZATION_NOT_FULL_WORLD')

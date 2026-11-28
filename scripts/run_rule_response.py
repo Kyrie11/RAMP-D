@@ -97,7 +97,7 @@ def main():
             r['trace_audit']=audit_pair(r);r['reaction_evidence']=reaction_evidence(r);r['resource_applicability']=resource_applicability(r['spec'])
             if not r['trace_audit']['ok']:bad.append(dict(scenario_id=sid,reason='trace consistency failed',errors=r['trace_audit']['errors']));continue
             if a.plots:
-                plot_pair(r,out/(sid+'.png'));plot_route_bev(r,out/(sid+'_bev.png'),record if not a.cache else None)
+                plot_pair(r,out/(sid+'.png'));plot_route_bev(r,out/(sid+'_bev.png'),record if not a.cache and not a.pair_input else None)
             f.write(json.dumps(r,allow_nan=False)+'\n');ok.append(dict(family_id=r['spec']['family_id'],actors=len(r['spec']['vehicles']),excluded=len(r['spec']['excluded_current']),aa_equal=r['aa_equal'],resource_applicability=r['resource_applicability'],trace_audit=r['trace_audit'],ego_intervention=r['ego_intervention'],rule_intervention=r['rule_intervention'],alternative_response=r['alternative_response'],runs={k:dict(stop=v['stop'],violations=len(v['violations'])) for k,v in r['runs'].items()}))
     (out/'summary.json').write_text(json.dumps(dict(accepted=ok,rejected=bad,formal_sc=False,training_allowed=False),indent=2)+'\n');print('accepted',len(ok),'rejected',len(bad));return 0 if ok else 4
 if __name__=='__main__':raise SystemExit(main())

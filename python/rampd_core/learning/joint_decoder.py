@@ -18,6 +18,12 @@ class FactualJointModel(nn.Module):
             nn.init.zeros_(self.gate.weight); nn.init.constant_(self.gate.bias,0.)
         if query_modes: self.query_logits=nn.Sequential(nn.Linear(3*d,d),nn.SiLU(),nn.Linear(d,modes))
     def encode_scene(self,inputs): return self.encoder(inputs)
+    def encode_public_context(self,inputs,adapter,source_embeddings,source_available):
+        """Opt-in public/hypothesized context bridge; caller owns provenance gate.
+        Original factual checkpoint and default forward remain unchanged.
+        """
+        encoded=self.encode_scene(inputs)
+        return adapter(encoded,source_embeddings,source_available,inputs['actor_mask'])
     def decode_candidate(self,inputs,encoded,candidate):
         B,A,D=encoded.shape; H=candidate.shape[1]; K=self.modes
         c=candidate.clone(); c[...,:2]/=30.; cseq,_=self.candidate(c); mask=inputs['actor_mask']; pool=(encoded*mask[...,None]).sum(1)/mask.sum(1,keepdim=True).clamp_min(1)

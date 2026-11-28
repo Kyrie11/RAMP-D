@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 PY="${PYTHON_BIN:-python}"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
-OUT="${REPORT_DIR:-$ROOT/reports/cleanup_$(date -u +%Y%m%dT%H%M%SZ)}"
+OUT="${REPORT_DIR:-$ROOT/reports/phase7bc_relation/cleanup_$(date -u +%Y%m%dT%H%M%SZ)}"
 if [ -e "$OUT" ]; then echo "REFUSE_EXISTING_REPORT_DIR: $OUT" >&2; exit 4; fi
 mkdir -p "$OUT"
 "$PY" scripts/verify_release.py | tee "$OUT/release_integrity.log"

@@ -142,6 +142,7 @@ def route_integrity(lane):
     if line.ndim!=2 or line.shape[1]!=2 or len(line)<2 or not np.isfinite(line).all():raise ValueError('invalid polyline')
     lengths=np.linalg.norm(np.diff(line,axis=0),axis=1); L=float(lengths.sum());seg=lane.get('route_segments',[dict(lane_id=lane['lane_id'],start_m=0.,end_m=L)]);joins=lane.get('route_joins',[])
     errors=[]
+    if not seg or any(not math.isfinite(float(s[k])) for s in seg for k in ('start_m','end_m')) or any(not math.isfinite(float(j[k])) for j in joins for k in ('gap_m','alignment')):raise ValueError('nonfinite/empty route ledger')
     if not math.isclose(L,float(lane['centerline_length_m']),abs_tol=1e-6,rel_tol=1e-9):errors.append('LENGTH')
     if not LineString(line).is_simple:errors.append('SELF_INTERSECTION')
     if len({str(s['lane_id']) for s in seg})!=len(seg) or len(joins)!=len(seg)-1:errors.append('ROSTER')
@@ -185,3 +186,37 @@ def verify_route_source(record, lane):
         parts.append(q if not j or gap else q[1:])
     if not parts or len(parts)!=len(ids) or not np.array_equal(np.concatenate(parts,axis=0),np.asarray(lane['centerline'],float)):errors.append('SOURCE_POLYLINE')
     return dict(ok=not errors,errors=sorted(set(errors)),lane_ids=ids,scope='NORMALIZED_SOURCE_MAP_TOPOLOGY_NOT_ROUTE_INTENT_OR_PHYSICAL_PROOF')
+
+
+def enumerate_route_hypotheses(record,lane,*,max_lanes=12,max_paths=8):
+    """Bounded forward alternatives from source topology, no future or intent.
+    Never used as complete support; explicit cap and rejected edges are reported.
+    Require exact shared endpoints here (no synthetic connector).
+    """
+    if type(max_lanes) is not int or not 1<=max_lanes<=24 or type(max_paths) is not int or not 1<=max_paths<=32:raise ValueError('bounded route query')
+    raw=[f for f in record['scene']['map_context']['primitives'] if f['kind']=='lane'];table={str(f['feature_id']):f for f in raw}
+    if len(raw)!=len(table):raise ValueError('duplicate source lane')
+    root=str(lane['lane_id']);
+    if root not in table:raise ValueError('root missing')
+    def points(i):return np.asarray([[p['x'],p['y']] for p in table[i]['vertices']],float)
+    def tangent(q,end):
+        d=np.diff(q,axis=0);d=d[np.linalg.norm(d,axis=1)>1e-6];return d[-1 if end else 0]/np.linalg.norm(d[-1 if end else 0]) if len(d) else None
+    q=points(root)
+    if len(q)<2 or not np.isfinite(q).all() or not np.array_equal(q,np.asarray(lane['centerline'])):raise ValueError('root geometry')
+    L=float(np.linalg.norm(np.diff(q,axis=0),axis=1).sum());stack=[(q,[dict(lane_id=root,start_m=0.,end_m=L)],[])];paths=[];rejected=[];expanded=0;limit= max_paths*max_lanes*4
+    while stack and len(paths)<max_paths and expanded<limit:
+        line,segments,joins=stack.pop();expanded+=1;i=segments[-1]['lane_id'];options=[]
+        if len(segments)<max_lanes:
+            for j in sorted(set(map(str,table[i].get('successors',[])))):
+                if j not in table or j in {s['lane_id'] for s in segments} or i not in list(map(str,table[j].get('predecessors',[]))) or table[i].get('attributes',{}).get('lane_type')!=table[j].get('attributes',{}).get('lane_type'):
+                    rejected.append([i,j,'TOPOLOGY_OR_TYPE_OR_CYCLE']);continue
+                p=points(j);a=tangent(line,True);b=tangent(p,False) if len(p)>=2 and np.isfinite(p).all() else None
+                if a is None or b is None or not np.array_equal(line[-1],p[0]) or float(a@b)<.9:rejected.append([i,j,'GEOMETRY']);continue
+                length=float(np.linalg.norm(np.diff(p,axis=0),axis=1).sum());start=segments[-1]['end_m'];nextline=np.concatenate((line,p[1:]));ns=segments+[dict(lane_id=j,start_m=start,end_m=start+length)];nj=joins+[dict(from_lane=i,to_lane=j,gap_m=0.,alignment=float(a@b))];candidate=dict(lane,centerline=nextline.tolist(),centerline_length_m=start+length,route_segments=ns,route_joins=nj)
+                if not verify_route_source(record,candidate)['ok']:rejected.append([i,j,'SOURCE_OR_SELF_INTERSECTION']);continue
+                options.append((nextline,ns,nj))
+        if options:stack.extend(reversed(options))
+        else:
+            candidate=dict(lane,centerline=line.tolist(),centerline_length_m=segments[-1]['end_m'],route_segments=segments,route_joins=joins,route_stop='MAX_LANES' if len(segments)==max_lanes else 'NO_FURTHER_ACCEPTED_EDGE',scope='MAP_ONLY_ROUTE_HYPOTHESIS_NOT_INTENT_OR_PHYSICAL_SUPPORT')
+            if verify_route_source(record,candidate)['ok']:paths.append(candidate)
+    return dict(paths=paths,rejected_edges=rejected,unexplored_prefixes=len(stack),depth_cap_reached=any(p['route_stop']=='MAX_LANES' for p in paths),complete_physical_support=False)

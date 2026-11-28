@@ -7,7 +7,7 @@ from rampd_core.datasets.shared_resource_scenario import simulate,audit
 from rampd_core.datasets.shared_resource_labels import release
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--families',type=int,default=8);p.add_argument('--train-heads',action='store_true');p.add_argument('--transition-heads',action='store_true');p.add_argument('--horizon',type=int,default=8);p.add_argument('--finite-teacher',action='store_true');p.add_argument('--protocol-shift',action='store_true',help='holdout green/clearance/ACK parameters; no model update');p.add_argument('--heterogeneous',action='store_true',help='additional declared delayed-release variants');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--families',type=int,default=8);p.add_argument('--train-heads',action='store_true');p.add_argument('--transition-heads',action='store_true');p.add_argument('--horizon',type=int,default=8);p.add_argument('--finite-teacher',action='store_true');p.add_argument('--protocol-shift',action='store_true',help='holdout green/clearance/ACK parameters; no model update');p.add_argument('--marked-evidence',action='store_true');p.add_argument('--heterogeneous',action='store_true',help='additional declared delayed-release variants');a=p.parse_args()
     if not 4<=a.families<=9:p.error('4–9 distinct spacing families')
     if a.protocol_shift and not a.transition_heads:p.error('protocol shift requires transition heads')
     out=Path(a.output);out.mkdir(parents=True,exist_ok=False);train=[];val=[];summary=[];tr_transition=[];va_transition=[]
@@ -27,6 +27,11 @@ def main():
                 f.write(json.dumps(r,allow_nan=False)+'\n')
     with (out/'labels.jsonl').open('w') as f:
         for r in train+val:f.write(json.dumps(r,allow_nan=False)+'\n')
+    if a.marked_evidence:
+        from rampd_core.datasets.shared_resource_labels import marked_transition_evidence
+        with (out/'marked_evidence.jsonl').open('w') as f:
+            for run in map(json.loads,(out/'runs.jsonl').read_text().splitlines()):
+                for row in marked_transition_evidence(run,split='training' if run['seed']<a.families-2 else 'validation',horizon=a.horizon):f.write(json.dumps(row,allow_nan=False)+'\n')
     report=dict(scope='DECLARED_AFFINE_SHARED_RESOURCE_NOT_PHYSICAL_SIMULATOR',families=a.families,training_families=a.families-2,validation_families=2,runs=summary,heads=[])
     if a.train_heads:
         import torch
@@ -54,8 +59,9 @@ def main():
                 if shifted:
                     _,q=fit_transition_head(tr_transition,shifted,h,context=context,epochs=0,frozen_model=m);report['protocol_shift_heads'].append(q)
     if a.finite_teacher:
-        from rampd_core.finite_wait_reference import finite_teacher
+        from rampd_core.finite_wait_reference import finite_teacher,finite_criticality
         teacher=[finite_teacher(o,14) for o in ((4,6),(5,7),(6,8))]
         (out/'finite_teacher.json').write_text(json.dumps(teacher,indent=2,allow_nan=False)+'\n');report['finite_teacher_scope']='FINITE_WAIT_GO_ONLY'
+        (out/'finite_criticality.json').write_text(json.dumps([finite_criticality(o,14) for o in ((4,6),(5,7),(6,8))],indent=2,allow_nan=False)+'\n')
     (out/'summary.json').write_text(json.dumps(report,indent=2,allow_nan=False)+'\n');print(json.dumps({k:v for k,v in report.items() if k!='runs'}))
 if __name__=='__main__':main()

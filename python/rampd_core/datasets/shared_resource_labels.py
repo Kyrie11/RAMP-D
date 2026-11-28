@@ -62,3 +62,60 @@ def transition_rows(run, *, split, horizon=8):
             cv.append([int(contact[i]) for i in ids])
         row=dict(legacy[k]);row.pop('digest');row.update(schema='rampd.shared_resource_transition.v1',horizon=horizon,public_inputs=context,targets=dict(event=event,observation=obs,occupancy=occ),cv_geometry=cv,public_current_occupancy=[int(f['occupancy'][i]) for i in ids]);row['digest']=canonical_digest(row);rows.append(row)
     return rows
+
+
+
+def public_relation_tokens(positions, velocities, *, history_valid, ego_signal, age, public_durations=None):
+    """Pure prefix-only feature builder: no simulator ledger, receipt or future arguments."""
+    ids=list(ROSTER)
+    if len(positions)!=len(ids) or len(velocities)!=len(ids) or ego_signal not in (None,'A','B') or type(age) is not int or age<1:raise ValueError('public prefix')
+    p=list(positions);v=list(velocities);signal=ego_signal;tokens=[];available=[]
+    green,clear=public_durations if public_durations is not None else (0,0)
+    for j,i in enumerate(ids):
+        peers=[a for a in range(len(ids)) if ROSTER[ids[a]]==ROSTER[i] and p[a]>p[j]];lead=min(peers,key=lambda a:p[a]) if peers else None
+        motion=[p[j]/45,v[j],float(history_valid),float(ROSTER[i]=='A'),float(i=='e'),float(p[j]>=45)]
+        neighbor=[0.]*6 if lead is None else [(p[lead]-p[j]-4)/60,v[lead],v[lead]-v[j],float(history_valid),1.,0.]
+        # Known resource geometry in this model only; closed contact for either direction.
+        resource=[(-8-p[j])/45,(20-p[j])/45,float(-8<=p[j]<=20),sum(-8<=a<=20 for a in p)/4,sum(-8<=p[a]<=20 and ROSTER[ids[a]]!=ROSTER[i] for a in range(4))/4,0.]
+        rule=[float(signal=='A'),float(signal=='B'),float(signal is None),min(age,160)/40,green/40,clear/8]
+        info=[float(signal==ROSTER[i]),float(signal is None),float(signal is not None and signal!=ROSTER[i]),min(age,160)/40,0.,0.] if i=='e' else [0.]*6
+        tokens.append([motion,neighbor,resource,rule,info]);available.append([True,lead is not None,True,True,i=='e'])
+    return tokens,available
+
+
+def relation_rows(run, *, split, horizon=8, public_protocol=True):
+    """Independent typed-source dataset; only ego sees its own permit.
+    Public protocol durations are a declared experiment assumption; hidden ACK,
+    other actors' receipt and future state are never read by feature builder.
+    Start = currently stationary non-ego actor moves during next H ticks,
+    excluding actors already at terminal. Not identified human intent.
+    """
+    base=transition_rows(run,split=split,horizon=horizon)
+    frames=run['frames'];ids=list(ROSTER);rows=[];age=0;old_signal=object()
+    for k,r in enumerate(base):
+        f=frames[k];prior=frames[k-1] if k else None
+        p=[f['state'][i] for i in ids];v=[p[j]-prior['state'][i] if prior else 0 for j,i in enumerate(ids)]
+        signal=f['public']['e']['signal'];age=age+1 if signal==old_signal else 1;old_signal=signal
+        tokens,available=public_relation_tokens(p,v,history_valid=prior is not None,ego_signal=signal,age=age,public_durations=(run['green_ticks'],run['clearance_ticks']) if public_protocol else None)
+        start=[];start_mask=[]
+        for j,i in enumerate(ids):
+            valid=i!='e' and prior is not None and v[j]==0 and p[j]<45
+            start_mask.append(valid);start.append(int(valid and any(g['state'][i]>p[j] for g in frames[k+1:k+horizon+1])))
+        row={key:r[key] for key in ('family_id','split','run_digest','tick','horizon','domain','model_training_allowed','real_world_training_allowed','formal_sc','formal_heads','cv_geometry','public_current_occupancy')}
+        row.update(schema='rampd.shared_resource_relation.v1',tokens=tokens,available=available,public_protocol=public_protocol,targets=dict(r['targets'],start=start),start_mask=start_mask,field_valid=dict(r['field_valid'],start=any(start_mask)))
+        row['digest']=canonical_digest(row);rows.append(row)
+    return rows
+
+
+def marked_transition_evidence(run, *, split, horizon=8):
+    """Conditional next-state mark and permission time evidence, independent of
+    the time-only pilot. No positive permission is a safety certificate.
+    H+1 or no event is not permanent nonexistence; mark masked on no change.
+    Actual permit is controller readback; observed permit is ego view.
+    """
+    base=transition_rows(run,split=split,horizon=horizon);frames=run['frames'];rows=[]
+    for k,r in enumerate(base):
+        t=r['targets'];e=t['event'];o=t['observation'];future=frames[k+1:k+horizon+1]
+        row=dict(schema='rampd.shared_marked_evidence.v1',family_id=r['family_id'],run_digest=r['run_digest'],split=split,tick=k,horizon=horizon,domain=r['domain'],event_time=e,event_next_direction=None if not e else frames[k+e]['controller']['command']['direction'],observation_time=o,observation_next_permit=None if not o else frames[k+o]['public']['e']['signal'],mark_valid={'event':bool(e),'observation':bool(o)},future_confirmed_entry_permit={d:[g['controller']['permit']==d for g in future] for d in ('A','B')},future_ego_observed_permit=[g['public']['e']['signal']=='A' for g in future],scope='PERMISSION_NOT_COLLISION_FREE_OR_VIABILITY',training_allowed=False,formal_sc=False)
+        row['digest']=canonical_digest(row);rows.append(row)
+    return rows

@@ -730,6 +730,19 @@
     "physical_resource_verified": false,
     "status": "LOCAL_DIAGNOSTIC_PASS_NOT_NATIVE_OR_FULL_WORLD"
   },
+  "phase7bc_relation": {
+    "delivery_pair_replays": 60,
+    "formal_teacher_authorized": false,
+    "native_full_sc": false,
+    "physical_simulator_verified": false,
+    "relation_heads_ablation": 12,
+    "relation_runs": 60,
+    "report_root": "reports/phase7bc_relation",
+    "shared_upload_runs_replayed": 56,
+    "specialized_tests": 99,
+    "status": "FACTUAL_FROZEN_TYPED_RELATION_PILOT_AND_FINITE_CRITICALITY",
+    "version": "1.0.0.dev0"
+  },
   "phase7bc_transition": {
     "finite_analytic_edges": 408,
     "formal_sc": false,
