@@ -156,3 +156,32 @@ def route_integrity(lane):
         ii,jj=before[-1],after[0];alignment=float((line[ii+1]-line[ii])@(line[jj+1]-line[jj])/(lengths[ii]*lengths[jj]))
         if abs(alignment-j['alignment'])>1e-6 or alignment<.9-1e-8 or gap>.1+1e-8:errors.append('JOIN_TANGENT')
     return dict(ok=not errors,errors=sorted(set(errors)),length_m=L,joins=len(joins),approximate_joins=sum(j['gap_m']>1e-8 for j in joins),scope='POLYLINE_LEDGER_NOT_RAW_TOPOLOGY_OR_PHYSICAL_ROUTE')
+
+
+def verify_route_source(record, lane):
+    """Independently bind the route ledger to the supplied normalized raw map.
+    Requires original record access; does not verify source bytes by itself.
+    Every edge must be reciprocal and every segment must match raw vertices.
+    No future trajectory or inferred route choice is used.
+    """
+    geometry=route_integrity(lane);errors=list(geometry['errors'])
+    raw=[f for f in record['scene']['map_context']['primitives'] if f['kind']=='lane']
+    table={str(f['feature_id']):f for f in raw}
+    if len(table)!=len(raw):raise ValueError('duplicate source lane')
+    segments=lane.get('route_segments',[dict(lane_id=lane['lane_id'],start_m=0.,end_m=geometry['length_m'])]);ids=[str(s['lane_id']) for s in segments];parts=[];length=0.
+    if str(lane['lane_id']) not in ids:errors.append('ROOT_LANE')
+    for j,(lid,seg) in enumerate(zip(ids,segments)):
+        if lid not in table:errors.append('MISSING_SOURCE_LANE');break
+        f=table[lid];q=np.asarray([[p['x'],p['y']] for p in f['vertices']],float)
+        if q.ndim!=2 or len(q)<2 or not np.isfinite(q).all():errors.append('SOURCE_VERTICES');break
+        gap=0.
+        if j:
+            prior=table[ids[j-1]]
+            if lid not in list(map(str,prior.get('successors',[]))) or ids[j-1] not in list(map(str,f.get('predecessors',[]))):errors.append('SOURCE_TOPOLOGY')
+            if prior.get('attributes',{}).get('lane_type')!=f.get('attributes',{}).get('lane_type'):errors.append('SOURCE_LANE_TYPE')
+            gap=float(np.linalg.norm(parts[-1][-1]-q[0]))
+        start=length+gap;length=start+float(np.linalg.norm(np.diff(q,axis=0),axis=1).sum())
+        if max(abs(start-seg['start_m']),abs(length-seg['end_m']))>1e-6:errors.append('SOURCE_ARCLENGTH')
+        parts.append(q if not j or gap else q[1:])
+    if not parts or len(parts)!=len(ids) or not np.array_equal(np.concatenate(parts,axis=0),np.asarray(lane['centerline'],float)):errors.append('SOURCE_POLYLINE')
+    return dict(ok=not errors,errors=sorted(set(errors)),lane_ids=ids,scope='NORMALIZED_SOURCE_MAP_TOPOLOGY_NOT_ROUTE_INTENT_OR_PHYSICAL_PROOF')

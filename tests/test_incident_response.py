@@ -179,3 +179,39 @@ def test_declared_heads_reject_family_and_permission_leak():
     q=copy.deepcopy(tr);q[0]['real_world_training_allowed']=True;q[0]['digest']=canonical_digest({k:v for k,v in q[0].items() if k!='digest'})
     with pytest.raises(ValueError,match='permission'):fit_head(q,va,'event',epochs=1)
     _,r=fit_head(tr,va,'event',epochs=1);assert r['formal_sc'] is False and r['validation_rows']==len(va)
+
+
+def test_source_topology_not_just_polyline():
+    from rampd_core.datasets.incident_scenarios import extend_unique_route,verify_route_source,route_integrity
+    def lane(i,x,y,prev,succ):return dict(kind='lane',feature_id=i,vertices=[dict(x=x,y=0),dict(x=y,y=0)],predecessors=prev,successors=succ,attributes={'lane_type':'2'})
+    r=dict(scene=dict(map_context=dict(primitives=[lane('a',0,20,[],['b']),lane('b',20,50,['a'],[])])))
+    q=extend_unique_route(r,dict(lane_id='a',centerline=[[0,0],[20,0]]));assert verify_route_source(r,q)['ok']
+    r['scene']['map_context']['primitives'][0]['successors']=[];assert route_integrity(q)['ok'] and not verify_route_source(r,q)['ok']
+
+
+def test_heterogeneous_release_and_source_label_gate():
+    from rampd_core.datasets.shared_resource_scenario import simulate,audit
+    from rampd_core.datasets.shared_resource_labels import release,transition_rows
+    from rampd_core.datasets.split_manifest import canonical_digest
+    a=simulate();b=simulate(release_delays={'e':3,'a':0,'b':2,'c':1});assert a!=b and audit(b)['ok']
+    assert any(f['public']['e']!=f['public']['a'] for f in b['frames'])
+    q=copy.deepcopy(b);q['family_id']='fake';q['digest']=canonical_digest({k:v for k,v in q.items() if k!='digest'})
+    with pytest.raises(ValueError):release(q,split='training')
+    q=copy.deepcopy(b);q['frames'][0]['controller']['green_age']=100;q['digest']=canonical_digest({k:v for k,v in q.items() if k!='digest'})
+    with pytest.raises(ValueError,match='reexecution'):release(q,split='training')
+    x=transition_rows(b,split='training',horizon=8);assert len(x)==152 and len(x[0]['public_inputs'])==17
+    # Labels use a future window, but input prefix is invariant under future ACK delay.
+    d=simulate(ack_delay_ticks=3);p=transition_rows(a,split='training');q=transition_rows(d,split='training');assert p[0]['public_inputs']==q[0]['public_inputs'] and p[0]['cv_geometry']==q[0]['cv_geometry']
+    assert not any(x[0]['formal_heads'].values())
+
+
+def test_transition_head_and_finite_teacher():
+    from rampd_core.datasets.shared_resource_scenario import simulate
+    from rampd_core.datasets.shared_resource_labels import transition_rows
+    from rampd_core.learning.resource_pilot import fit_transition_head
+    from rampd_core.finite_wait_reference import finite_teacher
+    tr=transition_rows(simulate(seed=0),split='training');va=transition_rows(simulate(seed=1),split='validation')
+    with pytest.raises(ValueError,match='duplicate'):fit_transition_head(tr+tr,va,'event',epochs=1)
+    for h in ('event','occupancy','observation'):
+        _,r=fit_transition_head(tr,va,h,epochs=1);assert r['final']['loss']>=0 and not r['formal_sc']
+    r=finite_teacher((5,7),14);assert r['rows'][11]['viable'] is False and r['rows'][12]['rank']==12 and r['rows'][14]['forced_wait_ticks_max']==9 and not r['training_allowed']

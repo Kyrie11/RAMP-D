@@ -68,7 +68,7 @@ def _projected_spec(meta, lane, current, eid):
     return dict(**meta,ego_id=eid,lane=lane,vehicles=[asdict(a) for a in vehicles],excluded_current=excluded,receipts=receipts,closure=asdict(closure),closure_lane_ids=scope_lanes,projected_widths=widths)
 
 
-def from_record(record, *, extend_route=False, clock_profile="nominal", prepend_route=False, recipient_policy="all_current_nearest"):
+def from_record(record, *, extend_route=False, clock_profile="nominal", prepend_route=False, recipient_policy="all_current_nearest", recipient_probability=.5, recipient_seed=7):
     """Restrictive 1-D projection, never a lane-membership or resource proof."""
     s=record['scene']; m=s['manifest']; k=m['current_time_index']; idx=m['metadata']['source_track_indices'].index(m['metadata']['sdc_track_index']); eid=str(s['tracks'][idx]['track_id']); lane=lane_proposal(record,max_distance=1.25,min_length=2. if extend_route else 25.,min_ahead=0. if extend_route else 10.,min_alignment=.9 if extend_route else .7)
     if prepend_route and not extend_route:raise ValueError("prepend requires route extension")
@@ -87,9 +87,9 @@ def from_record(record, *, extend_route=False, clock_profile="nominal", prepend_
     all_rec={eid:cp['ego_receipt']};all_rec.update({a[0]:(cp['other_receipt'] if a[0]==selected else None) for a in others})
     if recipient_policy=='route_equipped':
         from .rule_lifecycle import route_equipped_recipients
-        cohort=route_equipped_recipients([v['id'] for v in spec['vehicles']],eid,source_digest=spec['source_digest'],other_receipt=cp['other_receipt'],ego_receipt=cp['ego_receipt'])
+        cohort=route_equipped_recipients([v['id'] for v in spec['vehicles']],eid,source_digest=spec['source_digest'],other_receipt=cp['other_receipt'],ego_receipt=cp['ego_receipt'],probability=recipient_probability,seed=recipient_seed)
         all_rec={i:cohort.get(i) for i in all_rec}
-        spec['recipient_model']=dict(probability=.5,seed=7,scope='DECLARED_ROUTE_EQUIPMENT_NOT_EMPIRICAL')
+        spec['recipient_model']=dict(probability=recipient_probability,seed=recipient_seed,scope='DECLARED_ROUTE_EQUIPMENT_NOT_EMPIRICAL')
     spec.update(receipts={v['id']:all_rec[v['id']] for v in spec['vehicles']},all_current_receipts=all_rec,clock_profile=clock_profile,schedule_source='DECLARED_RAW_PROFILE',recipient_policy=recipient_policy)
     return spec
 
@@ -323,7 +323,7 @@ def audit_pair(pair):
     return dict(ok=not errors,errors=sorted(set(errors)),scope='INDEPENDENT_TRACE_CONSISTENCY_NOT_CONTROLLER_ORACLE_OR_SAFETY')
 
 
-def reconfigure_projected_pair(pair, *, recipient_policy='preserve'):
+def reconfigure_projected_pair(pair, *, recipient_policy='preserve', recipient_probability=.5, recipient_seed=7):
     """Derive a NEW declared schedule from an audited source pair. Never alters it."""
     import copy
     if not audit_pair(pair)['ok']:raise ValueError('source pair inconsistent')
@@ -336,8 +336,8 @@ def reconfigure_projected_pair(pair, *, recipient_policy='preserve'):
     spec['all_current_receipts']={i:(cp['ego_receipt'] if i==eid else cp['other_receipt'] if i==target else None) for i in full}
     if recipient_policy=='route_equipped':
         from .rule_lifecycle import route_equipped_recipients
-        cohort=route_equipped_recipients(list(spec['receipts']),eid,source_digest=spec['source_digest'],other_receipt=cp['other_receipt'],ego_receipt=cp['ego_receipt'])
+        cohort=route_equipped_recipients(list(spec['receipts']),eid,source_digest=spec['source_digest'],other_receipt=cp['other_receipt'],ego_receipt=cp['ego_receipt'],probability=recipient_probability,seed=recipient_seed)
         spec['all_current_receipts']={i:cohort.get(i) for i in full}
-        spec['recipient_model']=dict(probability=.5,seed=7,scope='DECLARED_ROUTE_EQUIPMENT_NOT_EMPIRICAL')
+        spec['recipient_model']=dict(probability=recipient_probability,seed=recipient_seed,scope='DECLARED_ROUTE_EQUIPMENT_NOT_EMPIRICAL')
     spec['receipts']={i:spec['all_current_receipts'][i] for i in spec['receipts']};spec['recipient_policy']=recipient_policy
     return spec

@@ -730,6 +730,19 @@
     "physical_resource_verified": false,
     "status": "LOCAL_DIAGNOSTIC_PASS_NOT_NATIVE_OR_FULL_WORLD"
   },
+  "phase7bc_transition": {
+    "finite_analytic_edges": 408,
+    "formal_sc": false,
+    "new_factual_cache_available": false,
+    "old_shared_runs_reproduced": 24,
+    "physical_simulator_verified": false,
+    "protocol_shift_runs": 4,
+    "shared_runs": 32,
+    "specialized_tests": 89,
+    "status": "FACTUAL_FROZEN_DECLARED_TRANSITION_AND_FINITE_REFERENCE_ONLY",
+    "training_head_performance_gate_passed": false,
+    "version": "1.0.0.dev0"
+  },
   "release": "0.9.22",
   "requires_carla": false,
   "requires_dataset": false,

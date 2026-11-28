@@ -30,6 +30,9 @@ def audit(cache,run):
                 for mode in p['xy'].unbind(1):
                     q,_=weak_motion_targets(i,mode,pred_valid);guesses.append(q.float())
                 prob=(torch.stack(guesses,1)*p['logits'].softmax(-1)[:,:,None,None]).sum(1)
+                # Future-defined diagnostic strata only; never input or sampling policy.
+                for name,sel in [('near_static_future_start',m[0,:,0]&labels[0,:,0]),('near_static_future_no_start',m[0,:,0]&~labels[0,:,0])]:
+                    mask=v[0]&sel[:,None];z=bins.setdefault(name,dict(knots=0,model_error_sum=0.,cv_error_sum=0.,dca_error_sum=0.));z['knots']+=int(mask.sum());z['model_error_sum']+=float(err[mask].sum());z['cv_error_sum']+=float(ce[mask].sum());z['dca_error_sum']+=float(de[mask].sum())
                 for j,name in enumerate(weak):
                     sel=m[...,j];weak[name].extend(zip(prob[...,j][sel].tolist(),labels[...,j][sel].tolist()))
             cv_pred=dict(logits=torch.zeros(1,1),xy=cv[:,None]);cv_nll.append((float(joint_nll(cv_pred,y,v)),int(v.sum())))

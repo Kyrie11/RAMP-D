@@ -91,3 +91,6 @@ Optional actor-local history, CV anchor and shared per-mode scorer; independent 
 
 See `docs/PHASE7AB_FACTUAL_FREEZE_ACCEPTANCE.md` and `docs/PHASE7AB_FACTUAL_FREEZE_RUNBOOK.md`.
 Factual architecture candidate: motion-context + actor-local history + CV residual + radial Laplace; preserve older flags/checkpoints. New optional scene-level mode-quality auxiliary (default off), extended factual audit, route geometry ledger, versioned report/declared device cohort, projected evidence v2. Executable declared affine 2D shared corridor and separate model-domain Event/Occupancy/Observation head pilot; no real simulator or Native SC claim.
+
+## Current Phase7BC transition / finite-reference checkpoint
+See `docs/PHASE7BC_TRANSITION_ACCEPTANCE.md` and `docs/PHASE7BC_TRANSITION_RUNBOOK.md`. Frozen fact model unchanged; optional frozen token probe, source topology check, controlled recipient coverage, full-window transition heads, heterogeneous delayed release and heldout protocol timing, independently cross-checked finite WAIT/GO teacher. No physical simulator or full Native SC authorization.

@@ -25,8 +25,10 @@ def _occ(boxes):return {i:contact(b,b,RESOURCE,RESOURCE) is not None for i,b in 
 def _spans(a,b):return {i:contact(a[i],b[i],RESOURCE,RESOURCE) for i in a}
 def _serialize(spans):return {i:None if p is None else [str(x) for x in p] for i,p in spans.items()}
 
-def simulate(*,seed=0,ego_wait_ticks=0,ack_delay_ticks=1,clearance_ticks=2,steps=160,green_ticks=16):
+def simulate(*,seed=0,ego_wait_ticks=0,ack_delay_ticks=1,clearance_ticks=2,steps=160,green_ticks=16,release_delays=None):
     if any(type(x) is not int or x<0 for x in (seed,ego_wait_ticks,ack_delay_ticks)) or type(steps) is not int or steps<1:raise ValueError('scenario configuration')
+    if release_delays is not None and (set(release_delays)!=set(ROSTER) or any(type(d) is not int or not 0<=d<=8 for d in release_delays.values())):raise ValueError('release delay roster')
+    delays=release_delays or dict.fromkeys(ROSTER,0);prior_permit=None;permit_age=0
     # The seed is a declared initial spacing variant, not an empirical distribution.
     states={'e':-10-seed%3,'a':-16-seed%3,'b':-10-(seed//3)%3,'c':-16-(seed//3)%3}
     c=SharedResourceController(ROSTER,clearance_ticks=clearance_ticks,green_ticks=green_ticks)
@@ -37,12 +39,17 @@ def simulate(*,seed=0,ego_wait_ticks=0,ack_delay_ticks=1,clearance_ticks=2,steps
         a=_boxes(states);occ=_occ(a);g=c.step(k,occ,prior_swept_empty=empty,ack=ack)
         if c.command!=last_command:
             pending.append((k+max(1,ack_delay_ticks),c.command));last_command=c.command
+        # A declared immediate local stop cue removes permission; release
+        # notification can be delayed independently per actor. Not a general
+        # lossy traffic-signal model or a guarantee of real driver compliance.
+        permit=g['permit'];permit_age=permit_age+1 if permit is not None and permit==prior_permit else int(permit is not None);prior_permit=permit
+        observed={i:permit if permit_age>delays[i] else None for i in states}
         nxt=dict(states); actions={}
         for i,s in states.items():
             direction=ROSTER[i];candidate=s+1; dest=rectangle(direction,Q(candidate));entry=not occ[i] and contact(a[i],dest,RESOURCE,RESOURCE) is not None
             # Protected exit: a car already in resource can clear even under RED.
             # Outside it, the displayed, confirmed local signal is the sole permission.
-            move=not entry or g['permit']==direction
+            move=not entry or observed[i]==direction
             if i=='e' and k<ego_wait_ticks:move=False
             # Queue gap: update using prior states, no future state of lead vehicle.
             if any(ROSTER[j]==direction and 0<states[j]-s<=5 for j in states if i!=j):move=False
@@ -50,9 +57,10 @@ def simulate(*,seed=0,ego_wait_ticks=0,ack_delay_ticks=1,clearance_ticks=2,steps
             if s>=45:move=False
             nxt[i]=candidate if move else s;actions[i]=int(move)
         b=_boxes(nxt);spans=_spans(a,b);empty=all(v is None for v in spans.values())
-        frames.append(dict(tick=k,t_s=str(Q(k,2)),state=dict(states),next_state=nxt,actions=actions,occupancy=occ,contact_spans=_serialize(spans),controller=g,public={i:dict(signal=g['permit']) for i in states}))
+        frames.append(dict(tick=k,t_s=str(Q(k,2)),state=dict(states),next_state=nxt,actions=actions,occupancy=occ,contact_spans=_serialize(spans),controller=g,public={i:dict(signal=observed[i]) for i in states}))
         states=nxt
     result=dict(schema='rampd.shared_corridor.v1',domain='DECLARED_2D_AFFINE_MODEL',family_id=f'shared-{seed}',seed=seed,ego_wait_ticks=ego_wait_ticks,ack_delay_ticks=ack_delay_ticks,clearance_ticks=clearance_ticks,green_ticks=green_ticks,steps=steps,resource=list(RESOURCE),roster=dict(ROSTER),frames=frames,final_state=states,formal_sc=False,real_world=False)
+    if release_delays is not None:result['release_delays']=dict(release_delays)
     result['digest']=canonical_digest(result);return result
 
 def audit(run):
@@ -63,6 +71,9 @@ def audit(run):
     errors=[];last=None;red_empty=0;prev_ack_red=False;last_dir=None;entries={i:0 for i in ROSTER};exits={i:0 for i in ROSTER};prev_empty=None
     if run.get('digest')!=canonical_digest({k:v for k,v in run.items() if k!='digest'}):errors.append('DIGEST')
     if run['resource']!=list(RESOURCE) or run['roster']!=ROSTER or run['formal_sc'] is not False or run['real_world'] is not False or len(run['frames'])!=run['steps']:errors.append('CONTRACT')
+    delays=run.get('release_delays',dict.fromkeys(ROSTER,0));permit_age=0;prev_permit=None
+    if set(delays)!=set(ROSTER) or any(type(d) is not int or not 0<=d<=8 for d in delays.values()):return dict(ok=False,errors=['RELEASE_DELAYS'])
+    if run['family_id']!=f"shared-{run['seed']}":errors.append('FAMILY_ID')
     expected_initial={'e':-10-run['seed']%3,'a':-16-run['seed']%3,'b':-10-(run['seed']//3)%3,'c':-16-(run['seed']//3)%3}
     if not run['frames'] or run['frames'][0]['state']!=expected_initial:errors.append('INITIAL_STATE')
     pending=[(0,{'version':0,'direction':'RED'})];applied=None;issued={'version':0,'direction':'RED'}
@@ -75,7 +86,11 @@ def audit(run):
         if o!=f['occupancy'] or _serialize(spans)!=f['contact_spans']:errors.append('GEOMETRY_LEDGER')
         if set(f['actions'])!=set(ROSTER) or any(f['next_state'][i]-f['state'][i] not in (0,1) or f['actions'][i]!=f['next_state'][i]-f['state'][i] for i in ROSTER):errors.append('MOTION')
         if permit is not None and (permit not in ('A','B') or cmd!=ack or cmd['direction']!=permit):errors.append('ACK_PERMISSION')
-        if any(f['public'][i]!={'signal':permit} for i in ROSTER):errors.append('PUBLIC_SIGNAL')
+        if cmd['direction'] not in ('RED','A','B') or type(cmd['version']) is not int:errors.append('COMMAND_TYPE')
+        expected_permit=cmd['direction'] if cmd==ack and cmd['direction'] in ('A','B') and not any(o[i] and ROSTER[i]!=cmd['direction'] for i in ROSTER) else None
+        if permit!=expected_permit or g['occupancy_known'] is not True:errors.append('PERMIT_READBACK')
+        permit_age=permit_age+1 if permit is not None and permit==prev_permit else int(permit is not None);prev_permit=permit
+        if set(f['public'])!=set(ROSTER) or any(f['public'][i]!={'signal':permit if permit_age>delays[i] else None} for i in ROSTER):errors.append('PUBLIC_SIGNAL')
         confirmed_red=cmd==ack and cmd['direction']=='RED'
         # In a command-transition frame the controller may already have issued
         # the next command, although the matching RED readback still applies.
@@ -92,6 +107,7 @@ def audit(run):
             if not o[i] and spans[i] is not None:
                 entries[i]+=1
                 if permit!=ROSTER[i]:errors.append('ILLEGAL_ENTRY')
+                if f['public'][i]['signal']!=ROSTER[i]:errors.append('UNOBSERVED_ENTRY')
             if o[i] and not n[i]:exits[i]+=1
         for i,j in combinations(ROSTER,2):
             if contact(a[i],b[i],a[j],b[j]) is not None:errors.append('COLLISION')

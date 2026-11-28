@@ -354,3 +354,23 @@ def test_local_rotation_preserves_pose_and_decoder_frame(source):
     handle=model.hist[0].register_forward_pre_hook(hook);model(i);handle.remove();assert torch.allclose(captured['history'][0,a,-2,:2],torch.tensor([-.2,0.]),atol=1e-6)
     assert torch.allclose(captured['history'][0,a,-1,:2],torch.zeros(2))
     m=FactualJointModel(16,3,4,motion_context=True,local_history=True);torch.nn.init.zeros_(m.decode[-1].weight);m.decode[-1].bias.data.copy_(torch.tensor([1.,0.]));q=m(i,b['candidate']);d=q['xy'][0,0,a]-b['cv'][0,a];assert torch.allclose(d[:,0],torch.zeros_like(d[:,0]),atol=1e-6);assert torch.allclose(d[:,1],i['dt'][0],atol=1e-6)
+
+
+def test_global_rigid_transform_keeps_factored_coordinate_inputs(source):
+    # Synthetic normalized record, not a claim about arbitrary learned SE(2) layers.
+    r=records(source)[0];q=copy.deepcopy(r);angle=.731;c,s=math.cos(angle),math.sin(angle)
+    def xy(x,y):return c*x-s*y+35,s*x+c*y-17
+    for a in q['scene']['tracks']:
+        for st in a['states']:
+            st['x'],st['y']=xy(st['x'],st['y']);st['vx'],st['vy']=c*st['vx']-s*st['vy'],s*st['vx']+c*st['vy'];st['heading']+=angle
+    for f in q['scene']['map_context']['primitives']:
+        for v in f['vertices']:v['x'],v['y']=xy(v['x'],v['y'])
+    a,b=(build_features(x,horizon=5,history_steps=3,max_map=16) for x in (r,q))
+    assert a['actor_ids']==b['actor_ids']
+    for key in ('history','category','map','forecast_dt'):assert torch.allclose(torch.tensor(a['inputs'][key]),torch.tensor(b['inputs'][key]),atol=1e-5)
+    for key in ('baseline_cv',):assert torch.allclose(torch.tensor(a[key]),torch.tensor(b[key]),atol=1e-5)
+    assert torch.allclose(torch.tensor(a['candidate']['path']),torch.tensor(b['candidate']['path']),atol=1e-5)
+    assert torch.allclose(torch.tensor(a['targets']['xy']),torch.tensor(b['targets']['xy']),atol=1e-5)
+    x,y=collate([a]),collate([b]);model=FactualJointModel(16,3,4,motion_context=True,local_history=True).eval()
+    with torch.no_grad():p=model(x['inputs'],x['candidate']);v=model(y['inputs'],y['candidate'])
+    assert torch.allclose(p['xy'],v['xy'],atol=1e-5) and torch.allclose(p['logits'],v['logits'],atol=1e-5)
